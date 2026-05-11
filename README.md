@@ -4,25 +4,20 @@ A pi extension that allows the main agent to spawn parallel sub-agents, with eac
 
 ## Installation
 
-### Option 1: Local Development (Quick)
+### Installed as a pi package (Recommended)
 
 ```bash
-# Clone or create the extension directory
-mkdir -p ~/.pi/agent/extensions/pi-subagents
-# Copy src/index.ts and package.json into it
+pi install git:github.com/harms-haus/pi-subagents
 ```
 
-### Option 2: As a Pi Package
+Or use `https://` / `ssh://` instead of `git:` if you prefer.
+
+### Local Development
+
+Clone the repo and install the local path (use `-l` for project-local install):
 
 ```bash
-# From the repo root
-pi install git:github.com/youruser/pi-subagents
-```
-
-Or for local development:
-
-```bash
-cd ~/Documents/software/pi-plugins/subagents
+cd pi-subagents
 pi install . -l
 ```
 

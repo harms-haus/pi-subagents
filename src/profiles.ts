@@ -246,12 +246,12 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
 export type ProfileScope = "global" | "project";
 
 /**
- * Read the raw settings file, mutate the subagents.profiles section,
- * and write it back.
+ * Read the raw settings file, apply a mutator, and write it back.
+ * The mutator receives the subagents section and returns true if changed.
  */
-async function mutateProfilesFile(
+async function mutateSettingsFile(
   filePath: string,
-  mutator: (profiles: SubagentProfiles) => boolean,
+  mutator: (subagents: Record<string, any>) => boolean,
 ): Promise<void> {
   let settings: Record<string, any> = {};
   if (existsSync(filePath)) {
@@ -263,14 +263,16 @@ async function mutateProfilesFile(
   }
 
   if (!settings.subagents) settings.subagents = {};
-  if (!settings.subagents.profiles) settings.subagents.profiles = {};
 
-  const changed = mutator(settings.subagents.profiles);
+  const changed = mutator(settings.subagents);
   if (!changed) return;
 
-  // Clean up empty profiles object
-  if (Object.keys(settings.subagents.profiles).length === 0) {
+  // Clean up empty sub-objects
+  if (settings.subagents.profiles && Object.keys(settings.subagents.profiles).length === 0) {
     delete settings.subagents.profiles;
+  }
+  if (settings.subagents.agentOverrides && Object.keys(settings.subagents.agentOverrides).length === 0) {
+    delete settings.subagents.agentOverrides;
   }
   if (Object.keys(settings.subagents).length === 0) {
     delete settings.subagents;
@@ -296,14 +298,16 @@ export async function saveProfile(
   cwd?: string,
 ): Promise<void> {
   const filePath = getSettingsPath(scope, cwd);
-  await mutateProfilesFile(filePath, (profiles) => {
-    profiles[name] = profile;
+  await mutateSettingsFile(filePath, (subagents) => {
+    if (!subagents.profiles) subagents.profiles = {};
+    subagents.profiles[name] = profile;
     return true;
   });
 }
 
 /**
  * Delete a profile from the given scope.
+ * Checks both subagents.profiles and subagents.agentOverrides.
  * Returns true if the profile existed and was deleted.
  */
 export async function deleteProfile(
@@ -313,13 +317,18 @@ export async function deleteProfile(
 ): Promise<boolean> {
   const filePath = getSettingsPath(scope, cwd);
   let existed = false;
-  await mutateProfilesFile(filePath, (profiles) => {
-    if (profiles[name]) {
+  await mutateSettingsFile(filePath, (subagents) => {
+    // Check profiles first
+    if (subagents.profiles?.[name]) {
       existed = true;
-      delete profiles[name];
-      return true;
+      delete subagents.profiles[name];
     }
-    return false;
+    // Also check agentOverrides (backward compat)
+    if (subagents.agentOverrides?.[name]) {
+      existed = true;
+      delete subagents.agentOverrides[name];
+    }
+    return existed;
   });
   return existed;
 }

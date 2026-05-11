@@ -1,0 +1,422 @@
+/**
+ * pi-subagents Extension
+ *
+ * Allows the main agent to spawn parallel sub-agents, with each sub-agent's
+ * latest output rendered in a rolling TUI window inline with the main agent's
+ * conversation history.
+ *
+ * Usage (from the LLM):
+ *   delegate_to_subagents({ tasks: [{ name: "test", prompt: "..." }] })
+ */
+
+import { spawn } from "node:child_process";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { Message } from "@earendil-works/pi-ai";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+import { Container, Markdown, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
+
+// ── Configuration ────────────────────────────────────────────────────
+
+const DEFAULT_MAX_LINES = 10;
+const MAX_PARALLEL_TASKS = 16;
+const MAX_CONCURRENCY = 4;
+
+// ── Types ────────────────────────────────────────────────────────────
+
+interface SubAgentTask {
+  name: string;
+  prompt: string;
+  cwd?: string;
+}
+
+interface SubAgentWindow {
+  name: string;
+  status: "running" | "completed" | "error";
+  lines: string[];
+  allMessages: string[];
+  exitCode: number | null;
+  model?: string;
+  stopReason?: string;
+  errorMessage?: string;
+}
+
+interface WindowedSubagentDetails {
+  windows: SubAgentWindow[];
+  maxLinesPerWindow: number;
+  globalStatus: "running" | "done";
+}
+
+// ── Schema ───────────────────────────────────────────────────────────
+
+const TaskSchema = Type.Object({
+  name: Type.String({ description: "Display name for this sub-agent window" }),
+  prompt: Type.String({ description: "The task/prompt to send to the sub-agent" }),
+  cwd: Type.Optional(Type.String({ description: "Working directory for this sub-agent" })),
+});
+
+const DelegateParams = Type.Object({
+  tasks: Type.Array(TaskSchema, { minItems: 1, maxItems: MAX_PARALLEL_TASKS }),
+  maxLinesPerWindow: Type.Optional(
+    Type.Number({ default: DEFAULT_MAX_LINES, description: "Max lines to show per sub-agent window" }),
+  ),
+});
+
+// ── ANSI Stripping ───────────────────────────────────────────────────
+
+const ANSI_REGEX =
+  /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_REGEX, "");
+}
+
+// ── Rolling Buffer ─────────────────────────────────────────────────────
+
+function appendLineToWindow(win: SubAgentWindow, line: string, maxLines: number) {
+  const clean = stripAnsi(line).trimEnd();
+  if (!clean) return;
+  win.lines.push(clean);
+  while (win.lines.length > maxLines) {
+    win.lines.shift();
+  }
+  win.allMessages.push(clean);
+}
+
+// ── Sub-Agent Spawner ────────────────────────────────────────────────
+
+function getPiInvocation(): { command: string; args: string[] } {
+  const currentScript = process.argv[1];
+  if (currentScript && !currentScript.startsWith("/$bunfs/root/")) {
+    return { command: process.execPath, args: [currentScript] };
+  }
+  return { command: "pi", args: [] };
+}
+
+async function runSubAgent(
+  task: SubAgentTask,
+  win: SubAgentWindow,
+  maxLines: number,
+  signal: AbortSignal | undefined,
+  onUpdate: () => void,
+): Promise<void> {
+  const invocation = getPiInvocation();
+  const args = [
+    ...invocation.args,
+    "--mode", "json",
+    "-p",
+    "--no-session",
+    task.prompt,
+  ];
+
+  let buffer = "";
+  let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Debounced onUpdate to reduce TUI pressure
+  const debouncedUpdate = () => {
+    if (bufferTimeout) clearTimeout(bufferTimeout);
+    bufferTimeout = setTimeout(() => onUpdate(), 50);
+  };
+
+  return new Promise((resolve) => {
+    const proc = spawn(invocation.command, args, {
+      cwd: task.cwd ?? process.cwd(),
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const processLine = (line: string) => {
+      if (!line.trim()) return;
+      let event: any;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        appendLineToWindow(win, line, maxLines);
+        debouncedUpdate();
+        return;
+      }
+
+      if (event.type === "message_end" && event.message?.role === "assistant") {
+        const msg = event.message as Message;
+        for (const part of msg.content) {
+          if (part.type === "text") {
+            const textLines = part.text.split("\n");
+            for (const textLine of textLines) {
+              appendLineToWindow(win, textLine, maxLines);
+            }
+          }
+          if (part.type === "toolCall") {
+            const args = (part as any).arguments || {};
+            const preview = JSON.stringify(args).slice(0, 60);
+            appendLineToWindow(win, `→ ${(part as any).name}: ${preview}`, maxLines);
+          }
+        }
+        if (msg.model) win.model = msg.model;
+        if (msg.stopReason) win.stopReason = msg.stopReason;
+        if (msg.errorMessage) win.errorMessage = msg.errorMessage;
+        debouncedUpdate();
+      }
+    };
+
+    proc.stdout.on("data", (data: Buffer) => {
+      buffer += data.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        processLine(line);
+      }
+    });
+
+    proc.stderr.on("data", (data: Buffer) => {
+      const text = data.toString().trim();
+      if (text) {
+        appendLineToWindow(win, `[stderr]: ${text}`, maxLines);
+        debouncedUpdate();
+      }
+    });
+
+    proc.on("close", (code) => {
+      if (buffer.trim()) processLine(buffer);
+      if (bufferTimeout) clearTimeout(bufferTimeout);
+      win.exitCode = code ?? 0;
+      if (code !== 0 || win.stopReason === "error" || win.stopReason === "aborted") {
+        win.status = "error";
+      } else {
+        win.status = "completed";
+      }
+      onUpdate();
+      resolve();
+    });
+
+    proc.on("error", () => {
+      if (bufferTimeout) clearTimeout(bufferTimeout);
+      win.exitCode = 1;
+      win.status = "error";
+      win.errorMessage = win.errorMessage || "Failed to spawn sub-agent process";
+      onUpdate();
+      resolve();
+    });
+
+    if (signal) {
+      const killProc = () => {
+        proc.kill("SIGTERM");
+        setTimeout(() => {
+          if (!proc.killed) proc.kill("SIGKILL");
+        }, 5000);
+      };
+      if (signal.aborted) {
+        killProc();
+      } else {
+        signal.addEventListener("abort", killProc, { once: true });
+      }
+    }
+  });
+}
+
+// ── Concurrency Helper ───────────────────────────────────────────────
+
+async function mapWithConcurrencyLimit<TIn, TOut>(
+  items: TIn[],
+  concurrency: number,
+  fn: (item: TIn, index: number) => Promise<TOut>,
+): Promise<TOut[]> {
+  if (items.length === 0) return [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const results: TOut[] = new Array(items.length);
+  let nextIndex = 0;
+  const workers = new Array(limit).fill(null).map(async () => {
+    while (true) {
+      const current = nextIndex++;
+      if (current >= items.length) return;
+      results[current] = await fn(items[current], current);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+// ── Formatting Helpers ──────────────────────────────────────────────
+
+function joinStatusParts(parts: { text: string; color?: string }[]): string {
+  const nonEmpty = parts.filter((p) => p.text);
+  let result = "";
+  for (let i = 0; i < nonEmpty.length; i++) {
+    result += nonEmpty[i].text;
+    if (i < nonEmpty.length - 1) result += ", ";
+  }
+  return result;
+}
+
+function buildWindowHeader(win: SubAgentWindow, themeFgr: (color: string, text: string) => string): string {
+  const icon = win.status === "running" ? "⏳"
+    : win.status === "error" ? "✗"
+    : "✓";
+  const color = win.status === "running" ? "warning"
+    : win.status === "error" ? "error"
+    : "success";
+  return themeFgr(color, icon) + " " + themeFgr("accent", themeFgr("toolTitle", win.name));
+}
+
+// ── Extension ────────────────────────────────────────────────────────
+
+export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "delegate_to_subagents",
+    label: "Delegate to Sub-agents",
+    description: [
+      "Spawn one or more parallel sub-agents to work on separate tasks.",
+      "Each sub-agent runs in an isolated pi process with its own context window.",
+      "Live progress from each sub-agent is shown in a rolling window in the TUI.",
+    ].join(" "),
+    parameters: DelegateParams,
+    promptSnippet: "Use when the user wants multiple independent tasks done in parallel",
+    promptGuidelines: [
+      "Use delegate_to_subagents when the user asks for multiple independent tasks.\n",
+      "Each task gets its own isolated pi sub-agent process with full tool access.\n",
+      "Provide a descriptive `name` for each task so the TUI window is labeled.\n",
+      "Set `maxLinesPerWindow` to control how many lines of live output are shown.\n",
+    ],
+
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      const maxLines = params.maxLinesPerWindow ?? DEFAULT_MAX_LINES;
+
+      const windows: SubAgentWindow[] = params.tasks.map((t) => ({
+        name: t.name,
+        status: "running",
+        lines: [],
+        allMessages: [],
+        exitCode: null,
+      }));
+
+      const makeDetails = (): WindowedSubagentDetails => ({
+        windows,
+        maxLinesPerWindow: maxLines,
+        globalStatus: windows.every((w) => w.status !== "running") ? "done" : "running",
+      });
+
+      const emitUpdate = () => {
+        if (onUpdate) {
+          onUpdate({
+            content: [{ type: "text", text: getSummaryText(windows) }],
+            details: makeDetails(),
+          });
+        }
+      };
+
+      await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (task, index) => {
+        const win = windows[index];
+        await runSubAgent(task, win, maxLines, signal, emitUpdate);
+      });
+
+      const summaryLines: string[] = [];
+      for (const win of windows) {
+        const icon = win.status === "completed" ? "✓" : "✗";
+        summaryLines.push(`${icon} ${win.name}: ${win.status}`);
+      }
+
+      return {
+        content: [{ type: "text", text: summaryLines.join("\n") }],
+        details: makeDetails(),
+      };
+    },
+
+    // ── renderCall ─────────────────────────────────────────────────
+    renderCall(args, theme, _context) {
+      const count = args.tasks?.length ?? 1;
+      const text =
+        theme.fg("toolTitle", theme.bold("delegate_to_subagents ")) +
+        theme.fg("accent", `${count} sub-agent${count > 1 ? "s" : ""}`);
+      return new Text(text, 0, 0);
+    },
+
+    // ── renderResult: Live rolling window display ──────────────────
+    renderResult(result, { isPartial, expanded }, theme, _context) {
+      const details = result.details as WindowedSubagentDetails | undefined;
+      if (!details) {
+        return new Text("(no sub-agent details)", 0, 0);
+      }
+
+      const container = new Container();
+      const running = details.windows.filter((w) => w.status === "running").length;
+      const done = details.windows.filter((w) => w.status === "completed").length;
+      const errors = details.windows.filter((w) => w.status === "error").length;
+
+      // ── Global status header ──
+      {
+        let header = theme.fg("toolTitle", theme.bold("Sub-agents: "));
+        const parts: string[] = [];
+        if (running > 0) parts.push(theme.fg("warning", `${running} running`));
+        if (done > 0) parts.push(theme.fg("success", `${done} done`));
+        if (errors > 0) parts.push(theme.fg("error", `${errors} error${errors > 1 ? "s" : ""}`));
+        header += parts.join(theme.fg("dim", ", "));
+        header += theme.fg("dim", ` (${details.maxLinesPerWindow}-line window)`);
+        container.addChild(new Text(header, 0, 0));
+        container.addChild(new Spacer(1));
+      }
+
+      // ── Per-agent windows ──
+      for (const win of details.windows) {
+        const icon = win.status === "running" ? "⏳"
+          : win.status === "error" ? "✗"
+          : "✓";
+        const color = win.status === "running" ? "warning"
+          : win.status === "error" ? "error"
+          : "success";
+
+        const headerLine = theme.fg(color, icon) + " " + theme.fg("accent", theme.bold(win.name));
+        container.addChild(new Text(headerLine, 0, 0));
+
+        if (expanded) {
+          // Expanded (Ctrl+O): show all captured messages, not just latest N
+          if (win.allMessages.length === 0) {
+            container.addChild(new Text(theme.fg("muted", "  (no output)"), 0, 0));
+          } else {
+            for (const msg of win.allMessages) {
+              const lines = msg.split("\n");
+              for (const line of lines) {
+                container.addChild(new Text("  " + line, 0, 0));
+              }
+            }
+          }
+        } else {
+          // Collapsed: rolling window (latest N lines)
+          if (win.lines.length === 0) {
+            container.addChild(new Text(theme.fg("muted", "  (starting...)"), 0, 0));
+          } else {
+            for (const line of win.lines) {
+              container.addChild(new Text("  " + line, 0, 0));
+            }
+          }
+        }
+
+        if (win.status === "error" && win.errorMessage) {
+          container.addChild(
+            new Text(theme.fg("error", "  Error: " + win.errorMessage), 0, 0)
+          );
+        }
+
+        container.addChild(new Spacer(1));
+      }
+
+      // ── Footer ──
+      if (running > 0) {
+        container.addChild(new Text(theme.fg("muted", `${running} running...`), 0, 0));
+      }
+
+      return container;
+    },
+  });
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function getSummaryText(windows: SubAgentWindow[]): string {
+  const running = windows.filter((w) => w.status === "running").length;
+  const done = windows.filter((w) => w.status === "completed").length;
+  const errors = windows.filter((w) => w.status === "error").length;
+  const parts: string[] = [];
+  if (running > 0) parts.push(`${running} running`);
+  if (done > 0) parts.push(`${done} done`);
+  if (errors > 0) parts.push(`${errors} error${errors > 1 ? "s" : ""}`);
+  return parts.join(", ") || "processing...";
+}

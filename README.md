@@ -175,6 +175,35 @@ Settings are loaded from:
 1. Global: `~/.pi/agent/settings.json`
 2. Project-local: `.pi/settings.json` (overrides global)
 
+## The `/profile` Command
+
+Use `/profile` interactively to manage subagent profiles without editing JSON by hand:
+
+| Command | Description |
+|---------|-------------|
+| `/profile list` | List all profiles with summaries |
+| `/profile show <name>` | Display full details of a profile |
+| `/profile <name>` | Alias for `show` |
+| `/profile create <name>` | Interactively create a new profile |
+| `/profile edit <name>` | Interactively edit an existing profile |
+| `/profile delete <name>` | Delete a profile |
+
+### Interactive Editor
+
+`/profile create` and `/profile edit` walk you through each setting:
+
+1. **Scope** — save to global or project-local settings
+2. **Provider** — e.g. `anthropic`, `openai`, `dashscope`
+3. **Model** — supports `provider/id` and `:thinking` shorthand
+4. **System prompt** — optionally set or replace the default
+5. **Append system prompt** — optionally append to the default
+6. **Thinking level** — off, minimal, low, medium, high, xhigh
+7. **Tools** — restrict to an allowlist or disable all
+8. **Extensions** — restrict or disable
+9. **Review & save** — shows full profile before confirming
+
+You can skip any field by answering "No" — it will be omitted from the profile (using pi defaults).
+
 ## Features
 
 - **Parallel execution**: Multiple sub-agents run concurrently (up to 4 at a time by default)

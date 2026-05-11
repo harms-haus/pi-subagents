@@ -24,8 +24,12 @@ import {
   resolveProfile,
   profileToArgs,
   profileSummary,
+  saveProfile,
+  deleteProfile,
+  formatProfileDetail,
   type SubagentProfile,
   type SubagentProfiles,
+  type ProfileScope,
 } from "./profiles";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -288,6 +292,143 @@ function buildWindowHeader(win: SubAgentWindow, themeFgr: (color: string, text: 
   return themeFgr(color, icon) + " " + themeFgr("accent", themeFgr("toolTitle", win.name));
 }
 
+// ── Interactive Profile Editor ───────────────────────────────────────
+
+async function editProfileInteractive(
+  name: string,
+  initial: SubagentProfile,
+  ctx: any,
+): Promise<void> {
+  const profile = { ...initial };
+  const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
+  // Scope
+  const scope = await ctx.ui.select<ProfileScope>(
+    "Save to which scope?",
+    [
+      { value: "global", label: "Global (~/.pi/agent/settings.json)" },
+      { value: "project", label: "Project (.pi/settings.json)" },
+    ],
+  );
+  if (!scope) return;
+
+  // Provider
+  const provider = await ctx.ui.input("Provider (e.g. anthropic, openai, dashscope):", profile.provider ?? "");
+  if (provider === undefined) return;
+  if (provider) profile.provider = provider;
+  else delete profile.provider;
+
+  // Model
+  const model = await ctx.ui.input("Model (supports provider/id and :thinking shorthand):", profile.model ?? "");
+  if (model === undefined) return;
+  if (model) profile.model = model;
+  else delete profile.model;
+
+  // System prompt
+  const hasSystem = await ctx.ui.confirm(
+    "System prompt?",
+    profile.systemPrompt ? "A custom system prompt is set. Keep it?" : "Set a custom system prompt?",
+  );
+  if (hasSystem) {
+    const sp = await ctx.ui.editor("System prompt:", profile.systemPrompt ?? "You are a helpful coding assistant.");
+    if (sp === undefined) return;
+    profile.systemPrompt = sp;
+  } else {
+    delete profile.systemPrompt;
+  }
+
+  // Append system prompt
+  const hasAppend = await ctx.ui.confirm(
+    "Append to system prompt?",
+    profile.appendSystemPrompt ? "An appended system prompt is set. Keep it?" : "Append text to the default system prompt?",
+  );
+  if (hasAppend) {
+    const ap = await ctx.ui.input("Append text:", profile.appendSystemPrompt ?? "");
+    if (ap === undefined) return;
+    if (ap) profile.appendSystemPrompt = ap;
+  } else {
+    delete profile.appendSystemPrompt;
+  }
+
+  // Thinking level
+  const hasThinking = await ctx.ui.confirm(
+    "Thinking level?",
+    profile.thinkingLevel ? `Thinking level is ${profile.thinkingLevel}. Set one?` : "Set a thinking level?",
+  );
+  if (hasThinking) {
+    const tl = await ctx.ui.select<ThinkingLevel>("Thinking level:",
+      THINKING_LEVELS.map((l) => ({ value: l, label: l })),
+    );
+    if (tl) profile.thinkingLevel = tl;
+  } else {
+    delete profile.thinkingLevel;
+  }
+
+  // Tools
+  const hasTools = await ctx.ui.confirm(
+    "Configure tools?",
+    profile.tools || profile.noTools ? "Tool config is set. Change it?" : "Restrict which tools the subagent can use?",
+  );
+  if (hasTools) {
+    const noTools = await ctx.ui.confirm("Disable all tools?", "");
+    if (noTools) {
+      profile.noTools = true;
+      delete profile.tools;
+    } else {
+      delete profile.noTools;
+      const toolsStr = await ctx.ui.input(
+        "Tool allowlist (comma-separated, e.g. read,bash,grep):",
+        profile.tools?.join(",") ?? "",
+      );
+      if (toolsStr === undefined) return;
+      if (toolsStr.trim()) {
+        profile.tools = toolsStr.split(",").map((t: string) => t.trim()).filter(Boolean);
+      } else {
+        delete profile.tools;
+      }
+    }
+  }
+
+  // Extensions
+  const hasExts = await ctx.ui.confirm(
+    "Configure extensions?",
+    profile.noExtensions || profile.extensions ? "Extension config is set. Change it?" : "Configure extension loading?",
+  );
+  if (hasExts) {
+    const noExt = await ctx.ui.confirm("Disable all extensions?", "");
+    if (noExt) {
+      profile.noExtensions = true;
+      delete profile.extensions;
+    } else {
+      delete profile.noExtensions;
+      const extStr = await ctx.ui.input(
+        "Extension paths (comma-separated):",
+        profile.extensions?.join(",") ?? "",
+      );
+      if (extStr === undefined) return;
+      if (extStr.trim()) {
+        profile.extensions = extStr.split(",").map((e: string) => e.trim()).filter(Boolean);
+      } else {
+        delete profile.extensions;
+      }
+    }
+  }
+
+  // Review and save
+  const summary = formatProfileDetail(name, profile);
+  const confirmed = await ctx.ui.confirm(
+    `Save profile "${name}"?`,
+    summary + "\n\nSave this profile?",
+  );
+  if (!confirmed) {
+    ctx.ui.notify("Cancelled.", "info");
+    return;
+  }
+
+  await saveProfile(name, profile, scope, ctx.cwd);
+  ctx.ui.notify(`Profile "${name}" saved to ${scope} settings.`, "info");
+}
+
 // ── Extension ────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -398,7 +539,7 @@ export default function (pi: ExtensionAPI) {
 
       let text =
         theme.fg("toolTitle", theme.bold("delegate_to_subagents ")) +
-        theme.fg("accent", `${count} sub-agent${count > 1 ? "s" : "}");
+        theme.fg("accent", `${count} sub-agent${count > 1 ? "s" : ""}`);
 
       if (defaultProfile) {
         text += theme.fg("dim", ` (default profile: ${defaultProfile})`);
@@ -487,6 +628,123 @@ export default function (pi: ExtensionAPI) {
       }
 
       return container;
+    },
+  });
+
+  // ── /profile command ──────────────────────────────────────────────
+
+  pi.registerCommand("profile", {
+    description: "Manage subagent profiles (list, show, create, edit, delete)",
+
+    async getArgumentCompletions(prefix: string) {
+      const profiles = await loadProfiles();
+      const subs = ["list", "show", "create", "edit", "delete"];
+      const items = [...subs, ...Object.keys(profiles)]
+        .filter((s) => s.startsWith(prefix))
+        .map((s) => ({ value: s, label: s }));
+      return items.length > 0 ? items : null;
+    },
+
+    handler: async (args, ctx) => {
+      const tokens = args.trim().split(/\s+/);
+      const sub = tokens[0] ?? "list";
+
+      // ── /profile list ──
+      if (sub === "list" || sub === "ls") {
+        const profiles = await loadProfiles(ctx.cwd);
+        const names = Object.keys(profiles);
+        if (names.length === 0) {
+          ctx.ui.notify("No subagent profiles defined. Use /profile create to add one.", "info");
+          return;
+        }
+        const lines = names.map((n) => "  " + profileSummary(n, profiles[n]));
+        ctx.ui.notify("Subagent profiles:\n" + lines.join("\n"), "info");
+        return;
+      }
+
+      // ── /profile show <name> ──
+      if (sub === "show") {
+        const name = tokens[1];
+        if (!name) {
+          ctx.ui.notify("Usage: /profile show <name>", "warning");
+          return;
+        }
+        const profiles = await loadProfiles(ctx.cwd);
+        const profile = profiles[name];
+        if (!profile) {
+          ctx.ui.notify(`Profile "${name}" not found. Available: ${Object.keys(profiles).join(", ") || "(none)"}`, "error");
+          return;
+        }
+        ctx.ui.notify(formatProfileDetail(name, profile), "info");
+        return;
+      }
+
+      // ── /profile create <name> ──
+      if (sub === "create" || sub === "new") {
+        const name = tokens[1];
+        if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+          ctx.ui.notify("Usage: /profile create <name>  (alphanumeric, hyphens, underscores)", "warning");
+          return;
+        }
+        const profiles = await loadProfiles(ctx.cwd);
+        if (profiles[name]) {
+          ctx.ui.notify(`Profile "${name}" already exists. Use /profile edit ${name} to modify it.`, "warning");
+          return;
+        }
+        await editProfileInteractive(name, {}, ctx);
+        return;
+      }
+
+      // ── /profile edit <name> ──
+      if (sub === "edit") {
+        const name = tokens[1];
+        if (!name) {
+          ctx.ui.notify("Usage: /profile edit <name>", "warning");
+          return;
+        }
+        const profiles = await loadProfiles(ctx.cwd);
+        const profile = profiles[name];
+        if (!profile) {
+          ctx.ui.notify(`Profile "${name}" not found. Use /profile create ${name} to create it.`, "error");
+          return;
+        }
+        await editProfileInteractive(name, { ...profile }, ctx);
+        return;
+      }
+
+      // ── /profile delete <name> ──
+      if (sub === "delete" || sub === "rm" || sub === "remove") {
+        const name = tokens[1];
+        if (!name) {
+          ctx.ui.notify("Usage: /profile delete <name>", "warning");
+          return;
+        }
+        const ok = await ctx.ui.confirm("Delete profile?", `Delete subagent profile "${name}"?`);
+        if (!ok) return;
+        const deleted = await deleteProfile(name, "global");
+        const deletedProject = await deleteProfile(name, "project", ctx.cwd);
+        if (deleted || deletedProject) {
+          ctx.ui.notify(`Profile "${name}" deleted.`, "info");
+        } else {
+          ctx.ui.notify(`Profile "${name}" not found.`, "error");
+        }
+        return;
+      }
+
+      // ── Bare name: /profile <name> (alias for show) ──
+      if (sub && !/^(list|show|create|edit|delete|ls|new|rm|remove)$/.test(sub)) {
+        const profiles = await loadProfiles(ctx.cwd);
+        const profile = profiles[sub];
+        if (profile) {
+          ctx.ui.notify(formatProfileDetail(sub, profile), "info");
+          return;
+        }
+      }
+
+      ctx.ui.notify(
+        "Usage: /profile [list|show <name>|create <name>|edit <name>|delete <name>]",
+        "warning",
+      );
     },
   });
 }

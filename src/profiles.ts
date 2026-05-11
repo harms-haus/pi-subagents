@@ -31,7 +31,7 @@
  * }
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -239,4 +239,109 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
   if (profile.noTools) parts.push("no-tools");
   else if (profile.tools) parts.push(`tools=[${profile.tools.join(",")}]`);
   return parts.join(", ");
+}
+
+// ── Profile Mutation ─────────────────────────────────────────────────
+
+export type ProfileScope = "global" | "project";
+
+/**
+ * Read the raw settings file, mutate the subagents.profiles section,
+ * and write it back.
+ */
+async function mutateProfilesFile(
+  filePath: string,
+  mutator: (profiles: SubagentProfiles) => boolean,
+): Promise<void> {
+  let settings: Record<string, any> = {};
+  if (existsSync(filePath)) {
+    try {
+      settings = JSON.parse(await readFile(filePath, "utf8"));
+    } catch {
+      settings = {};
+    }
+  }
+
+  if (!settings.subagents) settings.subagents = {};
+  if (!settings.subagents.profiles) settings.subagents.profiles = {};
+
+  const changed = mutator(settings.subagents.profiles);
+  if (!changed) return;
+
+  // Clean up empty profiles object
+  if (Object.keys(settings.subagents.profiles).length === 0) {
+    delete settings.subagents.profiles;
+  }
+  if (Object.keys(settings.subagents).length === 0) {
+    delete settings.subagents;
+  }
+
+  await writeFile(filePath, JSON.stringify(settings, null, 2) + "\n", "utf8");
+}
+
+export function getSettingsPath(scope: ProfileScope, cwd?: string): string {
+  if (scope === "project") {
+    return getProjectSettingsPath(cwd ?? process.cwd());
+  }
+  return getGlobalSettingsPath();
+}
+
+/**
+ * Save (create or update) a profile to the given scope.
+ */
+export async function saveProfile(
+  name: string,
+  profile: SubagentProfile,
+  scope: ProfileScope,
+  cwd?: string,
+): Promise<void> {
+  const filePath = getSettingsPath(scope, cwd);
+  await mutateProfilesFile(filePath, (profiles) => {
+    profiles[name] = profile;
+    return true;
+  });
+}
+
+/**
+ * Delete a profile from the given scope.
+ * Returns true if the profile existed and was deleted.
+ */
+export async function deleteProfile(
+  name: string,
+  scope: ProfileScope,
+  cwd?: string,
+): Promise<boolean> {
+  const filePath = getSettingsPath(scope, cwd);
+  let existed = false;
+  await mutateProfilesFile(filePath, (profiles) => {
+    if (profiles[name]) {
+      existed = true;
+      delete profiles[name];
+      return true;
+    }
+    return false;
+  });
+  return existed;
+}
+
+/**
+ * Format a profile as a human-readable multi-line string for display.
+ */
+export function formatProfileDetail(name: string, profile: SubagentProfile): string {
+  const lines: string[] = [];
+  lines.push(`Profile: ${name}`);
+  if (profile.provider) lines.push(`  provider:          ${profile.provider}`);
+  if (profile.model) lines.push(`  model:             ${profile.model}`);
+  if (profile.thinkingLevel) lines.push(`  thinkingLevel:     ${profile.thinkingLevel}`);
+  if (profile.systemPrompt) lines.push(`  systemPrompt:      ${profile.systemPrompt}`);
+  if (profile.appendSystemPrompt) lines.push(`  appendSystemPrompt: ${profile.appendSystemPrompt}`);
+  if (profile.noTools) lines.push(`  noTools:           true`);
+  else if (profile.tools) lines.push(`  tools:             [${profile.tools.join(", ")}]`);
+  if (profile.noExtensions) lines.push(`  noExtensions:      true`);
+  if (profile.extensions) lines.push(`  extensions:        [${profile.extensions.join(", ")}]`);
+  if (profile.noSkills) lines.push(`  noSkills:          true`);
+  if (profile.noContextFiles) lines.push(`  noContextFiles:    true`);
+  if (profile.apiKey) lines.push(`  apiKey:            ${profile.apiKey}`);
+  if (profile.extraArgs) lines.push(`  extraArgs:         ${JSON.stringify(profile.extraArgs)}`);
+  return lines.join("\n");
 }

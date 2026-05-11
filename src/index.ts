@@ -306,11 +306,12 @@ async function editProfileInteractive(
   const scope = await ctx.ui.select<ProfileScope>(
     "Save to which scope?",
     [
-      { value: "global", label: "Global (~/.pi/agent/settings.json)" },
-      { value: "project", label: "Project (.pi/settings.json)" },
+      "Global (~/.pi/agent/settings.json)",
+      "Project (.pi/settings.json)",
     ],
   );
   if (!scope) return;
+  const scopeValue: ProfileScope = scope.startsWith("Global") ? "global" : "project";
 
   // Provider
   const provider = await ctx.ui.input("Provider (e.g. anthropic, openai, dashscope):", profile.provider ?? "");
@@ -357,7 +358,7 @@ async function editProfileInteractive(
   );
   if (hasThinking) {
     const tl = await ctx.ui.select<ThinkingLevel>("Thinking level:",
-      THINKING_LEVELS.map((l) => ({ value: l, label: l })),
+      THINKING_LEVELS,
     );
     if (tl) profile.thinkingLevel = tl;
   } else {
@@ -425,8 +426,8 @@ async function editProfileInteractive(
     return;
   }
 
-  await saveProfile(name, profile, scope, ctx.cwd);
-  ctx.ui.notify(`Profile "${name}" saved to ${scope} settings.`, "info");
+  await saveProfile(name, profile, scopeValue, ctx.cwd);
+  ctx.ui.notify(`Profile "${name}" saved to ${scopeValue} settings.`, "info");
 }
 
 // ── Extension ────────────────────────────────────────────────────────

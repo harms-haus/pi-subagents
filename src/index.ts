@@ -5,8 +5,12 @@
  * latest output rendered in a rolling TUI window inline with the main agent's
  * conversation history.
  *
+ * Supports named profiles configured in settings.json under
+ * `subagents.profiles` to pre-configure provider/model, system prompts,
+ * thinking levels, and other model settings per profile.
+ *
  * Usage (from the LLM):
- *   delegate_to_subagents({ tasks: [{ name: "test", prompt: "..." }] })
+ *   delegate_to_subagents({ tasks: [{ name: "test", prompt: "...", profile: "code-reviewer" }] })
  */
 
 import { spawn } from "node:child_process";
@@ -15,6 +19,14 @@ import type { Message } from "@earendil-works/pi-ai";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Container, Markdown, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import {
+  loadProfiles,
+  resolveProfile,
+  profileToArgs,
+  profileSummary,
+  type SubagentProfile,
+  type SubagentProfiles,
+} from "./profiles";
 
 // ── Configuration ────────────────────────────────────────────────────
 
@@ -28,6 +40,8 @@ interface SubAgentTask {
   name: string;
   prompt: string;
   cwd?: string;
+  /** Named profile from settings.json subagents.profiles */
+  profile?: string;
 }
 
 interface SubAgentWindow {
@@ -39,6 +53,10 @@ interface SubAgentWindow {
   model?: string;
   stopReason?: string;
   errorMessage?: string;
+  /** Name of the profile used, if any */
+  profileName?: string;
+  /** Human-readable profile summary for display */
+  profileInfo?: string;
 }
 
 interface WindowedSubagentDetails {
@@ -53,6 +71,9 @@ const TaskSchema = Type.Object({
   name: Type.String({ description: "Display name for this sub-agent window" }),
   prompt: Type.String({ description: "The task/prompt to send to the sub-agent" }),
   cwd: Type.Optional(Type.String({ description: "Working directory for this sub-agent" })),
+  profile: Type.Optional(Type.String({
+    description: "Named subagent profile from settings (sets provider/model, system prompt, thinking level, etc.)",
+  })),
 });
 
 const DelegateParams = Type.Object({
@@ -60,6 +81,9 @@ const DelegateParams = Type.Object({
   maxLinesPerWindow: Type.Optional(
     Type.Number({ default: DEFAULT_MAX_LINES, description: "Max lines to show per sub-agent window" }),
   ),
+  profile: Type.Optional(Type.String({
+    description: "Default profile for all tasks (overridden by per-task profile)",
+  })),
 });
 
 // ── ANSI Stripping ───────────────────────────────────────────────────
@@ -99,6 +123,7 @@ async function runSubAgent(
   maxLines: number,
   signal: AbortSignal | undefined,
   onUpdate: () => void,
+  profile?: SubagentProfile,
 ): Promise<void> {
   const invocation = getPiInvocation();
   const args = [
@@ -106,8 +131,14 @@ async function runSubAgent(
     "--mode", "json",
     "-p",
     "--no-session",
-    task.prompt,
   ];
+
+  // Inject profile-specific CLI arguments before the prompt
+  if (profile) {
+    args.push(...profileToArgs(profile));
+  }
+
+  args.push(task.prompt);
 
   let buffer = "";
   let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -267,6 +298,10 @@ export default function (pi: ExtensionAPI) {
       "Spawn one or more parallel sub-agents to work on separate tasks.",
       "Each sub-agent runs in an isolated pi process with its own context window.",
       "Live progress from each sub-agent is shown in a rolling window in the TUI.",
+      "Optionally specify a profile name to pre-configure provider/model, system prompt,",
+      "thinking level, and other model settings. Profiles are defined in settings.json",
+      "under subagents.profiles. A top-level profile parameter sets a default for all tasks;",
+      "each task can override with its own profile.",
     ].join(" "),
     parameters: DelegateParams,
     promptSnippet: "Use when the user wants multiple independent tasks done in parallel",
@@ -275,18 +310,34 @@ export default function (pi: ExtensionAPI) {
       "Each task gets its own isolated pi sub-agent process with full tool access.\n",
       "Provide a descriptive `name` for each task so the TUI window is labeled.\n",
       "Set `maxLinesPerWindow` to control how many lines of live output are shown.\n",
+      "Use the `profile` parameter (top-level or per-task) to select a named subagent profile",
+      "that pre-configures provider/model, system prompt, thinking level, and other settings.\n",
+      "When the user mentions a specific agent role like \"use the code-reviewer profile\"",
+      "or \"run this as the researcher\", set the profile field accordingly.\n",
     ],
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       const maxLines = params.maxLinesPerWindow ?? DEFAULT_MAX_LINES;
 
-      const windows: SubAgentWindow[] = params.tasks.map((t) => ({
-        name: t.name,
-        status: "running",
-        lines: [],
-        allMessages: [],
-        exitCode: null,
-      }));
+      // Load profiles from settings (global + project-local)
+      const profiles = await loadProfiles(ctx.cwd);
+
+      const windows: SubAgentWindow[] = params.tasks.map((t) => {
+        const resolvedProfileName = t.profile ?? params.profile;
+        const resolvedProfile = resolvedProfileName
+          ? resolveProfile(profiles, resolvedProfileName)
+          : undefined;
+
+        return {
+          name: t.name,
+          status: "running",
+          lines: [],
+          allMessages: [],
+          exitCode: null,
+          profileName: resolvedProfileName,
+          profileInfo: resolvedProfile ? profileSummary(resolvedProfileName!, resolvedProfile) : undefined,
+        };
+      });
 
       const makeDetails = (): WindowedSubagentDetails => ({
         windows,
@@ -305,13 +356,30 @@ export default function (pi: ExtensionAPI) {
 
       await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (task, index) => {
         const win = windows[index];
-        await runSubAgent(task, win, maxLines, signal, emitUpdate);
+        const resolvedProfileName = task.profile ?? params.profile;
+        const resolvedProfile = resolvedProfileName
+          ? resolveProfile(profiles, resolvedProfileName)
+          : undefined;
+
+        if (resolvedProfileName && !resolvedProfile) {
+          win.status = "error";
+          win.errorMessage = `Unknown profile: "${resolvedProfileName}". Available profiles: ${Object.keys(profiles).join(", ") || "(none)"}`;
+          win.exitCode = 1;
+          emitUpdate();
+          return;
+        }
+
+        await runSubAgent(task, win, maxLines, signal, emitUpdate, resolvedProfile);
       });
 
       const summaryLines: string[] = [];
       for (const win of windows) {
         const icon = win.status === "completed" ? "✓" : "✗";
-        summaryLines.push(`${icon} ${win.name}: ${win.status}`);
+        let line = `${icon} ${win.name}: ${win.status}`;
+        if (win.profileName) {
+          line += ` (${win.profileInfo ?? win.profileName})`;
+        }
+        summaryLines.push(line);
       }
 
       return {
@@ -323,9 +391,21 @@ export default function (pi: ExtensionAPI) {
     // ── renderCall ─────────────────────────────────────────────────
     renderCall(args, theme, _context) {
       const count = args.tasks?.length ?? 1;
-      const text =
+      const taskProfiles = (args.tasks ?? [])
+        .map((t: any) => t.profile)
+        .filter(Boolean) as string[];
+      const defaultProfile = args.profile;
+
+      let text =
         theme.fg("toolTitle", theme.bold("delegate_to_subagents ")) +
-        theme.fg("accent", `${count} sub-agent${count > 1 ? "s" : ""}`);
+        theme.fg("accent", `${count} sub-agent${count > 1 ? "s" : "}");
+
+      if (defaultProfile) {
+        text += theme.fg("dim", ` (default profile: ${defaultProfile})`);
+      }
+      if (taskProfiles.length > 0) {
+        text += theme.fg("dim", ` profiles: [${taskProfiles.join(", ")}]`);
+      }
       return new Text(text, 0, 0);
     },
 
@@ -363,7 +443,10 @@ export default function (pi: ExtensionAPI) {
           : win.status === "error" ? "error"
           : "success";
 
-        const headerLine = theme.fg(color, icon) + " " + theme.fg("accent", theme.bold(win.name));
+        let headerLine = theme.fg(color, icon) + " " + theme.fg("accent", theme.bold(win.name));
+        if (win.profileName) {
+          headerLine += theme.fg("dim", ` [${win.profileInfo ?? win.profileName}]`);
+        }
         container.addChild(new Text(headerLine, 0, 0));
 
         if (expanded) {

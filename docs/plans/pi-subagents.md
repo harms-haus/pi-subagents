@@ -341,6 +341,9 @@ renderResult(result, { isPartial, expanded }, theme, _ctx) {
 - **Error highlighting**: If a sub-agent exits with a non-zero code, highlight the window border in red.
 - **Progress bar**: If the sub-agent can report progress (e.g., number of files processed), show a mini progress bar in the window header.
 - **Filtering**: Allow the user to filter which sub-agent windows are visible when many are running in parallel.
+- **Profile management UI**: Add a `/profiles` command to list, create, and edit profiles interactively.
+- **Profile inheritance**: Allow profiles to extend other profiles for shared base configuration.
+- **Environment variables**: Support env var overrides for profile settings.
 
 ---
 

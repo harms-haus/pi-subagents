@@ -2,6 +2,8 @@
 
 A pi extension that allows the main agent to spawn parallel sub-agents, with each sub-agent's latest output rendered in a rolling TUI window inline with the main agent's conversation history.
 
+Sub-agents can optionally use **named profiles** that pre-configure provider/model, system prompts, thinking levels, and other model settings.
+
 ## Installation
 
 ### Installed as a pi package (Recommended)
@@ -31,11 +33,12 @@ Once installed, the LLM can use the tool:
     "tasks": [
       {
         "name": "linter-src",
-        "prompt": "Review and fix all linting errors in the src/ directory. Use the bash tool to run eslint and fix any issues."
+        "prompt": "Review and fix all linting errors in the src/ directory."
       },
       {
         "name": "linter-tests",
-        "prompt": "Review and fix all linting errors in the tests/ directory. Use the bash tool to run eslint and fix any issues."
+        "prompt": "Review and fix all linting errors in the tests/ directory.",
+        "profile": "fast-worker"
       }
     ],
     "maxLinesPerWindow": 10
@@ -47,13 +50,130 @@ Once installed, the LLM can use the tool:
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `tasks` | `Array<{name, prompt, cwd?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
+| `tasks` | `Array<{name, prompt, cwd?, profile?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
 | `maxLinesPerWindow` | `number` | No | Maximum lines to show per sub-agent window (default: 10) |
+| `profile` | `string` | No | Default profile for all tasks (overridden by per-task profile) |
 
 Each task:
 - `name`: Display label shown in the TUI window header
 - `prompt`: Prompt sent to the sub-agent (same as typing into pi directly)
 - `cwd`: Working directory for the sub-agent (default: current directory)
+- `profile`: Named profile to use for this sub-agent (see below)
+
+## Subagent Profiles
+
+Profiles let you pre-configure the provider, model, system prompt, thinking level, and other settings for sub-agents. They are defined in `settings.json` under `subagents.profiles`.
+
+### Defining Profiles
+
+Add profiles to your global `~/.pi/agent/settings.json` or project-local `.pi/settings.json`:
+
+```json
+{
+  "subagents": {
+    "profiles": {
+      "code-reviewer": {
+        "model": "anthropic/claude-sonnet-4-5",
+        "systemPrompt": "You are an expert code reviewer. Focus on bugs, security issues, and performance. Be thorough but concise.",
+        "thinkingLevel": "high",
+        "tools": ["read", "bash", "grep", "find"]
+      },
+      "fast-worker": {
+        "model": "dashscope/qwen3.5-plus",
+        "appendSystemPrompt": "Be concise. Skip explanations unless asked.",
+        "thinkingLevel": "off"
+      },
+      "researcher": {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "systemPrompt": "You are a research assistant. Use web search to find information.",
+        "thinkingLevel": "medium",
+        "noExtensions": true
+      },
+      "planner": {
+        "model": "dashscope/glm-5",
+        "systemPrompt": "You are a planning agent. Break down tasks into steps. Do not execute, only plan.",
+        "thinkingLevel": "high",
+        "noTools": true
+      }
+    }
+  }
+}
+```
+
+### Profile Options
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `provider` | `string` | Provider name (e.g., `"anthropic"`, `"openai"`, `"dashscope"`)
+| `model` | `string` | Model pattern or ID. Supports `"provider/id"` format and `":thinking"` shorthand (e.g., `"sonnet:high"`)
+| `systemPrompt` | `string` | Replace the default system prompt entirely
+| `appendSystemPrompt` | `string` | Append text to the default system prompt
+| `thinkingLevel` | `string` | Thinking level: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`
+| `noTools` | `boolean` | Disable all tools
+| `tools` | `string[]` | Allowlist of tool names to enable
+| `noExtensions` | `boolean` | Disable all extensions
+| `extensions` | `string[]` | Extension paths to load
+| `noSkills` | `boolean` | Disable skills
+| `noContextFiles` | `boolean` | Disable AGENTS.md/CLAUDE.md context files
+| `apiKey` | `string` | Custom API key
+| `extraArgs` | `string[]` | Additional CLI arguments passed verbatim
+
+### Using Profiles
+
+**Per-task profile** — each task specifies its own profile:
+
+```json
+{
+  "delegate_to_subagents": {
+    "tasks": [
+      { "name": "review", "prompt": "Review src/...", "profile": "code-reviewer" },
+      { "name": "research", "prompt": "Find best practices for...", "profile": "researcher" }
+    ]
+  }
+}
+```
+
+**Default profile for all tasks** — set at the top level, overridden by per-task profiles:
+
+```json
+{
+  "delegate_to_subagents": {
+    "profile": "fast-worker",
+    "tasks": [
+      { "name": "task-a", "prompt": "..." },
+      { "name": "task-b", "prompt": "...", "profile": "code-reviewer" }
+    ]
+  }
+}
+```
+
+### Backward Compatibility: agentOverrides
+
+The existing `subagents.agentOverrides` pattern continues to work. Entries in `agentOverrides` are treated as simple profiles with just model/provider settings:
+
+```json
+{
+  "subagents": {
+    "agentOverrides": {
+      "worker": { "model": "dashscope/qwen3.5-plus" },
+      "scout": { "model": "nvidia-nim/z-ai/glm4.7" }
+    }
+  }
+}
+```
+
+If a name exists in both `profiles` and `agentOverrides`, the `profiles` entry takes precedence.
+
+### Profile Resolution Order
+
+1. Per-task `profile` field (highest priority)
+2. Top-level `profile` parameter
+3. If neither is specified, no profile is applied (uses pi defaults)
+
+Settings are loaded from:
+1. Global: `~/.pi/agent/settings.json`
+2. Project-local: `.pi/settings.json` (overrides global)
 
 ## Features
 

@@ -40,18 +40,18 @@ Once installed, the LLM can use the tool:
         "prompt": "Review and fix all linting errors in the tests/ directory.",
         "profile": "fast-worker"
       }
-    ],
-    "maxLinesPerWindow": 10
+    ]
   }
 }
 ```
+
+After `delegate_to_subagents` completes, it returns **session IDs** for each task. Use `get_subagent_output` to retrieve the final text output:
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `tasks` | `Array<{name, prompt, cwd?, profile?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
-| `maxLinesPerWindow` | `number` | No | Maximum lines to show per sub-agent window (default: 10) |
 | `profile` | `string` | No | Default profile for all tasks (overridden by per-task profile) |
 
 Each task:
@@ -59,6 +59,24 @@ Each task:
 - `prompt`: Prompt sent to the sub-agent (same as typing into pi directly)
 - `cwd`: Working directory for the sub-agent (default: current directory)
 - `profile`: Named profile to use for this sub-agent (see below)
+
+The `maxLinesPerWindow` setting is configured in `settings.json` under `subagents.maxLinesPerWindow` (default: 15).
+
+### Retrieving Sub-agent Output
+
+After `delegate_to_subagents` completes, each task has a session ID. Use these tools to retrieve results:
+
+- **`get_subagent_output(sessionId)`** — Returns the last assistant text output from a sub-agent session. This is the primary way to get results.
+- **`get_subagent_session(sessionId)`** — Returns the full session transcript including all messages, tool calls, and results. Use for debugging.
+- **`list_subagent_profiles()`** — Lists all available subagent profiles that can be used with `delegate_to_subagents`.
+
+```json
+{
+  "get_subagent_output": {
+    "sessionId": "abc12345"
+  }
+}
+```
 
 ## Subagent Profiles
 

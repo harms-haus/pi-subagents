@@ -88,6 +88,7 @@ export interface SubagentProfiles {
 interface SubagentSettings {
   profiles?: SubagentProfiles;
   agentOverrides?: Record<string, Partial<SubagentProfile>>;
+  maxLinesPerWindow?: number;
 }
 
 // ── Settings Loading ─────────────────────────────────────────────────
@@ -331,6 +332,26 @@ export async function deleteProfile(
     return existed;
   });
   return existed;
+}
+
+/**
+ * Load maxLinesPerWindow from settings files.
+ * Project-local settings override global settings. Defaults to 15.
+ */
+export async function loadMaxLinesPerWindow(cwd?: string): Promise<number> {
+  const globalSettings = await readSettingsFile(getGlobalSettingsPath());
+  const globalSubagents: SubagentSettings = globalSettings.subagents ?? {};
+  let maxLines = globalSubagents.maxLinesPerWindow ?? 15;
+
+  if (cwd) {
+    const projectSettings = await readSettingsFile(getProjectSettingsPath(cwd));
+    const projectSubagents: SubagentSettings = projectSettings.subagents ?? {};
+    if (projectSubagents.maxLinesPerWindow !== undefined) {
+      maxLines = projectSubagents.maxLinesPerWindow;
+    }
+  }
+
+  return maxLines;
 }
 
 /**

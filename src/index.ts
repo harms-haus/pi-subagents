@@ -9,15 +9,25 @@
  * `subagents.profiles` to pre-configure provider/model, system prompts,
  * thinking levels, and other model settings per profile.
  *
+ * Tools provided:
+ *   delegate_to_subagents — spawn parallel sub-agents
+ *   get_subagent_output   — retrieve last assistant text from a sub-agent session
+ *   get_subagent_session  — retrieve full session transcript from a sub-agent
+ *   list_subagent_profiles — list available named profiles
+ *
  * Usage (from the LLM):
  *   delegate_to_subagents({ tasks: [{ name: "test", prompt: "...", profile: "code-reviewer" }] })
+ *   get_subagent_output({ sessionId: "abc12345" })
+ *   get_subagent_session({ sessionId: "abc12345" })
+ *   list_subagent_profiles({})
  */
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Message } from "@earendil-works/pi-ai";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Container, Markdown, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { Container, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import {
   loadProfiles,
@@ -27,6 +37,7 @@ import {
   saveProfile,
   deleteProfile,
   formatProfileDetail,
+  loadMaxLinesPerWindow,
   type SubagentProfile,
   type SubagentProfiles,
   type ProfileScope,
@@ -34,7 +45,7 @@ import {
 
 // ── Configuration ────────────────────────────────────────────────────
 
-const DEFAULT_MAX_LINES = 10;
+const DEFAULT_MAX_LINES = 15;
 const MAX_PARALLEL_TASKS = 16;
 const MAX_CONCURRENCY = 4;
 
@@ -50,6 +61,7 @@ interface SubAgentTask {
 
 interface SubAgentWindow {
   name: string;
+  sessionId: string;
   status: "running" | "completed" | "error";
   lines: string[];
   allMessages: string[];
@@ -63,10 +75,26 @@ interface SubAgentWindow {
   profileInfo?: string;
 }
 
+interface SubagentSessionData {
+  sessionId: string;
+  taskName: string;
+  prompt: string;
+  cwd?: string;
+  profileName?: string;
+  status: "running" | "completed" | "error";
+  messages: Message[];
+  exitCode: number | null;
+  model?: string;
+  stopReason?: string;
+  errorMessage?: string;
+  startedAt: number;
+}
+
 interface WindowedSubagentDetails {
   windows: SubAgentWindow[];
   maxLinesPerWindow: number;
   globalStatus: "running" | "done";
+  sessionIds: string[];
 }
 
 // ── Schema ───────────────────────────────────────────────────────────
@@ -82,9 +110,6 @@ const TaskSchema = Type.Object({
 
 const DelegateParams = Type.Object({
   tasks: Type.Array(TaskSchema, { minItems: 1, maxItems: MAX_PARALLEL_TASKS }),
-  maxLinesPerWindow: Type.Optional(
-    Type.Number({ default: DEFAULT_MAX_LINES, description: "Max lines to show per sub-agent window" }),
-  ),
   profile: Type.Optional(Type.String({
     description: "Default profile for all tasks (overridden by per-task profile)",
   })),
@@ -127,6 +152,7 @@ async function runSubAgent(
   maxLines: number,
   signal: AbortSignal | undefined,
   onUpdate: () => void,
+  session: SubagentSessionData,
   profile?: SubagentProfile,
 ): Promise<void> {
   const invocation = getPiInvocation();
@@ -171,24 +197,39 @@ async function runSubAgent(
         return;
       }
 
-      if (event.type === "message_end" && event.message?.role === "assistant") {
+      if (event.type === "message_end" && event.message) {
         const msg = event.message as Message;
-        for (const part of msg.content) {
-          if (part.type === "text") {
-            const textLines = part.text.split("\n");
-            for (const textLine of textLines) {
-              appendLineToWindow(win, textLine, maxLines);
+        // Store ALL messages for session retrieval
+        session.messages.push(msg);
+
+        if (msg.role === "assistant" && msg.content) {
+          for (const part of msg.content) {
+            if (part.type === "text") {
+              const textLines = part.text.split("\n");
+              for (const textLine of textLines) {
+                appendLineToWindow(win, textLine, maxLines);
+              }
+            }
+            if (part.type === "toolCall") {
+              const args = (part as any).arguments || {};
+              const preview = JSON.stringify(args).slice(0, 60);
+              appendLineToWindow(win, `→ ${(part as any).name}: ${preview}`, maxLines);
             }
           }
-          if (part.type === "toolCall") {
-            const args = (part as any).arguments || {};
-            const preview = JSON.stringify(args).slice(0, 60);
-            appendLineToWindow(win, `→ ${(part as any).name}: ${preview}`, maxLines);
+          if (msg.model) {
+            win.model = msg.model;
+            session.model = msg.model;
+          }
+          if (msg.stopReason) {
+            win.stopReason = msg.stopReason;
+            session.stopReason = msg.stopReason;
+          }
+          if (msg.errorMessage) {
+            win.errorMessage = msg.errorMessage;
+            session.errorMessage = msg.errorMessage;
           }
         }
-        if (msg.model) win.model = msg.model;
-        if (msg.stopReason) win.stopReason = msg.stopReason;
-        if (msg.errorMessage) win.errorMessage = msg.errorMessage;
+
         debouncedUpdate();
       }
     };
@@ -214,10 +255,13 @@ async function runSubAgent(
       if (buffer.trim()) processLine(buffer);
       if (bufferTimeout) clearTimeout(bufferTimeout);
       win.exitCode = code ?? 0;
+      session.exitCode = code ?? 0;
       if (code !== 0 || win.stopReason === "error" || win.stopReason === "aborted") {
         win.status = "error";
+        session.status = "error";
       } else {
         win.status = "completed";
+        session.status = "completed";
       }
       onUpdate();
       resolve();
@@ -226,8 +270,11 @@ async function runSubAgent(
     proc.on("error", () => {
       if (bufferTimeout) clearTimeout(bufferTimeout);
       win.exitCode = 1;
+      session.exitCode = 1;
       win.status = "error";
+      session.status = "error";
       win.errorMessage = win.errorMessage || "Failed to spawn sub-agent process";
+      session.errorMessage = session.errorMessage || "Failed to spawn sub-agent process";
       onUpdate();
       resolve();
     });
@@ -270,26 +317,18 @@ async function mapWithConcurrencyLimit<TIn, TOut>(
   return results;
 }
 
-// ── Formatting Helpers ──────────────────────────────────────────────
+// ── Session Helpers ──────────────────────────────────────────────────
 
-function joinStatusParts(parts: { text: string; color?: string }[]): string {
-  const nonEmpty = parts.filter((p) => p.text);
-  let result = "";
-  for (let i = 0; i < nonEmpty.length; i++) {
-    result += nonEmpty[i].text;
-    if (i < nonEmpty.length - 1) result += ", ";
+function getLastAssistantText(messages: Message[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === "assistant" && msg.content) {
+      for (const part of msg.content) {
+        if (part.type === "text") return part.text;
+      }
+    }
   }
-  return result;
-}
-
-function buildWindowHeader(win: SubAgentWindow, themeFgr: (color: string, text: string) => string): string {
-  const icon = win.status === "running" ? "⏳"
-    : win.status === "error" ? "✗"
-    : "✓";
-  const color = win.status === "running" ? "warning"
-    : win.status === "error" ? "error"
-    : "success";
-  return themeFgr(color, icon) + " " + themeFgr("accent", themeFgr("toolTitle", win.name));
+  return "";
 }
 
 // ── Interactive Profile Editor ───────────────────────────────────────
@@ -433,6 +472,32 @@ async function editProfileInteractive(
 // ── Extension ────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
+  // ── In-memory session store ──────────────────────────────────────
+  const sessionStore = new Map<string, SubagentSessionData>();
+  const MAX_STORED_SESSIONS = 32;
+
+  function registerSession(session: SubagentSessionData): void {
+    // Evict oldest sessions when store exceeds limit
+    if (sessionStore.size >= MAX_STORED_SESSIONS) {
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
+      for (const [key, val] of sessionStore) {
+        if (val.startedAt < oldestTime) {
+          oldestTime = val.startedAt;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey) sessionStore.delete(oldestKey);
+    }
+    sessionStore.set(session.sessionId, session);
+  }
+
+  pi.on("session_shutdown", async () => {
+    sessionStore.clear();
+  });
+
+  // ── Tool: delegate_to_subagents ─────────────────────────────────
+
   pi.registerTool({
     name: "delegate_to_subagents",
     label: "Delegate to Sub-agents",
@@ -444,6 +509,8 @@ export default function (pi: ExtensionAPI) {
       "thinking level, and other model settings. Profiles are defined in settings.json",
       "under subagents.profiles. A top-level profile parameter sets a default for all tasks;",
       "each task can override with its own profile.",
+      "Returns session IDs for each task that can be used with get_subagent_output",
+      "and get_subagent_session to retrieve results.",
     ].join(" "),
     parameters: DelegateParams,
     promptSnippet: "Use when the user wants multiple independent tasks done in parallel",
@@ -451,27 +518,35 @@ export default function (pi: ExtensionAPI) {
       "Use delegate_to_subagents when the user asks for multiple independent tasks.\n",
       "Each task gets its own isolated pi sub-agent process with full tool access.\n",
       "Provide a descriptive `name` for each task so the TUI window is labeled.\n",
-      "Set `maxLinesPerWindow` to control how many lines of live output are shown.\n",
       "Use the `profile` parameter (top-level or per-task) to select a named subagent profile",
       "that pre-configures provider/model, system prompt, thinking level, and other settings.\n",
       "When the user mentions a specific agent role like \"use the code-reviewer profile\"",
       "or \"run this as the researcher\", set the profile field accordingly.\n",
+      "After delegate_to_subagents completes, use get_subagent_output to retrieve each sub-agent's",
+      "final text output. Use get_subagent_session for the full session transcript if needed.\n",
     ],
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
-      const maxLines = params.maxLinesPerWindow ?? DEFAULT_MAX_LINES;
+      const maxLines = await loadMaxLinesPerWindow(ctx.cwd);
 
       // Load profiles from settings (global + project-local)
       const profiles = await loadProfiles(ctx.cwd);
 
-      const windows: SubAgentWindow[] = params.tasks.map((t) => {
-        const resolvedProfileName = t.profile ?? params.profile;
-        const resolvedProfile = resolvedProfileName
-          ? resolveProfile(profiles, resolvedProfileName)
-          : undefined;
+      // Pre-resolve profiles for each task (avoids double resolution)
+      const resolvedProfiles = params.tasks.map((t) => {
+        const name = t.profile ?? params.profile;
+        const profile = name ? resolveProfile(profiles, name) : undefined;
+        return { name, profile };
+      });
+
+      const windows: SubAgentWindow[] = params.tasks.map((t, i) => {
+        const resolvedProfileName = resolvedProfiles[i].name;
+        const resolvedProfile = resolvedProfiles[i].profile;
+        const sessionId = randomUUID().slice(0, 8);
 
         return {
           name: t.name,
+          sessionId,
           status: "running",
           lines: [],
           allMessages: [],
@@ -481,10 +556,29 @@ export default function (pi: ExtensionAPI) {
         };
       });
 
+      // Create session data for each task
+      const sessions: SubagentSessionData[] = params.tasks.map((t, i) => ({
+        sessionId: windows[i].sessionId,
+        taskName: t.name,
+        prompt: t.prompt,
+        cwd: t.cwd,
+        profileName: t.profile ?? params.profile,
+        status: "running" as const,
+        messages: [],
+        exitCode: null,
+        startedAt: Date.now(),
+      }));
+
+      // Register sessions in the store
+      for (const session of sessions) {
+        registerSession(session);
+      }
+
       const makeDetails = (): WindowedSubagentDetails => ({
         windows,
         maxLinesPerWindow: maxLines,
         globalStatus: windows.every((w) => w.status !== "running") ? "done" : "running",
+        sessionIds: windows.map((w) => w.sessionId),
       });
 
       const emitUpdate = () => {
@@ -498,26 +592,28 @@ export default function (pi: ExtensionAPI) {
 
       await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (task, index) => {
         const win = windows[index];
-        const resolvedProfileName = task.profile ?? params.profile;
-        const resolvedProfile = resolvedProfileName
-          ? resolveProfile(profiles, resolvedProfileName)
-          : undefined;
+        const session = sessions[index];
+        const resolvedProfileName = resolvedProfiles[index].name;
+        const resolvedProfile = resolvedProfiles[index].profile;
 
         if (resolvedProfileName && !resolvedProfile) {
           win.status = "error";
+          session.status = "error";
           win.errorMessage = `Unknown profile: "${resolvedProfileName}". Available profiles: ${Object.keys(profiles).join(", ") || "(none)"}`;
+          session.errorMessage = win.errorMessage;
           win.exitCode = 1;
+          session.exitCode = 1;
           emitUpdate();
           return;
         }
 
-        await runSubAgent(task, win, maxLines, signal, emitUpdate, resolvedProfile);
+        await runSubAgent(task, win, maxLines, signal, emitUpdate, session, resolvedProfile);
       });
 
       const summaryLines: string[] = [];
       for (const win of windows) {
         const icon = win.status === "completed" ? "✓" : "✗";
-        let line = `${icon} ${win.name}: ${win.status}`;
+        let line = `${icon} ${win.name}: ${win.status} (session: ${win.sessionId})`;
         if (win.profileName) {
           line += ` (${win.profileInfo ?? win.profileName})`;
         }
@@ -623,12 +719,210 @@ export default function (pi: ExtensionAPI) {
         container.addChild(new Spacer(1));
       }
 
-      // ── Footer ──
+      // ── Footer: session IDs when done ──
       if (running > 0) {
         container.addChild(new Text(theme.fg("muted", `${running} running...`), 0, 0));
+      } else {
+        // Show session IDs for retrieval
+        const idLines = details.windows.map(
+          (w) => `  ${w.name}: ${theme.fg("accent", w.sessionId)}`,
+        );
+        container.addChild(
+          new Text(theme.fg("dim", "Session IDs (use with get_subagent_output):"), 0, 0)
+        );
+        for (const line of idLines) {
+          container.addChild(new Text("  " + line, 0, 0));
+        }
       }
 
       return container;
+    },
+  });
+
+  // ── Tool: get_subagent_output ───────────────────────────────────
+
+  pi.registerTool({
+    name: "get_subagent_output",
+    label: "Get Sub-agent Output",
+    description: [
+      "Retrieve the last assistant text output from a completed sub-agent session.",
+      "Use this to get the results from a subagent after it finishes, without needing",
+      "the subagent to write to a file. Pass the session ID returned by delegate_to_subagents.",
+    ].join(" "),
+    parameters: Type.Object({
+      sessionId: Type.String({ description: "The session ID returned by delegate_to_subagents" }),
+    }),
+    promptSnippet: "Get the final text output from a previously completed sub-agent session",
+    promptGuidelines: [
+      "Use get_subagent_output to retrieve the final text output from a sub-agent after",
+      "delegate_to_subagents completes, instead of asking the sub-agent to write to a file.",
+    ],
+
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const session = sessionStore.get(params.sessionId);
+      if (!session) {
+        throw new Error(
+          `Session "${params.sessionId}" not found. The session may have expired or the ID is incorrect.`,
+        );
+      }
+
+      const lastText = getLastAssistantText(session.messages);
+      return {
+        content: [{ type: "text", text: lastText || "(no text output from sub-agent)" }],
+        details: {
+          sessionId: params.sessionId,
+          status: session.status,
+          taskName: session.taskName,
+        },
+      };
+    },
+
+    renderCall(args, theme, _context) {
+      return new Text(
+        theme.fg("toolTitle", theme.bold("get_subagent_output ")) +
+        theme.fg("accent", args.sessionId ?? "..."),
+        0, 0,
+      );
+    },
+
+    renderResult(result, { expanded }, theme, _context) {
+      const text = result.content[0];
+      const content = text?.type === "text" ? text.text : "(no output)";
+      return new Text(theme.fg("toolOutput", content), 0, 0);
+    },
+  });
+
+  // ── Tool: get_subagent_session ──────────────────────────────────
+
+  pi.registerTool({
+    name: "get_subagent_session",
+    label: "Get Sub-agent Session",
+    description: [
+      "Retrieve the complete session transcript from a sub-agent, including all messages",
+      "(assistant text, tool calls, tool results). Use this for detailed debugging or when",
+      "you need the full conversation history of a sub-agent. Pass the session ID returned",
+      "by delegate_to_subagents.",
+    ].join(" "),
+    parameters: Type.Object({
+      sessionId: Type.String({ description: "The session ID returned by delegate_to_subagents" }),
+    }),
+    promptSnippet: "Read the full session transcript from a previously completed sub-agent session",
+    promptGuidelines: [
+      "Use get_subagent_session when you need the FULL conversation history of a sub-agent,",
+      "including all tool calls and results. Use get_subagent_output instead when you only",
+      "need the final output.",
+    ],
+
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const session = sessionStore.get(params.sessionId);
+      if (!session) {
+        throw new Error(
+          `Session "${params.sessionId}" not found. The session may have expired or the ID is incorrect.`,
+        );
+      }
+
+      const parts: string[] = [];
+      for (const msg of session.messages) {
+        if (msg.role === "assistant" && msg.content) {
+          for (const part of msg.content) {
+            if (part.type === "text") {
+              parts.push(part.text);
+            }
+            if (part.type === "toolCall") {
+              const args = (part as any).arguments || {};
+              const preview = JSON.stringify(args).slice(0, 120);
+              parts.push(`→ ${(part as any).name}: ${preview}`);
+            }
+          }
+        } else if (msg.role === "toolResult" && (msg as any).content) {
+          const toolResult = msg as any;
+          for (const part of toolResult.content) {
+            if (part.type === "text") {
+              const text = part.text;
+              if (text.length > 500) {
+                parts.push(`[tool result]: ${text.slice(0, 500)}...`);
+              } else {
+                parts.push(`[tool result]: ${text}`);
+              }
+            }
+          }
+        }
+      }
+
+      return {
+        content: [{ type: "text", text: parts.join("\n---\n") || "(no messages in session)" }],
+        details: {
+          sessionId: params.sessionId,
+          status: session.status,
+          taskName: session.taskName,
+          messageCount: session.messages.length,
+          exitCode: session.exitCode,
+          model: session.model,
+        },
+      };
+    },
+
+    renderCall(args, theme, _context) {
+      return new Text(
+        theme.fg("toolTitle", theme.bold("get_subagent_session ")) +
+        theme.fg("accent", args.sessionId ?? "..."),
+        0, 0,
+      );
+    },
+
+    renderResult(result, { expanded }, theme, _context) {
+      const text = result.content[0];
+      const content = text?.type === "text" ? text.text : "(no output)";
+      return new Text(theme.fg("toolOutput", content), 0, 0);
+    },
+  });
+
+  // ── Tool: list_subagent_profiles ────────────────────────────────
+
+  pi.registerTool({
+    name: "list_subagent_profiles",
+    label: "List Sub-agent Profiles",
+    description: [
+      "List all available subagent profiles that can be used with delegate_to_subagents.",
+      "Profiles are configured in settings.json under subagents.profiles.",
+    ].join(" "),
+    parameters: Type.Object({}),
+    promptSnippet: "List available named subagent profiles and their configurations",
+    promptGuidelines: [
+      "Use list_subagent_profiles to see which profiles are available before choosing",
+      "one for delegate_to_subagents.",
+    ],
+
+    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+      const profiles = await loadProfiles(ctx.cwd);
+      const names = Object.keys(profiles);
+      if (names.length === 0) {
+        return {
+          content: [{ type: "text", text: "No subagent profiles defined. Add profiles to settings.json under subagents.profiles." }],
+          details: { count: 0 },
+        };
+      }
+      const summaries = names.map((n) => [n, profileSummary(n, profiles[n])] as const);
+      return {
+        content: [{ type: "text", text: summaries.map(([, s]) => s).join("\n") }],
+        details: {
+          count: names.length,
+          profiles: Object.fromEntries(summaries),
+        },
+      };
+    },
+
+    renderCall(_args, theme, _context) {
+      return new Text(
+        theme.fg("toolTitle", theme.bold("list_subagent_profiles")),
+        0, 0,
+      );
+    },
+
+    renderResult(result, { expanded }, theme, _context) {
+      const text = result.content[0];
+      const content = text?.type === "text" ? text.text : "(no profiles)";
+      return new Text(theme.fg("toolOutput", content), 0, 0);
     },
   });
 

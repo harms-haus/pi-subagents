@@ -8,7 +8,7 @@ import type { ExtensionAPI, Theme, ToolExecutionResult } from "@earendil-works/p
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { loadProfiles, profileSummary } from "../profiles";
-import type { SubagentSessionData, ToolCallPart } from "../types";
+import type { SessionRecord, ToolCallPart } from "../types";
 import { getLastAssistantText, getTextParts } from "../utils";
 
 // ── Rendering Helpers ───────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ const SESSION_NOT_FOUND_ERROR = (sessionId: string) =>
 /**
  * Register the retrieval tools: get_subagent_output, get_subagent_session, and list_subagent_profiles.
  */
-export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<string, SubagentSessionData>): void {
+export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<string, SessionRecord>): void {
   // ── Tool: get_subagent_output ───────────────────────────────────
 
   pi.registerTool({
@@ -57,6 +57,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
       "Retrieve the last assistant text output from a completed sub-agent session.",
       "Use this to get the results from a subagent after it finishes, without needing",
       "the subagent to write to a file. Pass the session ID returned by delegate_to_subagents.",
+      "For resumed sessions, returns the output from the LATEST run.",
     ].join(" "),
     parameters: Type.Object({
       sessionId: Type.String({ description: "The session ID returned by delegate_to_subagents" }),
@@ -68,18 +69,21 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
     ],
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const session = sessionStore.get(params.sessionId);
-      if (!session) {
+      const record = sessionStore.get(params.sessionId);
+      if (!record || record.runs.length === 0) {
         throw new Error(SESSION_NOT_FOUND_ERROR(params.sessionId));
       }
 
-      const lastText = getLastAssistantText(session.messages);
+      // Get the LATEST run's output
+      const latestRun = record.runs[record.runs.length - 1];
+      const lastText = getLastAssistantText(latestRun.messages);
       return {
         content: [{ type: "text", text: lastText || "(no text output from sub-agent)" }],
         details: {
           sessionId: params.sessionId,
-          status: session.status,
-          taskName: session.taskName,
+          status: latestRun.status,
+          taskName: latestRun.taskName,
+          runCount: record.runs.length,
         },
       };
     },
@@ -97,7 +101,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
       "Retrieve the complete session transcript from a sub-agent, including all messages",
       "(assistant text, tool calls, tool results). Use this for detailed debugging or when",
       "you need the full conversation history of a sub-agent. Pass the session ID returned",
-      "by delegate_to_subagents.",
+      "by delegate_to_subagents. For resumed sessions, returns ALL runs' data concatenated.",
     ].join(" "),
     parameters: Type.Object({
       sessionId: Type.String({ description: "The session ID returned by delegate_to_subagents" }),
@@ -110,51 +114,68 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
     ],
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const session = sessionStore.get(params.sessionId);
-      if (!session) {
+      const record = sessionStore.get(params.sessionId);
+      if (!record || record.runs.length === 0) {
         throw new Error(SESSION_NOT_FOUND_ERROR(params.sessionId));
       }
 
       const parts: string[] = [];
-      for (const msg of session.messages) {
-        // Extract text parts using the helper
-        const textParts = getTextParts(msg);
-        for (const text of textParts) {
-          parts.push(text);
+
+      for (let runIndex = 0; runIndex < record.runs.length; runIndex++) {
+        const run = record.runs[runIndex];
+
+        // Add run separator if multiple runs
+        if (record.runs.length > 1) {
+          parts.push(`=== Run ${runIndex + 1}/${record.runs.length} (${run.status}) ===`);
         }
 
-        // Extract tool calls
-        if (msg.role === "assistant" && msg.content) {
-          for (const part of msg.content) {
-            if (part.type === "toolCall") {
-              const args = (part as ToolCallPart).arguments || {};
-              const preview = JSON.stringify(args).slice(0, 120);
-              parts.push(`→ ${(part as ToolCallPart).name}: ${preview}`);
-            }
+        for (const msg of run.messages) {
+          // Extract text parts using the helper
+          const textParts = getTextParts(msg);
+          for (const text of textParts) {
+            parts.push(text);
           }
-        } else if (msg.role === "toolResult" && msg.content) {
-          for (const part of msg.content) {
-            if (part.type === "text") {
-              const text = part.text;
-              if (text.length > 500) {
-                parts.push(`[tool result]: ${text.slice(0, 500)}...`);
-              } else {
-                parts.push(`[tool result]: ${text}`);
+
+          // Extract tool calls
+          if (msg.role === "assistant" && msg.content) {
+            for (const part of msg.content) {
+              if (part.type === "toolCall") {
+                const args = (part as ToolCallPart).arguments || {};
+                const preview = JSON.stringify(args).slice(0, 120);
+                parts.push(`→ ${(part as ToolCallPart).name}: ${preview}`);
+              }
+            }
+          } else if (msg.role === "toolResult" && msg.content) {
+            for (const part of msg.content) {
+              if (part.type === "text") {
+                const text = part.text;
+                if (text.length > 500) {
+                  parts.push(`[tool result]: ${text.slice(0, 500)}...`);
+                } else {
+                  parts.push(`[tool result]: ${text}`);
+                }
               }
             }
           }
         }
+
+        if (run.errorMessage) {
+          parts.push(`[Error: ${run.errorMessage}]`);
+        }
       }
 
+      // Get latest run info for details
+      const latestRun = record.runs[record.runs.length - 1];
       return {
         content: [{ type: "text", text: parts.join("\n---\n") || "(no messages in session)" }],
         details: {
           sessionId: params.sessionId,
-          status: session.status,
-          taskName: session.taskName,
-          messageCount: session.messages.length,
-          exitCode: session.exitCode,
-          model: session.model,
+          status: latestRun.status,
+          taskName: latestRun.taskName,
+          messageCount: record.runs.reduce((sum, r) => sum + r.messages.length, 0),
+          exitCode: latestRun.exitCode,
+          model: latestRun.model,
+          runCount: record.runs.length,
         },
       };
     },

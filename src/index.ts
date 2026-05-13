@@ -26,27 +26,49 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerProfileCommand } from "./commands/profile";
 import { registerDelegateTool } from "./tools/delegate";
 import { registerRetrievalTools } from "./tools/retrieval";
-import type { SubagentSessionData } from "./types";
+import type { SessionRecord, SubagentSessionData } from "./types";
 
 export default function (pi: ExtensionAPI) {
   // ── In-memory session store ──────────────────────────────────────
-  const sessionStore = new Map<string, SubagentSessionData>();
+  const sessionStore = new Map<string, SessionRecord>();
   const MAX_STORED_SESSIONS = 32;
+  const MAX_RUNS_PER_SESSION = 10;
 
   function registerSession(session: SubagentSessionData): void {
-    // Evict oldest sessions when store exceeds limit
-    if (sessionStore.size >= MAX_STORED_SESSIONS) {
-      let oldestKey: string | null = null;
-      let oldestTime = Infinity;
-      for (const [key, val] of sessionStore) {
-        if (val.startedAt < oldestTime) {
-          oldestTime = val.startedAt;
-          oldestKey = key;
-        }
+    const existing = sessionStore.get(session.sessionId);
+    if (existing) {
+      // Resume: append to existing record
+      existing.runs.push(session);
+      // Cap runs per session to prevent unbounded memory growth
+      while (existing.runs.length > MAX_RUNS_PER_SESSION) {
+        existing.runs.shift();
       }
-      if (oldestKey) sessionStore.delete(oldestKey);
+    } else {
+      // New session: create a new record
+      if (sessionStore.size >= MAX_STORED_SESSIONS) {
+        let oldestKey: string | null = null;
+        let oldestTime = Infinity;
+        for (const [key, val] of sessionStore) {
+          const firstRun = val.runs[0];
+          if (firstRun && firstRun.startedAt < oldestTime) {
+            oldestTime = firstRun.startedAt;
+            oldestKey = key;
+          }
+        }
+        if (oldestKey) sessionStore.delete(oldestKey);
+      }
+      sessionStore.set(session.sessionId, { runs: [session] });
     }
-    sessionStore.set(session.sessionId, session);
+  }
+
+  function getActiveSessionIds(): Set<string> {
+    const active = new Set<string>();
+    for (const [, record] of sessionStore) {
+      if (record.runs.some((r) => r.status === "running")) {
+        active.add(record.runs[0].sessionId);
+      }
+    }
+    return active;
   }
 
   pi.on("session_shutdown", async () => {
@@ -55,7 +77,7 @@ export default function (pi: ExtensionAPI) {
 
   // ── Register tools and commands ──────────────────────────────────
 
-  registerDelegateTool(pi, sessionStore, registerSession);
+  registerDelegateTool(pi, sessionStore, registerSession, getActiveSessionIds);
   registerRetrievalTools(pi, sessionStore);
   registerProfileCommand(pi);
 }

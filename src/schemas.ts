@@ -19,6 +19,8 @@ export const TaskSchema = Type.Object({
       description: "Named subagent profile from settings (sets provider/model, system prompt, thinking level, etc.)",
     }),
   ),
+  timeout: Type.Optional(Type.Number({ description: "Timeout in seconds for this subagent (default 600)" })),
+  resume: Type.Optional(Type.String({ description: "Previous session ID to resume from" })),
 });
 
 /** Schema for delegate_to_subagents tool parameters */

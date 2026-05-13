@@ -17,6 +17,9 @@ export const MAX_CONCURRENCY = 4;
 /** Maximum number of messages to store per session (prevents unbounded memory growth) */
 export const MAX_MESSAGES_PER_SESSION = 500;
 
+/** Default timeout for sub-agent tasks (in seconds) */
+export const DEFAULT_TIMEOUT = 600;
+
 // ── Types ────────────────────────────────────────────────────────────
 
 /** Tool call part in a message (used internally for type narrowing) */
@@ -42,6 +45,10 @@ export interface SubAgentTask {
   cwd?: string;
   /** Named profile from settings.json subagents.profiles */
   profile?: string;
+  /** Timeout in seconds (default: 600) */
+  timeout?: number;
+  /** Previous session ID to resume from */
+  resume?: string;
 }
 
 /** A single line in a sub-agent's rolling window */
@@ -79,6 +86,12 @@ export interface SubagentSessionData extends SubagentState {
   startedAt: number;
 }
 
+/** A record of all runs for a session ID (supports resume/multi-run) */
+export interface SessionRecord {
+  /** All runs for this session, in chronological order */
+  runs: SubagentSessionData[];
+}
+
 // ── Helper Functions ───────────────────────────────────────────────────
 
 /**
@@ -91,6 +104,64 @@ export function syncState(source: SubagentState, target: SubagentState): void {
   target.model = source.model;
   target.stopReason = source.stopReason;
   target.errorMessage = source.errorMessage;
+}
+
+/**
+ * Format previous runs' session data for inclusion in a resume prompt.
+ * Produces a human-readable transcript of all previous runs.
+ */
+export function formatRunsForResume(runs: SubagentSessionData[]): string {
+  const parts: string[] = [];
+  for (let i = 0; i < runs.length; i++) {
+    const run = runs[i];
+    if (runs.length > 1) {
+      parts.push(`--- Run ${i + 1} (${run.status}, ${run.messages.length} messages) ---`);
+    }
+    for (const msg of run.messages) {
+      if (msg.role === "user") {
+        const text = getTextContent(msg);
+        if (text) parts.push(`User: ${text}`);
+      } else if (msg.role === "assistant") {
+        const text = getTextContent(msg);
+        if (text) parts.push(`Assistant: ${text}`);
+        // Extract tool calls
+        if (msg.content) {
+          // biome-ignore lint/suspicious/noExplicitAny: Message.content type varies
+          for (const part of msg.content as any[]) {
+            if (part.type === "toolCall") {
+              const args = JSON.stringify(part.arguments || {}).slice(0, 120);
+              parts.push(`Tool Call: ${part.name}(${args})`);
+            }
+          }
+        }
+      } else if (msg.role === "toolResult") {
+        const text = getTextContent(msg);
+        if (text) {
+          const truncated = text.length > 500 ? `${text.slice(0, 500)}...` : text;
+          parts.push(`Tool Result: ${truncated}`);
+        }
+      }
+    }
+    if (run.errorMessage) {
+      parts.push(`[Error: ${run.errorMessage}]`);
+    }
+  }
+  return parts.join("\n\n");
+}
+
+/** Extract text content from a Message */
+// biome-ignore lint/suspicious/noExplicitAny: Message.content type varies
+function getTextContent(msg: { content?: any }): string | undefined {
+  if (!msg.content) return undefined;
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.content)) {
+    const texts: string[] = [];
+    for (const part of msg.content) {
+      if (part.type === "text" && part.text) texts.push(part.text);
+    }
+    return texts.join("\n") || undefined;
+  }
+  return undefined;
 }
 
 /** Details passed to the UI for rendering sub-agent windows */

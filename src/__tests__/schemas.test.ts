@@ -125,6 +125,76 @@ describe("TaskSchema", () => {
     expect(TaskSchema.properties.prompt).toBeDefined();
     expect(TaskSchema.properties.cwd).toBeDefined();
     expect(TaskSchema.properties.profile).toBeDefined();
+    expect(TaskSchema.properties.timeout).toBeDefined();
+    expect(TaskSchema.properties.resume).toBeDefined();
+  });
+});
+
+describe("TaskSchema - timeout and resume fields", () => {
+  it("should validate task with timeout field", () => {
+    const validTask = {
+      name: "test",
+      prompt: "do something",
+      timeout: 300,
+    };
+
+    const result = Value.Check(TaskSchema, validTask);
+    expect(result).toBe(true);
+  });
+
+  it("should validate task with resume field", () => {
+    const validTask = {
+      name: "test",
+      prompt: "continue",
+      resume: "abc123",
+    };
+
+    const result = Value.Check(TaskSchema, validTask);
+    expect(result).toBe(true);
+  });
+
+  it("should validate task with both timeout and resume fields", () => {
+    const validTask = {
+      name: "test",
+      prompt: "do something",
+      timeout: 300,
+      resume: "abc123",
+    };
+
+    const result = Value.Check(TaskSchema, validTask);
+    expect(result).toBe(true);
+  });
+
+  it("should reject task with non-number timeout", () => {
+    const invalidTask = {
+      name: "test",
+      prompt: "test",
+      timeout: "300",
+    };
+
+    const result = Value.Check(TaskSchema, invalidTask);
+    expect(result).toBe(false);
+  });
+
+  it("should reject task with non-string resume", () => {
+    const invalidTask = {
+      name: "test",
+      prompt: "test",
+      resume: 123,
+    };
+
+    const result = Value.Check(TaskSchema, invalidTask);
+    expect(result).toBe(false);
+  });
+
+  it("should validate task without timeout or resume", () => {
+    const validTask = {
+      name: "test",
+      prompt: "do something",
+    };
+
+    const result = Value.Check(TaskSchema, validTask);
+    expect(result).toBe(true);
   });
 });
 

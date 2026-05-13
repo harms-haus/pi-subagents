@@ -1,9 +1,10 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerProfileCommand } from "../commands/profile";
+import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
 import { registerRetrievalTools } from "../tools/retrieval";
-import type { SubagentSessionData } from "../types";
+import type { SessionRecord, SubagentSessionData } from "../types";
 import { countWindowStatuses } from "../utils";
 
 // Mock the TUI components
@@ -25,15 +26,29 @@ vi.mock("typebox", () => ({
   Type: {
     Object: vi.fn(() => ({})),
     String: vi.fn(() => ({})),
+    Number: vi.fn(() => ({})),
     Optional: vi.fn((fn: unknown) => fn),
     Array: vi.fn(() => ({})),
   },
 }));
 
+// Mock the spawner
+vi.mock("../spawner", () => ({
+  runSubAgent: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock the profiles module
+vi.mock("../profiles", () => ({
+  loadProfiles: vi.fn().mockResolvedValue({}),
+  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
+  resolveProfile: vi.fn(),
+  profileSummary: vi.fn().mockReturnValue("profile-summary"),
+}));
+
 describe("tools", () => {
   describe("tool registration", () => {
     let mockPi: ExtensionAPI;
-    let sessionStore: Map<string, SubagentSessionData>;
+    let sessionStore: Map<string, SessionRecord>;
     let mockRegisterSession: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
@@ -96,7 +111,8 @@ describe("tools", () => {
 
     describe("registerDelegateTool", () => {
       it("should register delegate_to_subagents tool", () => {
-        registerDelegateTool(mockPi, sessionStore, mockRegisterSession);
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
 
         expect(mockPi.registerTool).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -116,7 +132,7 @@ describe("tools", () => {
   });
 
   describe("sessionStore operations", () => {
-    let sessionStore: Map<string, SubagentSessionData>;
+    let sessionStore: Map<string, SessionRecord>;
     let mockPi: ExtensionAPI;
 
     beforeEach(() => {
@@ -126,6 +142,7 @@ describe("tools", () => {
         registerCommand: vi.fn(),
         on: vi.fn(),
       } as unknown as ExtensionAPI;
+      vi.mocked(runSubAgent).mockClear();
     });
 
     describe("get_subagent_output", () => {
@@ -148,7 +165,7 @@ describe("tools", () => {
           exitCode: 0,
           startedAt: Date.now(),
         };
-        sessionStore.set("test-session", testSession);
+        sessionStore.set("test-session", { runs: [testSession] });
 
         // Get the tool execute function
         const toolRegistration = vi
@@ -198,7 +215,7 @@ describe("tools", () => {
           exitCode: 0,
           startedAt: Date.now(),
         };
-        sessionStore.set("test-session", testSession);
+        sessionStore.set("test-session", { runs: [testSession] });
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
@@ -240,7 +257,7 @@ describe("tools", () => {
           exitCode: 0,
           startedAt: Date.now(),
         };
-        sessionStore.set("test-session", testSession);
+        sessionStore.set("test-session", { runs: [testSession] });
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
@@ -387,6 +404,378 @@ describe("tools", () => {
         renderResult(result, { expanded: false }, mockTheme, null as unknown);
 
         expect(mockTheme.fg).toHaveBeenCalledWith("toolOutput", "(no output)");
+      });
+    });
+
+    describe("delegate_to_subagents - timeout", () => {
+      it("should pass timeout parameter to runSubAgent via AbortSignal", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const result = await executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
+          },
+          null,
+          vi.fn(),
+          { cwd: process.cwd() },
+        );
+
+        expect(result).toBeDefined();
+        expect(runSubAgent).toHaveBeenCalledTimes(1);
+      });
+
+      it("should use DEFAULT_TIMEOUT when no timeout specified", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const result = await executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt" }],
+          },
+          null,
+          vi.fn(),
+          { cwd: process.cwd() },
+        );
+
+        expect(result).toBeDefined();
+        expect(runSubAgent).toHaveBeenCalledTimes(1);
+
+        // Verify a signal was passed
+        const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+        expect(callArgs.signal).toBeInstanceOf(AbortSignal);
+      });
+    });
+
+    describe("delegate_to_subagents - resume", () => {
+      it("should reject resume with non-existent session ID", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        await expect(
+          executeFn(
+            "tool-call-id",
+            {
+              tasks: [{ name: "test-task", prompt: "test prompt", resume: "nonexistent" }],
+            },
+            null,
+            vi.fn(),
+            { cwd: process.cwd() },
+          ),
+        ).rejects.toThrow(/not found/i);
+      });
+
+      it("should reject resume when session is still running", async () => {
+        const mockRegisterSession = vi.fn();
+        const runningSessionId = "running-session-id";
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set([runningSessionId]));
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        // Set up a session with running status
+        const runningSession: SubagentSessionData = {
+          sessionId: runningSessionId,
+          taskName: "running-task",
+          prompt: "running prompt",
+          cwd: "/tmp",
+          status: "running",
+          messages: [],
+          exitCode: null,
+          startedAt: Date.now(),
+        };
+        sessionStore.set(runningSessionId, { runs: [runningSession] });
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        await expect(
+          executeFn(
+            "tool-call-id",
+            {
+              tasks: [{ name: "test-task", prompt: "test prompt", resume: runningSessionId }],
+            },
+            null,
+            vi.fn(),
+            { cwd: process.cwd() },
+          ),
+        ).rejects.toThrow(/still running/i);
+      });
+
+      it("should format resume prompt with previous session data", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const previousSessionId = "previous-session-id";
+        const previousSession: SubagentSessionData = {
+          sessionId: previousSessionId,
+          taskName: "previous-task",
+          prompt: "previous prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Previous assistant response" }],
+            },
+          ],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        sessionStore.set(previousSessionId, { runs: [previousSession] });
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        await executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "new instructions", resume: previousSessionId }],
+          },
+          null,
+          vi.fn(),
+          { cwd: process.cwd() },
+        );
+
+        // Verify the prompt passed to runSubAgent contains the resume formatting
+        const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+        expect(callArgs.task.prompt).toMatch(/^Previously:\n\n/);
+        expect(callArgs.task.prompt).toContain("Previous assistant response");
+        expect(callArgs.task.prompt).toContain("Instructions:\n\nnew instructions");
+      });
+
+      it("should reuse session ID for resumed task", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const previousSessionId = "known-session-id";
+        const previousSession: SubagentSessionData = {
+          sessionId: previousSessionId,
+          taskName: "previous-task",
+          prompt: "previous prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        sessionStore.set(previousSessionId, { runs: [previousSession] });
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const result = await executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "new instructions", resume: previousSessionId }],
+          },
+          null,
+          vi.fn(),
+          { cwd: process.cwd() },
+        );
+
+        // Verify the session ID in the result matches the original
+        expect(result.details.sessionIds).toContain(previousSessionId);
+      });
+    });
+
+    describe("get_subagent_output - multi-run", () => {
+      it("should return latest run output for multi-run session", async () => {
+        registerRetrievalTools(mockPi, sessionStore);
+
+        const sessionId = "multi-run-session";
+        const firstRun: SubagentSessionData = {
+          sessionId,
+          taskName: "first-task",
+          prompt: "first prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "First run output" }],
+            },
+          ],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        const secondRun: SubagentSessionData = {
+          sessionId,
+          taskName: "second-task",
+          prompt: "second prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Second run output" }],
+            },
+          ],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        sessionStore.set(sessionId, { runs: [firstRun, secondRun] });
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const result = await executeFn("tool-call-id", { sessionId }, null, vi.fn(), null);
+
+        expect(result.content[0].text).toBe("Second run output");
+      });
+    });
+
+    describe("get_subagent_session - multi-run", () => {
+      it("should return all runs concatenated for multi-run session", async () => {
+        registerRetrievalTools(mockPi, sessionStore);
+
+        const sessionId = "multi-run-session";
+        const firstRun: SubagentSessionData = {
+          sessionId,
+          taskName: "first-task",
+          prompt: "first prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "First run message" }],
+            },
+          ],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        const secondRun: SubagentSessionData = {
+          sessionId,
+          taskName: "second-task",
+          prompt: "second prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Second run message" }],
+            },
+          ],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        sessionStore.set(sessionId, { runs: [firstRun, secondRun] });
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "get_subagent_session");
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const result = await executeFn("tool-call-id", { sessionId }, null, vi.fn(), null);
+
+        expect(result.content[0].text).toContain("Run 1/2");
+        expect(result.content[0].text).toContain("Run 2/2");
+        expect(result.content[0].text).toContain("First run message");
+        expect(result.content[0].text).toContain("Second run message");
+      });
+
+      it("should include runCount in details", async () => {
+        registerRetrievalTools(mockPi, sessionStore);
+
+        const sessionId = "multi-run-session";
+        const firstRun: SubagentSessionData = {
+          sessionId,
+          taskName: "first-task",
+          prompt: "first prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        const secondRun: SubagentSessionData = {
+          sessionId,
+          taskName: "second-task",
+          prompt: "second prompt",
+          cwd: "/tmp",
+          status: "completed",
+          messages: [],
+          exitCode: 0,
+          startedAt: Date.now(),
+        };
+        sessionStore.set(sessionId, { runs: [firstRun, secondRun] });
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "get_subagent_session");
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const result = await executeFn("tool-call-id", { sessionId }, null, vi.fn(), null);
+
+        expect(result.details.runCount).toBe(2);
       });
     });
   });

@@ -11,23 +11,18 @@ import { Container, Spacer, Text } from "@earendil-works/pi-tui";
 import { loadMaxLinesPerWindow, loadProfiles, profileSummary, resolveProfile } from "../profiles";
 import { DelegateParams } from "../schemas";
 import { runSubAgent } from "../spawner";
-import type { SubAgentWindow, SubagentSessionData, WindowedSubagentDetails } from "../types";
-import { MAX_CONCURRENCY } from "../types";
+import type { SessionRecord, SubAgentWindow, SubagentSessionData, WindowedSubagentDetails, WindowLine } from "../types";
+import { DEFAULT_TIMEOUT, formatRunsForResume, MAX_CONCURRENCY } from "../types";
 import { countWindowStatuses, getSummaryText, mapWithConcurrencyLimit } from "../utils";
-
-// WindowLine is defined in types.ts but needed for renderResult
-type WindowLine = {
-  text: string;
-  kind: "text" | "tool";
-};
 
 /**
  * Register the delegate_to_subagents tool.
  */
 export function registerDelegateTool(
   pi: ExtensionAPI,
-  _sessionStore: Map<string, SubagentSessionData>,
+  sessionStore: Map<string, SessionRecord>,
   registerSession: (session: SubagentSessionData) => void,
+  getActiveSessionIds: () => Set<string>,
 ): void {
   pi.registerTool({
     name: "delegate_to_subagents",
@@ -41,7 +36,10 @@ export function registerDelegateTool(
       "under subagents.profiles. A top-level profile parameter sets a default for all tasks;",
       "each task can override with its own profile.",
       "Returns session IDs for each task that can be used with get_subagent_output",
-      "and get_subagent_session to retrieve results.",
+      "and get_subagent_session to retrieve results. Each task supports an optional `timeout`",
+      "parameter (in seconds, default 600) that aborts the sub-agent if it exceeds the time",
+      "limit. Each task supports an optional `resume` parameter referencing a previous session",
+      "ID. The resumed agent receives the prior session's transcript as context.",
     ].join(" "),
     parameters: DelegateParams,
     promptSnippet: "Use when the user wants multiple independent tasks done in parallel",
@@ -55,6 +53,9 @@ export function registerDelegateTool(
       'or "run this as the researcher", set the profile field accordingly.\n',
       "After delegate_to_subagents completes, use get_subagent_output to retrieve each sub-agent's",
       "final text output. Use get_subagent_session for the full session transcript if needed.\n",
+      "Use the `timeout` per-task parameter to set a time limit in seconds. Default is 600s (10 min).\n",
+      "Use the `resume` parameter to continue work from a previous sub-agent session.\n",
+      "You can only resume sessions that are completed or errored (not running).\n",
     ],
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -70,10 +71,28 @@ export function registerDelegateTool(
         return { name, profile };
       });
 
+      // Validate resume parameters
+      const activeIds = getActiveSessionIds();
+      for (const task of params.tasks) {
+        if (task.resume) {
+          const record = sessionStore.get(task.resume);
+          if (!record || record.runs.length === 0) {
+            throw new Error(
+              `Cannot resume: session "${task.resume}" not found. The session may have expired or the ID is incorrect.`,
+            );
+          }
+          if (activeIds.has(task.resume)) {
+            throw new Error(
+              `Cannot resume: session "${task.resume}" is still running. Wait for it to complete before resuming.`,
+            );
+          }
+        }
+      }
+
       const windows: SubAgentWindow[] = params.tasks.map((t, i) => {
         const resolvedProfileName = resolvedProfiles[i].name;
         const resolvedProfile = resolvedProfiles[i].profile;
-        const sessionId = randomUUID().replace(/-/g, "").slice(0, 16);
+        const sessionId = t.resume || randomUUID().replace(/-/g, "").slice(0, 16);
 
         return {
           name: t.name,
@@ -139,21 +158,67 @@ export function registerDelegateTool(
           return;
         }
 
-        await runSubAgent({
-          task,
-          win,
-          maxLines,
-          signal,
-          onUpdate: emitUpdate,
-          session,
-          profile: resolvedProfile,
-        });
+        // Format prompt for resume if applicable
+        let effectivePrompt = task.prompt;
+        if (task.resume) {
+          const record = sessionStore.get(task.resume);
+          if (record) {
+            const previousData = formatRunsForResume(record.runs);
+            effectivePrompt = `Previously:\n\n${previousData}\n\nInstructions:\n\n${task.prompt}`;
+          }
+        }
+
+        const effectiveTask = { ...task, prompt: effectivePrompt };
+
+        // Create per-task timeout
+        const taskTimeout = Math.max(1, task.timeout ?? DEFAULT_TIMEOUT);
+        const taskAbortController = new AbortController();
+        const taskAbortTimeout = setTimeout(() => {
+          taskAbortController.abort();
+        }, taskTimeout * 1000);
+
+        // Forward parent signal to task controller
+        const onParentAbort = () => taskAbortController.abort();
+        if (signal?.aborted) {
+          taskAbortController.abort();
+        } else if (signal) {
+          signal.addEventListener("abort", onParentAbort, { once: true });
+        }
+
+        try {
+          await runSubAgent({
+            task: effectiveTask,
+            win,
+            maxLines,
+            signal: taskAbortController.signal,
+            onUpdate: emitUpdate,
+            session,
+            profile: resolvedProfile,
+          });
+        } finally {
+          clearTimeout(taskAbortTimeout);
+          if (signal) signal.removeEventListener("abort", onParentAbort);
+        }
+
+        // Check if timeout caused the abort
+        if (taskAbortController.signal.aborted && !signal?.aborted) {
+          win.status = "error";
+          session.status = "error";
+          win.errorMessage = `Timed out after ${taskTimeout}s. Consider resuming with a longer timeout.`;
+          session.errorMessage = win.errorMessage;
+          win.exitCode = 1;
+          session.exitCode = 1;
+          emitUpdate();
+        }
       });
 
       const summaryLines: string[] = [];
       for (const win of windows) {
         const icon = win.status === "completed" ? "✓" : "✗";
         let line = `${icon} ${win.name}: ${win.status} (session: ${win.sessionId})`;
+        if (win.errorMessage) {
+          line += ` — ${win.errorMessage}`;
+        }
         if (win.profileName) {
           line += ` (${win.profileInfo ?? win.profileName})`;
         }

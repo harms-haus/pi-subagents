@@ -2,16 +2,21 @@
  * Tests for src/utils.ts
  */
 
+import { homedir } from "node:os";
+
 import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import type { SubAgentWindow } from "../types";
 import {
   appendLineToWindow,
+  collapseCdDot,
   countWindowStatuses,
   getLastAssistantText,
   getSummaryText,
   getTextParts,
   mapWithConcurrencyLimit,
+  shortenPath,
+  shortenPathsInText,
   stripAnsi,
 } from "../utils";
 
@@ -624,5 +629,102 @@ describe("getTextParts", () => {
       ],
     };
     expect(getTextParts(message)).toEqual([]);
+  });
+});
+
+describe("shortenPath", () => {
+  it("should return '.' when path is identical to cwd", () => {
+    expect(shortenPath("/home/user/project", "/home/user/project")).toBe(".");
+  });
+
+  it("should return relative child path without ./ prefix", () => {
+    expect(shortenPath("/home/user/project/src/file.ts", "/home/user/project")).toBe("src/file.ts");
+  });
+
+  it("should return relative path for deeply nested child", () => {
+    expect(shortenPath("/home/user/project/src/utils/helpers/format.ts", "/home/user/project")).toBe(
+      "src/utils/helpers/format.ts",
+    );
+  });
+
+  it("should keep display path for parent directory when savings are small", () => {
+    const result = shortenPath("/home/user", "/home/user/project");
+    // rel is ".." (2 chars), displayPath is "/home/user" (10 chars), savings = 8 < 10
+    expect(result).toBe("/home/user");
+  });
+
+  it("should keep absolute path when relative is longer", () => {
+    // /opt/some/deep/path/file.txt from /home/user/project
+    // relative would be ../../../opt/some/deep/path/file.txt (longer)
+    const result = shortenPath("/opt/some/deep/path/file.txt", "/home/user/project");
+    // The relative path is longer, so the absolute path is kept
+    expect(result).toBe("/opt/some/deep/path/file.txt");
+  });
+
+  it("should substitute home directory with ~ when shorter than relative", () => {
+    const home = homedir();
+    const cwd = `${home}/projects/myapp`;
+    const path = `${home}/other/file.txt`;
+    const result = shortenPath(path, cwd);
+    // Should use ~/other/file.txt since it's shorter than ../../other/file.txt
+    expect(result).toBe("~/other/file.txt");
+  });
+
+  it("should keep display path for ascending path when savings are small", () => {
+    const home = homedir();
+    const cwd = `${home}/a/b`;
+    const path = `${home}/a/lib.ts`;
+    const result = shortenPath(path, cwd);
+    // rel is "../lib.ts" (9 chars), displayPath is "~/a/lib.ts" (10 chars), savings = 1 < 10
+    expect(result).toBe("~/a/lib.ts");
+  });
+});
+
+describe("shortenPathsInText", () => {
+  it("should shorten a single path matching cwd prefix", () => {
+    const cwd = "/home/user/project";
+    expect(shortenPathsInText("cat /home/user/project/file.txt", cwd)).toBe("cat file.txt");
+  });
+
+  it("should shorten multiple paths in one command", () => {
+    const cwd = "/home/user/project";
+    expect(shortenPathsInText("cp /home/user/project/a.txt /home/user/project/b.txt", cwd)).toBe("cp a.txt b.txt");
+  });
+
+  it("should not modify URLs", () => {
+    const cwd = "/home/user/project";
+    expect(shortenPathsInText("curl https://example.com/api/data", cwd)).toBe("curl https://example.com/api/data");
+  });
+
+  it("should leave text without paths unchanged", () => {
+    const cwd = "/home/user/project";
+    expect(shortenPathsInText("echo hello", cwd)).toBe("echo hello");
+  });
+
+  it("should shorten path at start of text", () => {
+    const cwd = "/home/user/project";
+    expect(shortenPathsInText("/home/user/project/run.sh arg1", cwd)).toBe("run.sh arg1");
+  });
+});
+
+describe("collapseCdDot", () => {
+  it("should return '.' for exact cd to cwd", () => {
+    expect(collapseCdDot("cd /home/user/project", "/home/user/project")).toBe(".");
+  });
+
+  it("should strip cd prefix when followed by && and command", () => {
+    expect(collapseCdDot("cd /home/user/project && ls -la", "/home/user/project")).toBe("ls -la");
+  });
+
+  it("should return empty string for cd with trailing && and nothing after", () => {
+    expect(collapseCdDot("cd /home/user/project &&", "/home/user/project")).toBe("");
+  });
+
+  it("should leave command unchanged when cd target differs from cwd", () => {
+    expect(collapseCdDot("cd /other/path && ls", "/home/user/project")).toBe("cd /other/path && ls");
+  });
+
+  it("should leave command unchanged when not starting with cd", () => {
+    expect(collapseCdDot("ls -la", "/home/user/project")).toBe("ls -la");
   });
 });

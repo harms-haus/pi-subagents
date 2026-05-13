@@ -4,9 +4,13 @@
  * Helper functions for subagent processing, output formatting, and concurrency management.
  */
 
+import { homedir } from "node:os";
+import { relative } from "node:path";
 import type { Message } from "@earendil-works/pi-ai";
 import type { SubAgentWindow } from "./types";
 import { MAX_MESSAGES_PER_SESSION } from "./types";
+
+const HOME = homedir();
 
 // ── ANSI Stripping ───────────────────────────────────────────────────
 
@@ -19,6 +23,107 @@ const ANSI_REGEX = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-
  */
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_REGEX, "");
+}
+
+// ── Path Shortening ──────────────────────────────────────────────────────
+
+/**
+ * Shortens a single absolute file path relative to the given cwd.
+ * - Replaces home directory prefix with `~`
+ * - Uses relative path from cwd if shorter
+ */
+export function shortenPath(absolutePath: string, cwd: string): string {
+  if (absolutePath === cwd) return ".";
+
+  let displayPath = absolutePath;
+  if (absolutePath.startsWith(`${HOME}/`)) {
+    displayPath = `~${absolutePath.slice(HOME.length)}`;
+  }
+
+  const rel = relative(cwd, absolutePath);
+
+  if (rel !== "" && rel !== "." && rel.length < displayPath.length) {
+    // For ascending paths (..), only use if significantly shorter to avoid confusing output
+    if (rel.startsWith("..")) {
+      const savings = displayPath.length - rel.length;
+      if (savings < 10) return displayPath;
+    }
+    return rel;
+  }
+
+  return displayPath;
+}
+
+/** Regex to match candidate absolute paths (at least 2 segments, starting with /) */
+const ABSOLUTE_PATH_REGEX = /(?:^|[^:\w/])((?:\/[a-zA-Z0-9._-]+){2,})/g;
+
+/**
+ * Finds absolute paths in arbitrary text and shortens them.
+ * Excludes URLs (preceded by `://`).
+ */
+export function shortenPathsInText(text: string, cwd: string): string {
+  const matches: Array<{ match: string; index: number }> = [];
+  ABSOLUTE_PATH_REGEX.lastIndex = 0;
+  let m: RegExpExecArray | null = ABSOLUTE_PATH_REGEX.exec(text);
+  while (m !== null) {
+    if (m[1]) {
+      matches.push({ match: m[1], index: m.index + (m[0].length - m[1].length) });
+    }
+    m = ABSOLUTE_PATH_REGEX.exec(text);
+  }
+
+  if (matches.length === 0) return text;
+
+  // Build result by replacing each match
+  let result = "";
+  let lastEnd = 0;
+
+  for (const { match, index } of matches) {
+    result += text.slice(lastEnd, index);
+    result += shortenPath(match, cwd);
+    lastEnd = index + match.length;
+  }
+  result += text.slice(lastEnd);
+  return result;
+}
+
+/**
+ * Handles the common pattern where the cwd appears in cd commands.
+ * - `cd <cwd> && ...` → strips the `cd <cwd> &&` prefix
+ * - `cd <cwd>` exactly → returns `.`
+ * - `cd <cwd> &&` with nothing after → returns empty string
+ */
+let _cdCwd = "";
+let _cdPattern: RegExp | null = null;
+
+function getCdPattern(cwd: string): RegExp {
+  if (cwd !== _cdCwd) {
+    _cdCwd = cwd;
+    const escapedCwd = cwd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    _cdPattern = new RegExp(`^cd\\s+${escapedCwd}(\\s+&&\\s*(.*))?$`);
+  }
+  return _cdPattern as RegExp;
+}
+
+export function collapseCdDot(command: string, cwd: string): string {
+  const match = command.match(getCdPattern(cwd));
+
+  if (!match) return command;
+
+  if (match[1] === undefined) {
+    // Exact match: `cd <cwd>` with nothing after → return "."
+    return ".";
+  }
+
+  // Has `&&` part
+  const after = match[2] ?? "";
+  if (after.trim() === "") {
+    // `cd <cwd> &&` with nothing after → return empty string
+    return "";
+  }
+
+  // `cd <cwd> && ...` → strip prefix, return the rest
+  return after.trimStart();
 }
 
 // ── Rolling Buffer ─────────────────────────────────────────────────────

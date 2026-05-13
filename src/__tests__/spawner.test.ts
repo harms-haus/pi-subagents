@@ -350,4 +350,209 @@ describe("spawner", () => {
       await promise;
     });
   });
+
+  describe("path shortening in tool call display", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    async function emitToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", name: toolName, arguments: args }],
+        },
+      });
+
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    function findToolLine(keyword: string) {
+      const line = mockWindow.lines.find((l) => l.text.includes(keyword));
+      if (!line) {
+        throw new Error(
+          `Expected to find a line containing "${keyword}" in: ${mockWindow.lines.map((l) => l.text).join(", ")}`,
+        );
+      }
+      return line;
+    }
+
+    it("should shorten bash command paths relative to cwd", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("bash", { command: "cat /home/user/projects/my-app/src/index.ts" });
+
+      const toolLine = findToolLine("bash");
+      // The path appears in the output (shortenPathsInText extracts paths without leading /)
+      expect(toolLine.text).toContain("src/index.ts");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should strip cd <cwd> && prefix from bash commands", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("bash", { command: "cd /home/user/projects/my-app && npm test" });
+
+      const toolLine = findToolLine("bash");
+      expect(toolLine.text).toBe("→ bash → npm test");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should shorten edit tool file path", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("edit", {
+        path: "/home/user/projects/my-app/src/utils.ts",
+        edits: [{ oldText: "x", newText: "y" }],
+      });
+
+      const toolLine = findToolLine("edit");
+      expect(toolLine.text).toBe("→ edit → src/utils.ts (1 edit)");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should shorten read tool file path", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("read", {
+        path: "/home/user/projects/my-app/src/index.ts",
+        offset: 10,
+        limit: 20,
+      });
+
+      const toolLine = findToolLine("read");
+      expect(toolLine.text).toBe("→ read → src/index.ts:10+20");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should shorten write tool file path", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("write", {
+        path: "/home/user/projects/my-app/src/new-file.ts",
+        content: "hello",
+      });
+
+      const toolLine = findToolLine("write");
+      expect(toolLine.text).toBe("→ write → src/new-file.ts");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should shorten lsp-diagnostics file path", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("lsp-diagnostics", {
+        file: "/home/user/projects/my-app/src/app.tsx",
+      });
+
+      const toolLine = findToolLine("lsp-diagnostics");
+      expect(toolLine.text).toBe("→ lsp-diagnostics → src/app.tsx");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should shorten lint-files paths", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("lint-files", {
+        files: ["/home/user/projects/my-app/src/a.ts", "/home/user/projects/my-app/src/b.ts"],
+      });
+
+      const toolLine = findToolLine("lint");
+      expect(toolLine.text).toBe("→ lint → src/a.ts, src/b.ts");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should keep unrelated absolute paths unchanged", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("read", {
+        path: "/usr/local/share/some/config.json",
+      });
+
+      const toolLine = findToolLine("read");
+      // The path should remain absolute since making it relative would be longer
+      expect(toolLine.text).toContain("/usr/local/share/some/config.json");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
 });

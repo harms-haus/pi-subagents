@@ -11,7 +11,14 @@ import type { SubagentProfile } from "./profiles";
 import { profileToArgs } from "./profiles";
 import type { SubAgentTask, SubAgentWindow, SubagentSessionData, ToolCallPart } from "./types";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
-import { appendLineToWindow, getPiInvocation, getTextParts } from "./utils";
+import {
+  appendLineToWindow,
+  collapseCdDot,
+  getPiInvocation,
+  getTextParts,
+  shortenPath,
+  shortenPathsInText,
+} from "./utils";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -45,25 +52,30 @@ function validateCwd(cwd: string | undefined, fallback: string): string {
  * Format a tool call as a concise one-liner for the sub-agent rolling window.
  * Avoids dumping full JSON arguments for common tools.
  */
-function formatToolCall(toolName: string, args: Record<string, any>): string {
+function formatToolCall(toolName: string, args: Record<string, any>, cwd: string): string {
   switch (toolName) {
     // File mutations: just show the filename
     case "edit":
     case "write": {
-      const path = args.path ?? args.filePath ?? "...";
+      const path = shortenPath(args.path ?? args.filePath ?? "...", cwd);
       const count = args.edits?.length;
       const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
       return `${toolName} → ${path}${suffix}`;
     }
 
     case "bash": {
-      const cmd = (args.command ?? "...").split("\n")[0];
+      let cmd = (args.command ?? "...").split("\n")[0];
+      cmd = collapseCdDot(cmd, cwd);
+      if (cmd === "." || cmd === "") {
+        return `bash → cd .`;
+      }
+      cmd = shortenPathsInText(cmd, cwd);
       const truncated = cmd.length > 80 ? `${cmd.slice(0, 77)}...` : cmd;
       return `bash → ${truncated}`;
     }
 
     case "read": {
-      const path = args.path ?? "...";
+      const path = shortenPath(args.path ?? "...", cwd);
       const parts = [path];
       if (args.offset) parts.push(`:${args.offset}`);
       if (args.limit) parts.push(`+${args.limit}`);
@@ -93,17 +105,17 @@ function formatToolCall(toolName: string, args: Record<string, any>): string {
     // LSP tools
     case "lsp-diagnostics":
     case "lsp_diagnostics": {
-      const file = args.file ?? "...";
+      const file = shortenPath(args.file ?? "...", cwd);
       return `lsp-diagnostics → ${file}`;
     }
     case "lsp-find-references":
     case "lsp_find_references": {
-      const file = args.file ?? "...";
+      const file = shortenPath(args.file ?? "...", cwd);
       return `lsp-find-refs → ${file}:${args.line}:${args.column}`;
     }
     case "lsp-goto-definition":
     case "lsp_goto_definition": {
-      const file = args.file ?? "...";
+      const file = shortenPath(args.file ?? "...", cwd);
       return `lsp-goto-def → ${file}:${args.line}:${args.column}`;
     }
     case "lsp-find-symbol":
@@ -111,12 +123,12 @@ function formatToolCall(toolName: string, args: Record<string, any>): string {
       return `lsp-find-symbol → ${args.query ?? "..."}`;
     case "lsp-call-hierarchy":
     case "lsp_call_hierarchy": {
-      const file = args.file ?? "...";
+      const file = shortenPath(args.file ?? "...", cwd);
       return `lsp-call-hierarchy → ${file}:${args.line}:${args.column}`;
     }
     case "lsp-refactor-symbol":
     case "lsp_refactor_symbol": {
-      const file = args.file ?? "...";
+      const file = shortenPath(args.file ?? "...", cwd);
       return `lsp-rename → ${file}:${args.line}:${args.column} → ${args.newName ?? "..."}`;
     }
 
@@ -125,8 +137,11 @@ function formatToolCall(toolName: string, args: Record<string, any>): string {
     case "lint_files": {
       const files = args.files;
       if (files && files.length > 0) {
+        const shortened = files.map((f: string) => shortenPath(f, cwd));
         const preview =
-          files.length <= 3 ? files.join(", ") : `${files.slice(0, 2).join(", ")}, ... +${files.length - 2} more`;
+          shortened.length <= 3
+            ? shortened.join(", ")
+            : `${shortened.slice(0, 2).join(", ")}, ... +${shortened.length - 2} more`;
         return `lint → ${preview}`;
       }
       return "lint → (all)";
@@ -183,6 +198,7 @@ function handleStdoutLine(
   maxLines: number,
   session: SubagentSessionData,
   onUpdate: () => void,
+  cwd: string,
 ): void {
   if (!line.trim()) return;
 
@@ -218,7 +234,7 @@ function handleStdoutLine(
       for (const part of msg.content) {
         if (part.type === "toolCall") {
           const toolArgs = (part as ToolCallPart).arguments || {};
-          const preview = formatToolCall((part as ToolCallPart).name, toolArgs);
+          const preview = formatToolCall((part as ToolCallPart).name, toolArgs, cwd);
           appendLineToWindow(win, `→ ${preview}`, maxLines, "tool");
         }
       }
@@ -335,7 +351,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
     });
 
     const processLine = (line: string) => {
-      handleStdoutLine(line, win, maxLines, session, debouncedUpdate);
+      handleStdoutLine(line, win, maxLines, session, debouncedUpdate, resolvedCwd);
     };
 
     proc.stdout.on("data", (data: Buffer) => {

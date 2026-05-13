@@ -1,40 +1,32 @@
 /**
  * Subagent Profile System
  *
- * Loads named profiles from pi settings files (global + project-local)
+ * Loads named profiles from individual markdown files with YAML frontmatter,
  * and resolves them into CLI arguments for sub-agent processes.
  *
- * Profile configuration in settings.json:
- * {
- *   "subagents": {
- *     "profiles": {
- *       "code-reviewer": {
- *         "model": "anthropic/claude-sonnet-4-5",
- *         "systemPrompt": "You are a code reviewer. Focus on...",
- *         "thinkingLevel": "high",
- *         "tools": ["read", "bash", "grep"]
- *       },
- *       "fast-worker": {
- *         "model": "dashscope/qwen3.5-plus",
- *         "appendSystemPrompt": "Be concise. Skip explanations.",
- *         "thinkingLevel": "off"
- *       },
- *       "researcher": {
- *         "provider": "openai",
- *         "model": "gpt-4o",
- *         "systemPrompt": "You are a research assistant...",
- *         "thinkingLevel": "medium",
- *         "noExtensions": true
- *       }
- *     }
- *   }
- * }
+ * Profile locations:
+ *   Global:   ~/.pi/agent/agent-profiles/*.md
+ *   Project:  .pi/agent-profiles/*.md
+ *
+ * Project-local profiles override global profiles with the same name.
+ *
+ * Profile markdown format:
+ * ---
+ * name: my-profile
+ * provider: anthropic
+ * model: claude-sonnet-4-5
+ * thinkingLevel: high
+ * tools: read,bash,grep
+ * ---
+ *
+ * You are a coding agent...
  */
 
-import { existsSync } from "node:fs";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 
 // ── Profile Types ────────────────────────────────────────────────────
 
@@ -94,19 +86,6 @@ export interface ProfileInvocation {
   env: Record<string, string>;
 }
 
-interface SubagentSettings {
-  profiles?: SubagentProfiles;
-  agentOverrides?: Record<string, Partial<SubagentProfile>>;
-  maxLinesPerWindow?: number;
-  [key: string]: unknown;
-}
-
-/** Raw settings file structure with unknown properties */
-interface SettingsFile {
-  subagents?: SubagentSettings;
-  [key: string]: unknown;
-}
-
 // ── Profile Cache ─────────────────────────────────────────────────────
 
 let profilesCache: { cwd: string | undefined; profiles: SubagentProfiles; timestamp: number } | null = null;
@@ -116,7 +95,47 @@ export function invalidateProfilesCache(): void {
   profilesCache = null;
 }
 
-// ── Settings Loading ─────────────────────────────────────────────────
+// ── Helpers for array/string frontmatter fields ──────────────────────
+
+function parseStringOrArray(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return undefined;
+}
+
+// ── Profile Directory Paths ──────────────────────────────────────────
+
+function getGlobalProfilesDir(): string {
+  const agentDir = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  return join(agentDir, "agent-profiles");
+}
+
+function getProjectProfilesDir(cwd: string): string {
+  return join(cwd, ".pi", "agent-profiles");
+}
+
+export type ProfileScope = "global" | "project";
+
+export function getProfilesDir(scope: ProfileScope, cwd?: string): string {
+  return scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
+}
+
+// ── Settings File Reading (for loadMaxLinesPerWindow only) ───────────
+
+interface SubagentSettings {
+  maxLinesPerWindow?: number;
+  [key: string]: unknown;
+}
+
+interface SettingsFile {
+  subagents?: SubagentSettings;
+  [key: string]: unknown;
+}
 
 function getGlobalSettingsPath(): string {
   const agentDir = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
@@ -138,9 +157,67 @@ async function readSettingsFile(filePath: string): Promise<SettingsFile> {
   }
 }
 
+// ── Profile Loading from Markdown Files ──────────────────────────────
+
+function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
+  if (!existsSync(dir)) return;
+
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!(entry.isFile() && entry.name.endsWith(".md"))) continue;
+
+    const filePath = join(dir, entry.name);
+    try {
+      const content = readFileSync(filePath, "utf-8");
+      const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(content);
+
+      const name = frontmatter.name;
+      if (typeof name !== "string") continue;
+      if (!name) continue;
+
+      const profile: SubagentProfile = {};
+
+      if (typeof frontmatter.provider === "string") profile.provider = frontmatter.provider;
+      if (typeof frontmatter.model === "string") profile.model = frontmatter.model;
+      if (typeof frontmatter.thinkingLevel === "string")
+        profile.thinkingLevel = frontmatter.thinkingLevel as ThinkingLevel;
+      if (typeof frontmatter.appendSystemPrompt === "string")
+        profile.appendSystemPrompt = frontmatter.appendSystemPrompt;
+      if (typeof frontmatter.apiKey === "string") profile.apiKey = frontmatter.apiKey;
+
+      const trimmedBody = body.trim();
+      if (trimmedBody) profile.systemPrompt = trimmedBody;
+
+      const tools = parseStringOrArray(frontmatter.tools);
+      if (tools) profile.tools = tools;
+
+      if (frontmatter.noTools === true) profile.noTools = true;
+      if (frontmatter.noExtensions === true) profile.noExtensions = true;
+      if (frontmatter.noSkills === true) profile.noSkills = true;
+      if (frontmatter.noContextFiles === true) profile.noContextFiles = true;
+
+      const extensions = parseStringOrArray(frontmatter.extensions);
+      if (extensions) profile.extensions = extensions;
+
+      const extraArgs = parseStringOrArray(frontmatter.extraArgs);
+      if (extraArgs) profile.extraArgs = extraArgs;
+
+      profiles[name] = profile;
+    } catch (error) {
+      console.warn(`Failed to load profile from ${filePath}:`, error instanceof Error ? error.message : error);
+    }
+  }
+}
+
 /**
- * Load subagent profiles from settings files.
- * Project-local settings override global settings.
+ * Load subagent profiles from markdown files.
+ * Project-local profiles override global profiles.
  */
 export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
   const now = Date.now();
@@ -148,36 +225,16 @@ export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
     return profilesCache.profiles;
   }
 
-  const globalSettings = await readSettingsFile(getGlobalSettingsPath());
-  const globalSubagents: SubagentSettings = globalSettings.subagents ?? {};
+  const profiles: SubagentProfiles = {};
 
-  let profiles: SubagentProfiles = { ...globalSubagents.profiles };
+  // Load global profiles
+  const globalDir = getGlobalProfilesDir();
+  loadProfilesFromDir(globalDir, profiles);
 
-  // Merge agentOverrides as simple profiles (backward compat)
-  if (globalSubagents.agentOverrides) {
-    for (const [name, override] of Object.entries(globalSubagents.agentOverrides)) {
-      if (!profiles[name]) {
-        profiles[name] = override;
-      }
-    }
-  }
-
-  // Merge project-local settings on top
+  // Load project-local profiles (override globals)
   if (cwd) {
-    const projectSettings = await readSettingsFile(getProjectSettingsPath(cwd));
-    const projectSubagents: SubagentSettings = projectSettings.subagents ?? {};
-
-    if (projectSubagents.profiles) {
-      profiles = { ...profiles, ...projectSubagents.profiles };
-    }
-
-    if (projectSubagents.agentOverrides) {
-      for (const [name, override] of Object.entries(projectSubagents.agentOverrides)) {
-        if (!profiles[name]) {
-          profiles[name] = override;
-        }
-      }
-    }
+    const projectDir = getProjectProfilesDir(cwd);
+    loadProfilesFromDir(projectDir, profiles);
   }
 
   profilesCache = { cwd, profiles, timestamp: now };
@@ -286,60 +343,42 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
   return parts.join(", ");
 }
 
+// ── Profile Serialization ────────────────────────────────────────────
+
+function serializeProfileToMarkdown(name: string, profile: SubagentProfile): string {
+  const fmLines: string[] = ["---"];
+  fmLines.push(`name: ${name}`);
+
+  if (profile.provider !== undefined) fmLines.push(`provider: ${profile.provider}`);
+  if (profile.model !== undefined) fmLines.push(`model: ${profile.model}`);
+  if (profile.thinkingLevel !== undefined) fmLines.push(`thinkingLevel: ${profile.thinkingLevel}`);
+  if (profile.appendSystemPrompt !== undefined) fmLines.push(`appendSystemPrompt: ${profile.appendSystemPrompt}`);
+  if (profile.apiKey !== undefined) fmLines.push(`apiKey: ${profile.apiKey}`);
+
+  if (profile.noTools !== undefined) fmLines.push(`noTools: ${profile.noTools}`);
+  if (profile.noExtensions !== undefined) fmLines.push(`noExtensions: ${profile.noExtensions}`);
+  if (profile.noSkills !== undefined) fmLines.push(`noSkills: ${profile.noSkills}`);
+  if (profile.noContextFiles !== undefined) fmLines.push(`noContextFiles: ${profile.noContextFiles}`);
+
+  if (profile.tools && profile.tools.length > 0) fmLines.push(`tools: ${profile.tools.join(",")}`);
+  if (profile.extensions && profile.extensions.length > 0) fmLines.push(`extensions: ${profile.extensions.join(",")}`);
+  if (profile.extraArgs && profile.extraArgs.length > 0) fmLines.push(`extraArgs: ${profile.extraArgs.join(",")}`);
+
+  fmLines.push("---");
+
+  // Body is the system prompt
+  if (profile.systemPrompt) {
+    fmLines.push("");
+    fmLines.push(profile.systemPrompt);
+  }
+
+  return `${fmLines.join("\n")}\n`;
+}
+
 // ── Profile Mutation ─────────────────────────────────────────────────
 
-async function atomicWriteFile(filePath: string, content: string): Promise<void> {
-  const tmpPath = `${filePath}.tmp.${Date.now()}`;
-  await writeFile(tmpPath, content, "utf8");
-  await rename(tmpPath, filePath);
-}
-
-export type ProfileScope = "global" | "project";
-
 /**
- * Read the raw settings file, apply a mutator, and write it back.
- * The mutator receives the subagents section and returns true if changed.
- */
-async function mutateSettingsFile(filePath: string, mutator: (subagents: SubagentSettings) => boolean): Promise<void> {
-  let settings: SettingsFile = {};
-  if (existsSync(filePath)) {
-    try {
-      settings = JSON.parse(await readFile(filePath, "utf8"));
-    } catch {
-      settings = {};
-    }
-  }
-
-  if (!settings.subagents) settings.subagents = {};
-
-  const changed = mutator(settings.subagents);
-  if (!changed) return;
-
-  invalidateProfilesCache();
-
-  // Clean up empty sub-objects
-  if (settings.subagents.profiles && Object.keys(settings.subagents.profiles).length === 0) {
-    delete settings.subagents.profiles;
-  }
-  if (settings.subagents.agentOverrides && Object.keys(settings.subagents.agentOverrides).length === 0) {
-    delete settings.subagents.agentOverrides;
-  }
-  if (Object.keys(settings.subagents).length === 0) {
-    delete settings.subagents;
-  }
-
-  await atomicWriteFile(filePath, `${JSON.stringify(settings, null, 2)}\n`);
-}
-
-export function getSettingsPath(scope: ProfileScope, cwd?: string): string {
-  if (scope === "project") {
-    return getProjectSettingsPath(cwd ?? process.cwd());
-  }
-  return getGlobalSettingsPath();
-}
-
-/**
- * Save (create or update) a profile to the given scope.
+ * Save (create or update) a profile as a markdown file in the given scope.
  */
 export async function saveProfile(
   name: string,
@@ -347,40 +386,30 @@ export async function saveProfile(
   scope: ProfileScope,
   cwd?: string,
 ): Promise<void> {
-  const filePath = getSettingsPath(scope, cwd);
-  await mutateSettingsFile(filePath, (subagents) => {
-    if (!subagents.profiles) subagents.profiles = {};
-    subagents.profiles[name] = profile;
-    return true;
-  });
+  const dir = scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const filePath = join(dir, `${name}.md`);
+  const content = serializeProfileToMarkdown(name, profile);
+  await writeFile(filePath, content, "utf8");
   invalidateProfilesCache();
 }
 
 /**
- * Delete a profile from the given scope.
- * Checks both subagents.profiles and subagents.agentOverrides.
+ * Delete a profile markdown file from the given scope.
  * Returns true if the profile existed and was deleted.
  */
 export async function deleteProfile(name: string, scope: ProfileScope, cwd?: string): Promise<boolean> {
-  const filePath = getSettingsPath(scope, cwd);
-  let existed = false;
-  await mutateSettingsFile(filePath, (subagents) => {
-    // Check profiles first
-    if (subagents.profiles?.[name]) {
-      existed = true;
-      delete subagents.profiles[name];
-    }
-    // Also check agentOverrides (backward compat)
-    if (subagents.agentOverrides?.[name]) {
-      existed = true;
-      delete subagents.agentOverrides[name];
-    }
-    return existed;
-  });
-  if (existed) {
-    invalidateProfilesCache();
-  }
-  return existed;
+  const dir = scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
+  const filePath = join(dir, `${name}.md`);
+
+  if (!existsSync(filePath)) return false;
+
+  await unlink(filePath);
+  invalidateProfilesCache();
+  return true;
 }
 
 /**

@@ -20,8 +20,8 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
 
   // Scope
   const scope = await ctx.ui.select<ProfileScope>("Save to which scope?", [
-    "Global (~/.pi/agent/settings.json)",
-    "Project (.pi/settings.json)",
+    `Global (~/.pi/agent-profiles/${name}.md)`,
+    `Project (.pi/agent-profiles/${name}.md)`,
   ]);
   if (!scope) return;
   const scopeValue: ProfileScope = scope.startsWith("Global") ? "global" : "project";
@@ -140,5 +140,5 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
   }
 
   await saveProfile(name, profile, scopeValue, ctx.cwd);
-  ctx.ui.notify(`Profile "${name}" saved to ${scopeValue} settings.`, "info");
+  ctx.ui.notify(`Profile "${name}" saved to ${scopeValue} agent-profiles.`, "info");
 }

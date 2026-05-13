@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubagentProfile } from "../profiles";
 import {
   formatProfileDetail,
-  getSettingsPath,
+  getProfilesDir,
   invalidateProfilesCache,
   loadMaxLinesPerWindow,
   profileSummary,
@@ -17,12 +17,19 @@ import {
 // Mock filesystem functions
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
+  readFileSync: vi.fn(),
 }));
 
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   rename: vi.fn(),
+  mkdir: vi.fn(),
+  unlink: vi.fn(),
+}));
+
+vi.mock("@earendil-works/pi-coding-agent", () => ({
+  parseFrontmatter: vi.fn(),
 }));
 
 import { existsSync } from "node:fs";
@@ -491,24 +498,21 @@ describe("loadMaxLinesPerWindow", () => {
   });
 });
 
-describe("getSettingsPath", () => {
-  it("should return global path when scope is 'global'", () => {
-    const result = getSettingsPath("global");
-
-    expect(result).toMatch(/\.pi\/agent\/settings\.json$/);
+describe("getProfilesDir", () => {
+  it("should return global agent-profiles dir when scope is 'global'", () => {
+    const result = getProfilesDir("global");
+    expect(result).toMatch(/\.pi\/agent\/agent-profiles$/);
   });
 
-  it("should return project path when scope is 'project'", () => {
+  it("should return project agent-profiles dir when scope is 'project'", () => {
     const cwd = "/my/project";
-    const result = getSettingsPath("project", cwd);
-
-    expect(result).toBe("/my/project/.pi/settings.json");
+    const result = getProfilesDir("project", cwd);
+    expect(result).toBe("/my/project/.pi/agent-profiles");
   });
 
   it("should use process.cwd() when scope is 'project' and cwd is not provided", () => {
     const originalCwd = process.cwd();
-    const result = getSettingsPath("project");
-
-    expect(result).toBe(`${originalCwd}/.pi/settings.json`);
+    const result = getProfilesDir("project");
+    expect(result).toBe(`${originalCwd}/.pi/agent-profiles`);
   });
 });

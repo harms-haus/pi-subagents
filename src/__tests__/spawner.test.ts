@@ -3,6 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runSubAgent } from "../spawner";
 import type { SubAgentWindow, SubagentSessionData } from "../types";
 
+// Mock pi-coding-agent (used by profiles.ts for parseFrontmatter)
+vi.mock("@earendil-works/pi-coding-agent", () => ({
+  parseFrontmatter: vi.fn((content: string) => {
+    const lines = content.split("\n");
+    return { frontmatter: {}, body: lines.slice(2).join("\n") };
+  }),
+}));
+
 // Mock child_process.spawn
 vi.mock("node:child_process", () => ({
   spawn: vi.fn(),

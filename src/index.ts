@@ -5,9 +5,9 @@
  * latest output rendered in a rolling TUI window inline with the main agent's
  * conversation history.
  *
- * Supports named profiles configured in settings.json under
- * `subagents.profiles` to pre-configure provider/model, system prompts,
- * thinking levels, and other model settings per profile.
+ * Supports named profiles defined as markdown files in the
+ * agent-profiles/ directory, each pre-configuring provider/model, system
+ * prompts, thinking levels, and other model settings per profile.
  *
  * Tools provided:
  *   delegate_to_subagents — spawn parallel sub-agents

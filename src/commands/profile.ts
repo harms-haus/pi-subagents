@@ -33,7 +33,10 @@ export function registerProfileCommand(pi: ExtensionAPI): void {
         const profiles = await loadProfiles(ctx.cwd);
         const names = Object.keys(profiles);
         if (names.length === 0) {
-          ctx.ui.notify("No subagent profiles defined. Use /profile create to add one.", "info");
+          ctx.ui.notify(
+            "No subagent profiles found. Add .md files to ~/.pi/agent/agent-profiles/ or use /profile create.",
+            "info",
+          );
           return;
         }
         const lines = names.map((n) => `  ${profileSummary(n, profiles[n])}`);

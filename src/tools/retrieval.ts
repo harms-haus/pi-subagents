@@ -191,7 +191,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
     label: "List Sub-agent Profiles",
     description: [
       "List all available subagent profiles that can be used with delegate_to_subagents.",
-      "Profiles are configured in settings.json under subagents.profiles.",
+      "Profiles are stored as .md files in ~/.pi/agent/agent-profiles/ (global) and .pi/agent-profiles/ (project-local).",
     ].join(" "),
     parameters: Type.Object({}),
     promptSnippet: "List available named subagent profiles and their configurations",
@@ -208,7 +208,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
           content: [
             {
               type: "text",
-              text: "No subagent profiles defined. Add profiles to settings.json under subagents.profiles.",
+              text: "No subagent profiles found. Add .md files to ~/.pi/agent/agent-profiles/ or .pi/agent-profiles/.",
             },
           ],
           details: { count: 0 },

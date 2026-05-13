@@ -1,0 +1,353 @@
+import { EventEmitter } from "node:events";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { runSubAgent } from "../spawner";
+import type { SubAgentWindow, SubagentSessionData } from "../types";
+
+// Mock child_process.spawn
+vi.mock("node:child_process", () => ({
+  spawn: vi.fn(),
+}));
+
+import { spawn } from "node:child_process";
+
+// Create a mock ChildProcess
+type MockChildProcess = EventEmitter & {
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  stdin: EventEmitter;
+  killed: boolean;
+  kill: ReturnType<typeof vi.fn>;
+};
+
+function createMockProcess(): MockChildProcess {
+  const proc = new EventEmitter() as MockChildProcess;
+  proc.stdout = new EventEmitter();
+  proc.stderr = new EventEmitter();
+  proc.stdin = new EventEmitter();
+  proc.killed = false;
+  proc.kill = vi.fn((signal: string) => {
+    proc.killed = true;
+    proc.emit("exit", signal === "SIGTERM" ? 0 : 1);
+  });
+  return proc;
+}
+
+describe("spawner", () => {
+  let mockProcess: ReturnType<typeof createMockProcess>;
+  let mockWindow: SubAgentWindow;
+  let mockSession: SubagentSessionData;
+  let onUpdateSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockProcess = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(mockProcess);
+
+    mockWindow = {
+      name: "test-task",
+      sessionId: "test-session-id",
+      status: "running",
+      lines: [],
+      allMessages: [],
+      exitCode: null,
+    };
+
+    mockSession = {
+      sessionId: "test-session-id",
+      taskName: "test-task",
+      prompt: "test prompt",
+      cwd: "/tmp",
+      status: "running",
+      messages: [],
+      exitCode: null,
+      startedAt: Date.now(),
+    };
+
+    onUpdateSpy = vi.fn();
+  });
+
+  describe("runSubAgent", () => {
+    it("should spawn with correct arguments", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      // Wait for spawn to be called
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(spawn).toHaveBeenCalled();
+      const spawnArgs = vi.mocked(spawn).mock.calls[0];
+      // getPiInvocation() returns the actual node path and script path
+      expect(spawnArgs[0]).toBeTruthy();
+      expect(spawnArgs[1]).toContain("--mode");
+      expect(spawnArgs[1]).toContain("json");
+      expect(spawnArgs[1]).toContain("-p");
+      expect(spawnArgs[1]).toContain("--no-session");
+      expect(spawnArgs[1]).toContain("test prompt");
+
+      // Clean up
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should use absolute path when cwd is absolute", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: "/absolute/path" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(spawn).toHaveBeenCalled();
+      // validateCwd will resolve the path, but we test that it was called
+      expect(spawn).toHaveBeenCalled();
+      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      expect(spawnOptions.cwd).toBeTruthy();
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should normalize paths and check for '..' after resolution", async () => {
+      // resolve() normalizes paths like /safe/../unsafe to /unsafe
+      // The '..' check happens AFTER resolve(), so normalized paths pass
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: "/safe/../unsafe" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(spawn).toHaveBeenCalled();
+      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      // The path is normalized to /unsafe by resolve()
+      expect(spawnOptions.cwd).toBe("/unsafe");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should resolve relative paths using current directory", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: "relative/path" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // spawn should be called because resolve() makes relative paths absolute
+      // validateCwd will resolve the relative path to absolute
+      expect(spawn).toHaveBeenCalled();
+      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      expect(spawnOptions.cwd).toBeTruthy();
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle process stdout lines", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Simulate stdout data
+      mockProcess.stdout.emit("data", Buffer.from("line 1\nline 2\n"));
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockWindow.lines).toHaveLength(2);
+      expect(mockWindow.lines[0].text).toBe("line 1");
+      expect(mockWindow.lines[1].text).toBe("line 2");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should process JSON message_end events", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Simulate JSON message_end event
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "assistant response" }],
+          model: "test-model",
+        },
+      });
+
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockSession.messages).toHaveLength(1);
+      expect(mockSession.messages[0].role).toBe("assistant");
+      expect(mockWindow.model).toBe("test-model");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle malformed JSON gracefully", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Simulate malformed JSON (should be treated as plain text)
+      mockProcess.stdout.emit("data", Buffer.from("{ invalid json }\n"));
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Should treat as plain text, not as JSON
+      expect(mockWindow.lines[0].text).toContain("invalid");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle process exit with code 0", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      mockProcess.emit("close", 0);
+      await promise;
+
+      expect(mockWindow.exitCode).toBe(0);
+      expect(mockWindow.status).toBe("completed");
+    });
+
+    it("should handle process exit with non-zero code", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      mockProcess.emit("close", 1);
+      await promise;
+
+      expect(mockWindow.exitCode).toBe(1);
+      expect(mockWindow.status).toBe("error");
+    });
+
+    it("should handle abort signal with SIGTERM", async () => {
+      const abortController = new AbortController();
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        signal: abortController.signal,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Abort the process
+      abortController.abort();
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockProcess.kill).toHaveBeenCalledWith("SIGTERM");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle abort signal that is already aborted", async () => {
+      const abortController = new AbortController();
+      abortController.abort(); // Already aborted
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        signal: abortController.signal,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockProcess.kill).toHaveBeenCalledWith("SIGTERM");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should include profile args when profile is provided", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        profile: {
+          provider: "openai",
+          model: "gpt-4",
+          systemPrompt: "test system",
+          thinkingLevel: "high",
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(spawn).toHaveBeenCalled();
+      const spawnArgs = vi.mocked(spawn).mock.calls[0][1];
+
+      // Profile should inject additional args and env vars
+      expect(spawnArgs).toContain("test prompt");
+
+      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      expect(spawnOptions.env).toBeDefined();
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+});

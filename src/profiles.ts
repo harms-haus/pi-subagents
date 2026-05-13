@@ -31,10 +31,10 @@
  * }
  */
 
-import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
 // ── Profile Types ────────────────────────────────────────────────────
 
@@ -85,10 +85,35 @@ export interface SubagentProfiles {
   [name: string]: SubagentProfile;
 }
 
+/**
+ * Result of converting a profile to invocation parameters.
+ * Contains both CLI arguments and environment variables.
+ */
+export interface ProfileInvocation {
+  args: string[];
+  env: Record<string, string>;
+}
+
 interface SubagentSettings {
   profiles?: SubagentProfiles;
   agentOverrides?: Record<string, Partial<SubagentProfile>>;
   maxLinesPerWindow?: number;
+  [key: string]: unknown;
+}
+
+/** Raw settings file structure with unknown properties */
+interface SettingsFile {
+  subagents?: SubagentSettings;
+  [key: string]: unknown;
+}
+
+// ── Profile Cache ─────────────────────────────────────────────────────
+
+let profilesCache: { cwd: string | undefined; profiles: SubagentProfiles; timestamp: number } | null = null;
+const CACHE_TTL = 5000; // 5 seconds
+
+export function invalidateProfilesCache(): void {
+  profilesCache = null;
 }
 
 // ── Settings Loading ─────────────────────────────────────────────────
@@ -102,12 +127,13 @@ function getProjectSettingsPath(cwd: string): string {
   return join(cwd, ".pi", "settings.json");
 }
 
-async function readSettingsFile(filePath: string): Promise<Record<string, any>> {
+async function readSettingsFile(filePath: string): Promise<SettingsFile> {
   if (!existsSync(filePath)) return {};
   try {
     const content = await readFile(filePath, "utf8");
     return JSON.parse(content);
-  } catch {
+  } catch (error) {
+    console.warn(`Failed to read settings file ${filePath}:`, error instanceof Error ? error.message : error);
     return {};
   }
 }
@@ -117,6 +143,11 @@ async function readSettingsFile(filePath: string): Promise<Record<string, any>> 
  * Project-local settings override global settings.
  */
 export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
+  const now = Date.now();
+  if (profilesCache && profilesCache.cwd === cwd && now - profilesCache.timestamp < CACHE_TTL) {
+    return profilesCache.profiles;
+  }
+
   const globalSettings = await readSettingsFile(getGlobalSettingsPath());
   const globalSubagents: SubagentSettings = globalSettings.subagents ?? {};
 
@@ -149,6 +180,7 @@ export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
     }
   }
 
+  profilesCache = { cwd, profiles, timestamp: now };
   return profiles;
 }
 
@@ -156,20 +188,20 @@ export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
  * Resolve a profile name to a SubagentProfile, falling back to
  * agentOverrides for backward compatibility.
  */
-export function resolveProfile(
-  profiles: SubagentProfiles,
-  profileName: string,
-): SubagentProfile | undefined {
+export function resolveProfile(profiles: SubagentProfiles, profileName: string): SubagentProfile | undefined {
+  // Intentional abstraction point for future backward-compatibility resolution
   return profiles[profileName];
 }
 
 // ── CLI Argument Building ────────────────────────────────────────────
 
 /**
- * Convert a SubagentProfile into an array of CLI arguments for the pi subprocess.
+ * Convert a SubagentProfile into invocation parameters for the pi subprocess.
+ * Returns both CLI arguments and environment variables.
  */
-export function profileToArgs(profile: SubagentProfile): string[] {
+export function profileToArgs(profile: SubagentProfile): ProfileInvocation {
   const args: string[] = [];
+  const envVars: Record<string, string> = {};
 
   if (profile.provider) {
     args.push("--provider", profile.provider);
@@ -192,8 +224,9 @@ export function profileToArgs(profile: SubagentProfile): string[] {
     args.push("--thinking", profile.thinkingLevel);
   }
 
+  // Store API key in environment variable to avoid CLI exposure via /proc/PID/cmdline
   if (profile.apiKey) {
-    args.push("--api-key", profile.apiKey);
+    envVars.PI_API_KEY = profile.apiKey;
   }
 
   if (profile.noTools) {
@@ -220,11 +253,22 @@ export function profileToArgs(profile: SubagentProfile): string[] {
     args.push("--no-context-files");
   }
 
+  // Validate extraArgs for safety before pushing
   if (profile.extraArgs) {
+    for (const arg of profile.extraArgs) {
+      // Block null bytes
+      if (arg.includes("\0")) {
+        throw new Error("Invalid extraArg: contains null byte");
+      }
+      // Block shell operators and command separators
+      if (/^[\s|&;$\\`!]|&&|\|\||;|>|>>|<|<</.test(arg)) {
+        throw new Error(`Refusing extraArg: potentially unsafe argument '${arg.slice(0, 40)}'`);
+      }
+    }
     args.push(...profile.extraArgs);
   }
 
-  return args;
+  return { args, env: envVars };
 }
 
 /**
@@ -244,17 +288,20 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
 
 // ── Profile Mutation ─────────────────────────────────────────────────
 
+async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+  const tmpPath = `${filePath}.tmp.${Date.now()}`;
+  await writeFile(tmpPath, content, "utf8");
+  await rename(tmpPath, filePath);
+}
+
 export type ProfileScope = "global" | "project";
 
 /**
  * Read the raw settings file, apply a mutator, and write it back.
  * The mutator receives the subagents section and returns true if changed.
  */
-async function mutateSettingsFile(
-  filePath: string,
-  mutator: (subagents: Record<string, any>) => boolean,
-): Promise<void> {
-  let settings: Record<string, any> = {};
+async function mutateSettingsFile(filePath: string, mutator: (subagents: SubagentSettings) => boolean): Promise<void> {
+  let settings: SettingsFile = {};
   if (existsSync(filePath)) {
     try {
       settings = JSON.parse(await readFile(filePath, "utf8"));
@@ -268,6 +315,8 @@ async function mutateSettingsFile(
   const changed = mutator(settings.subagents);
   if (!changed) return;
 
+  invalidateProfilesCache();
+
   // Clean up empty sub-objects
   if (settings.subagents.profiles && Object.keys(settings.subagents.profiles).length === 0) {
     delete settings.subagents.profiles;
@@ -279,7 +328,7 @@ async function mutateSettingsFile(
     delete settings.subagents;
   }
 
-  await writeFile(filePath, JSON.stringify(settings, null, 2) + "\n", "utf8");
+  await atomicWriteFile(filePath, `${JSON.stringify(settings, null, 2)}\n`);
 }
 
 export function getSettingsPath(scope: ProfileScope, cwd?: string): string {
@@ -304,6 +353,7 @@ export async function saveProfile(
     subagents.profiles[name] = profile;
     return true;
   });
+  invalidateProfilesCache();
 }
 
 /**
@@ -311,11 +361,7 @@ export async function saveProfile(
  * Checks both subagents.profiles and subagents.agentOverrides.
  * Returns true if the profile existed and was deleted.
  */
-export async function deleteProfile(
-  name: string,
-  scope: ProfileScope,
-  cwd?: string,
-): Promise<boolean> {
+export async function deleteProfile(name: string, scope: ProfileScope, cwd?: string): Promise<boolean> {
   const filePath = getSettingsPath(scope, cwd);
   let existed = false;
   await mutateSettingsFile(filePath, (subagents) => {
@@ -331,6 +377,9 @@ export async function deleteProfile(
     }
     return existed;
   });
+  if (existed) {
+    invalidateProfilesCache();
+  }
   return existed;
 }
 
@@ -371,7 +420,10 @@ export function formatProfileDetail(name: string, profile: SubagentProfile): str
   if (profile.extensions) lines.push(`  extensions:        [${profile.extensions.join(", ")}]`);
   if (profile.noSkills) lines.push(`  noSkills:          true`);
   if (profile.noContextFiles) lines.push(`  noContextFiles:    true`);
-  if (profile.apiKey) lines.push(`  apiKey:            ${profile.apiKey}`);
+  if (profile.apiKey) {
+    const masked = profile.apiKey.length > 8 ? `${profile.apiKey.slice(0, 4)}****${profile.apiKey.slice(-4)}` : "****";
+    lines.push(`  apiKey:            ${masked}`);
+  }
   if (profile.extraArgs) lines.push(`  extraArgs:         ${JSON.stringify(profile.extraArgs)}`);
   return lines.join("\n");
 }

@@ -5,9 +5,9 @@
  */
 
 import type { ExtensionAPI, Theme, ToolExecutionResult } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Container, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { loadProfiles, profileSummary } from "../profiles";
+import { loadMaxLinesPerWindow, loadProfiles, profileSummary } from "../profiles";
 import type { SessionRecord, ToolCallPart } from "../types";
 import { getLastAssistantText, getTextParts } from "../utils";
 
@@ -15,13 +15,45 @@ import { getLastAssistantText, getTextParts } from "../utils";
 
 /**
  * Simple renderResult that extracts and displays the first text content.
- * Used by get_subagent_output, get_subagent_session, and list_subagent_profiles.
+ * Used by list_subagent_profiles (no truncation needed).
  */
 function createSimpleRenderResult(defaultLabel: string = "(no output)") {
   return (result: ToolExecutionResult, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
     const text = result.content[0];
     const content = text?.type === "text" ? text.text : defaultLabel;
     return new Text(theme.fg("toolOutput", content), 0, 0);
+  };
+}
+
+/**
+ * Truncating renderResult for sub-agent output/session data.
+ * Shows at most maxLinesPerWindow lines with a truncation indicator.
+ * The full content is still injected into context; only the TUI display is shortened.
+ */
+function createTruncatingRenderResult(defaultLabel: string = "(no output)") {
+  return (
+    result: ToolExecutionResult,
+    _options: { expanded: boolean },
+    theme: Theme,
+    _context: unknown,
+  ) => {
+    const text = result.content[0];
+    const content = text?.type === "text" ? text.text : defaultLabel;
+    const lines = content.split("\n");
+    const maxLines: number = (result.details as Record<string, unknown>)?.maxLines as number ?? 15;
+
+    if (lines.length <= maxLines) {
+      return new Text(theme.fg("toolOutput", content), 0, 0);
+    }
+
+    const shown = lines.slice(0, maxLines);
+    const truncated = lines.length - maxLines;
+    const indicator = theme.fg("dim", `... (${truncated} more line${truncated !== 1 ? "s" : ""})`);
+
+    const container = new Container();
+    container.addChild(new Text(theme.fg("toolOutput", shown.join("\n")), 0, 0));
+    container.addChild(new Text(indicator, 0, 0));
+    return container;
   };
 }
 
@@ -68,7 +100,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
       "delegate_to_subagents completes, instead of asking the sub-agent to write to a file.",
     ],
 
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const record = sessionStore.get(params.sessionId);
       if (!record || record.runs.length === 0) {
         throw new Error(SESSION_NOT_FOUND_ERROR(params.sessionId));
@@ -77,6 +109,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
       // Get the LATEST run's output
       const latestRun = record.runs[record.runs.length - 1];
       const lastText = getLastAssistantText(latestRun.messages);
+      const maxLines = await loadMaxLinesPerWindow(ctx?.cwd);
       return {
         content: [{ type: "text", text: lastText || "(no text output from sub-agent)" }],
         details: {
@@ -84,12 +117,13 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
           status: latestRun.status,
           taskName: latestRun.taskName,
           runCount: record.runs.length,
+          maxLines,
         },
       };
     },
 
     renderCall: createSessionRenderCall("get_subagent_output"),
-    renderResult: createSimpleRenderResult("(no output)"),
+    renderResult: createTruncatingRenderResult("(no output)"),
   });
 
   // ── Tool: get_subagent_session ──────────────────────────────────
@@ -113,7 +147,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
       "need the final output.",
     ],
 
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const record = sessionStore.get(params.sessionId);
       if (!record || record.runs.length === 0) {
         throw new Error(SESSION_NOT_FOUND_ERROR(params.sessionId));
@@ -166,6 +200,7 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
 
       // Get latest run info for details
       const latestRun = record.runs[record.runs.length - 1];
+      const maxLines = await loadMaxLinesPerWindow(ctx?.cwd);
       return {
         content: [{ type: "text", text: parts.join("\n---\n") || "(no messages in session)" }],
         details: {
@@ -176,12 +211,13 @@ export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<strin
           exitCode: latestRun.exitCode,
           model: latestRun.model,
           runCount: record.runs.length,
+          maxLines,
         },
       };
     },
 
     renderCall: createSessionRenderCall("get_subagent_session"),
-    renderResult: createSimpleRenderResult("(no output)"),
+    renderResult: createTruncatingRenderResult("(no output)"),
   });
 
   // ── Tool: list_subagent_profiles ────────────────────────────────

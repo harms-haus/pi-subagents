@@ -8,12 +8,13 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import type { SubagentProfile } from "./profiles";
-import { profileToArgs } from "./profiles";
+import { loadCommandPreviewWidth, profileToArgs } from "./profiles";
 import type { SubAgentTask, SubAgentWindow, SubagentSessionData, ToolCallPart } from "./types";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
 import {
   appendLineToWindow,
   collapseCdDot,
+  formatBashCommand,
   getPiInvocation,
   getTextParts,
   shortenPath,
@@ -52,7 +53,7 @@ function validateCwd(cwd: string | undefined, fallback: string): string {
  * Format a tool call as a concise one-liner for the sub-agent rolling window.
  * Avoids dumping full JSON arguments for common tools.
  */
-function formatToolCall(toolName: string, args: Record<string, any>, cwd: string): string {
+function formatToolCall(toolName: string, args: Record<string, any>, cwd: string, widthBudget: number): string {
   switch (toolName) {
     // File mutations: just show the filename
     case "edit":
@@ -70,8 +71,7 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
         return `bash → cd .`;
       }
       cmd = shortenPathsInText(cmd, cwd);
-      const truncated = cmd.length > 80 ? `${cmd.slice(0, 77)}...` : cmd;
-      return `bash → ${truncated}`;
+      return `bash → ${formatBashCommand(cmd, widthBudget - 7, widthBudget)}`;
     }
 
     case "read": {
@@ -152,7 +152,8 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
     case "fetch_content":
     case "web_search": {
       const url = args.url ?? args.query ?? "...";
-      const truncated = url.length > 80 ? `${url.slice(0, 77)}...` : url;
+      const urlBudget = widthBudget - toolName.length - 4;
+      const truncated = url.length > urlBudget ? `${url.slice(0, urlBudget - 3)}...` : url;
       return `${toolName} → ${truncated}`;
     }
     case "fetch-repo":
@@ -199,6 +200,7 @@ function handleStdoutLine(
   session: SubagentSessionData,
   onUpdate: () => void,
   cwd: string,
+  widthBudget: number,
 ): void {
   if (!line.trim()) return;
 
@@ -234,7 +236,7 @@ function handleStdoutLine(
       for (const part of msg.content) {
         if (part.type === "toolCall") {
           const toolArgs = (part as ToolCallPart).arguments || {};
-          const preview = formatToolCall((part as ToolCallPart).name, toolArgs, cwd);
+          const preview = formatToolCall((part as ToolCallPart).name, toolArgs, cwd, widthBudget);
           appendLineToWindow(win, `→ ${preview}`, maxLines, "tool");
         }
       }
@@ -317,6 +319,9 @@ function setupAbortHandler(proc: ReturnType<typeof spawn>, signal: AbortSignal):
 export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
   const { task, win, maxLines, signal, onUpdate, session, profile } = options;
 
+  // Compute command preview width (once per sub-agent run)
+  const lineBudget = await loadCommandPreviewWidth(task.cwd);
+
   const invocation = getPiInvocation();
   const args = [...invocation.args, "--mode", "json", "-p", "--no-session"];
 
@@ -351,7 +356,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
     });
 
     const processLine = (line: string) => {
-      handleStdoutLine(line, win, maxLines, session, debouncedUpdate, resolvedCwd);
+      handleStdoutLine(line, win, maxLines, session, debouncedUpdate, resolvedCwd, lineBudget);
     };
 
     proc.stdout.on("data", (data: Buffer) => {

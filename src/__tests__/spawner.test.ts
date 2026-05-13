@@ -11,12 +11,23 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   }),
 }));
 
+// Mock profiles module — keep real implementations but override loadCommandPreviewWidth
+// so tests are deterministic regardless of terminal width
+vi.mock("../profiles", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../profiles")>();
+  return {
+    ...actual,
+    loadCommandPreviewWidth: vi.fn().mockResolvedValue(160),
+  };
+});
+
 // Mock child_process.spawn
 vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
 import { spawn } from "node:child_process";
+import { loadCommandPreviewWidth } from "../profiles";
 
 // Create a mock ChildProcess
 type MockChildProcess = EventEmitter & {
@@ -558,6 +569,154 @@ describe("spawner", () => {
       const toolLine = findToolLine("read");
       // The path should remain absolute since making it relative would be longer
       expect(toolLine.text).toContain("/usr/local/share/some/config.json");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("smart && splitting in bash command display", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    async function emitToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", name: toolName, arguments: args }],
+        },
+      });
+
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    function findToolLines(keyword: string) {
+      return mockWindow.lines.filter((l) => l.text.includes(keyword));
+    }
+
+    it("should split bash command with && across lines when segments overflow a narrow width", async () => {
+      // Set a narrow width budget so that the command must wrap
+      vi.mocked(loadCommandPreviewWidth).mockResolvedValueOnce(40);
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Command is: npm run build && npm run test && npm run lint
+      // With width 40, the "→ bash → " prefix is 7 chars of the formatToolCall,
+      // so widthBudget passed to formatBashCommand is 40 - 7 = 33
+      // "npm run build && npm run test" = 30 chars, fits
+      // Adding " && npm run lint" would be 30 + 16 = 46, over budget
+      // So it should split at && boundary with a newline
+      await emitToolCall("bash", {
+        command: "npm run build && npm run test && npm run lint",
+      });
+
+      const bashLines = findToolLines("bash");
+      // The multi-line output is stored as a single entry with embedded \n
+      expect(bashLines.length).toBe(1);
+      const text = bashLines[0].text;
+
+      // Should contain a newline (the && split point)
+      expect(text).toContain("\n");
+      // First part should contain the initial segments ending with &&
+      expect(text).toContain("npm run build && npm run test &&");
+      // Second part (after newline) should have the remaining segment
+      expect(text).toContain("npm run lint");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should truncate a single overlong segment with ellipsis when no && split points exist", async () => {
+      // Set a very narrow width so a long single command truncates
+      vi.mocked(loadCommandPreviewWidth).mockResolvedValueOnce(30);
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Single command with no && — width 30, prefix takes 7, so 23 chars for content
+      await emitToolCall("bash", {
+        command: "echo 'this is a really really really long command that should be truncated'",
+      });
+
+      const toolLine = mockWindow.lines.find((l) => l.text.includes("bash"));
+      expect(toolLine).toBeTruthy();
+      // The line should contain "..." indicating truncation
+      expect(toolLine?.text).toContain("...");
+      // And the full long command should NOT appear verbatim
+      expect(toolLine?.text).not.toContain("should be truncated");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should truncate an overlong segment in the middle of a && chain", async () => {
+      // Set a narrow width so the middle segment overflows
+      vi.mocked(loadCommandPreviewWidth).mockResolvedValueOnce(40);
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // "short" fits, but "this-is-a-very-long-middle-segment-that-will-overflow" does not
+      await emitToolCall("bash", {
+        command: "short && this-is-a-very-long-middle-segment-that-will-overflow && tail",
+      });
+
+      const bashLines = findToolLines("bash");
+      // The long segment should be truncated with "..."
+      const allText = bashLines.map((l) => l.text).join("\n");
+      expect(allText).toContain("...");
+      // "tail" segment should still appear somewhere
+      expect(allText).toContain("tail");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should not split when the full command fits within width budget", async () => {
+      // Generous width — command should appear on a single line
+      vi.mocked(loadCommandPreviewWidth).mockResolvedValueOnce(160);
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("bash", {
+        command: "npm test && npm run lint",
+      });
+
+      const bashLines = findToolLines("bash");
+      // Should fit on a single line
+      expect(bashLines.length).toBe(1);
+      expect(bashLines[0].text).toBe("→ bash → npm test && npm run lint");
 
       mockProcess.emit("close", 0);
       await promise;

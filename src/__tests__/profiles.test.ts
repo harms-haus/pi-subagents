@@ -2,12 +2,13 @@
  * Tests for src/profiles.ts
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubagentProfile } from "../profiles";
 import {
   formatProfileDetail,
   getProfilesDir,
   invalidateProfilesCache,
+  loadCommandPreviewWidth,
   loadMaxLinesPerWindow,
   profileSummary,
   profileToArgs,
@@ -493,6 +494,130 @@ describe("loadMaxLinesPerWindow", () => {
       .mockRejectedValueOnce(new Error("Project file not found"));
 
     const result = await loadMaxLinesPerWindow("/project/path");
+
+    expect(result).toBe(20);
+  });
+});
+
+describe("loadCommandPreviewWidth", () => {
+  const originalColumns = process.stdout.columns;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    invalidateProfilesCache();
+  });
+
+  afterEach(() => {
+    // Restore original process.stdout.columns to avoid test pollution
+    Object.defineProperty(process.stdout, "columns", {
+      value: originalColumns,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it("returns terminal width - 4 when TTY", async () => {
+    Object.defineProperty(process.stdout, "columns", {
+      value: 120,
+      writable: true,
+      configurable: true,
+    });
+
+    const result = await loadCommandPreviewWidth();
+
+    expect(result).toBe(116);
+  });
+
+  it("returns default 160 when non-TTY and no settings", async () => {
+    Object.defineProperty(process.stdout, "columns", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
+
+    const result = await loadCommandPreviewWidth();
+
+    expect(result).toBe(160);
+  });
+
+  it("returns configured value from global settings when non-TTY", async () => {
+    Object.defineProperty(process.stdout, "columns", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          commandPreviewWidth: 200,
+        },
+      }),
+    );
+
+    const result = await loadCommandPreviewWidth();
+
+    expect(result).toBe(200);
+  });
+
+  it("project overrides global when non-TTY", async () => {
+    Object.defineProperty(process.stdout, "columns", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            commandPreviewWidth: 200,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            commandPreviewWidth: 120,
+          },
+        }),
+      );
+
+    const result = await loadCommandPreviewWidth("/project/path");
+
+    expect(result).toBe(120);
+  });
+
+  it("clamps to min 20 when terminal is very narrow", async () => {
+    Object.defineProperty(process.stdout, "columns", {
+      value: 15,
+      writable: true,
+      configurable: true,
+    });
+
+    const result = await loadCommandPreviewWidth();
+
+    expect(result).toBe(20);
+  });
+
+  it("clamps to min 20 when setting is very small", async () => {
+    Object.defineProperty(process.stdout, "columns", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          commandPreviewWidth: 5,
+        },
+      }),
+    );
+
+    const result = await loadCommandPreviewWidth();
 
     expect(result).toBe(20);
   });

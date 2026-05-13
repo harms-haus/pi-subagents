@@ -126,6 +126,96 @@ export function collapseCdDot(command: string, cwd: string): string {
   return after.trimStart();
 }
 
+// ── Bash Command Formatting ────────────────────────────────────────
+
+/**
+ * Format a bash command with smart && splitting for display.
+ *
+ * Splits on ` && ` boundaries, greedily fits segments into the width budget.
+ * When the next segment won't fit in the remaining width, starts a new line.
+ * When a single segment is too long, truncates with `...`.
+ * Continuation lines are prefixed with `│ ` for visual grouping.
+ *
+ * @param cmd - The bash command string (already collapsed/stripped of cd prefix)
+ * @param firstLineBudget - Maximum characters for the first line of command content
+ * @param contBudget - Maximum characters for continuation lines (command text only,
+ *   excluding the `│ ` prefix). Defaults to `firstLineBudget`.
+ * @returns Formatted multi-line string (continuation lines include `│ ` prefix)
+ */
+export function formatBashCommand(cmd: string, firstLineBudget: number, contBudget?: number): string {
+  const contLineBudget = contBudget ?? firstLineBudget;
+
+  if (cmd.length <= firstLineBudget) return cmd;
+
+  // Split on " && " boundaries
+  const segments = cmd.split(" && ");
+
+  if (segments.length === 1) {
+    // Single segment, just truncate
+    return `${cmd.slice(0, firstLineBudget - 3)}...`;
+  }
+
+  const lines: string[] = [];
+  let currentLine = "";
+  let isFirstLine = true;
+  const separator = " &&"; // goes at end of line when wrapping
+  const contPrefix = "\u2502 "; // \u2502 = │ prefix for continuation lines
+
+  for (let i = 0; i < segments.length; i++) {
+    const budget = isFirstLine && currentLine.length === 0 ? firstLineBudget : contLineBudget;
+    const seg = segments[i];
+
+    if (currentLine.length === 0) {
+      // Start of a new line
+      if (seg.length <= budget) {
+        currentLine = `${isFirstLine ? "" : contPrefix}${seg}`;
+      } else {
+        // Segment too long even on its own line — truncate it
+        const truncated = `${seg.slice(0, budget - 3)}...`;
+        // If there are more segments after this, we need " &&" suffix
+        if (i < segments.length - 1) {
+          lines.push(`${isFirstLine ? "" : contPrefix}${truncated} &&`);
+        } else {
+          lines.push(`${isFirstLine ? "" : contPrefix}${truncated}`);
+        }
+        isFirstLine = false;
+        currentLine = "";
+      }
+    } else {
+      // Try to append to current line
+      const withSeg = `${currentLine} && ${seg}`;
+      if (withSeg.length <= budget) {
+        currentLine = withSeg;
+      } else {
+        // Won't fit — flush current line with separator and start new line
+        lines.push(`${currentLine}${separator}`);
+        isFirstLine = false;
+
+        // Now try to fit seg on a new continuation line
+        if (seg.length <= contLineBudget) {
+          currentLine = `${contPrefix}${seg}`;
+        } else {
+          // Segment too long on its own
+          const truncated = `${seg.slice(0, contLineBudget - 3)}...`;
+          if (i < segments.length - 1) {
+            lines.push(`${contPrefix}${truncated} &&`);
+          } else {
+            lines.push(`${contPrefix}${truncated}`);
+          }
+          currentLine = "";
+        }
+      }
+    }
+  }
+
+  // Flush remaining
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+
+  return lines.join("\n");
+}
+
 // ── Rolling Buffer ─────────────────────────────────────────────────────
 
 /**

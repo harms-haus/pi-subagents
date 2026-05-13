@@ -11,6 +11,7 @@ import {
   appendLineToWindow,
   collapseCdDot,
   countWindowStatuses,
+  formatBashCommand,
   getLastAssistantText,
   getSummaryText,
   getTextParts,
@@ -704,6 +705,68 @@ describe("shortenPathsInText", () => {
   it("should shorten path at start of text", () => {
     const cwd = "/home/user/project";
     expect(shortenPathsInText("/home/user/project/run.sh arg1", cwd)).toBe("run.sh arg1");
+  });
+});
+
+describe("formatBashCommand", () => {
+  it("should return short command unchanged", () => {
+    expect(formatBashCommand("short-cmd", 40)).toBe("short-cmd");
+  });
+
+  it("should return command that exactly fits the width budget", () => {
+    expect(formatBashCommand("exactly-20-chars----", 20)).toBe("exactly-20-chars----");
+  });
+
+  it("should truncate a single segment that exceeds the budget", () => {
+    expect(formatBashCommand("a-very-long-command-that-exceeds-the-budget", 20)).toBe(
+      "a-very-long-comma...",
+    );
+  });
+
+  it("should split on && when segments don't fit together", () => {
+    expect(formatBashCommand("short && long-command-exceeds-budget", 15)).toBe(
+      "short &&\n\u2502 long-command...",
+    );
+  });
+
+  it("should split multiple && segments onto separate lines", () => {
+    expect(formatBashCommand("a && b && c", 5)).toBe("a &&\n\u2502 b &&\n\u2502 c");
+  });
+
+  it("should truncate oversized segment in the middle with more after", () => {
+    expect(
+      formatBashCommand(
+        "short && also-short && very-very-very-long-command && last",
+        25,
+      ),
+    ).toBe("short && also-short &&\n\u2502 very-very-very-long-co... &&\n\u2502 last");
+  });
+
+  it("should truncate oversized segment at the end", () => {
+    expect(
+      formatBashCommand(
+        "short && also-short && very-very-very-long-command",
+        25,
+      ),
+    ).toBe("short && also-short &&\n\u2502 very-very-very-long-co...");
+  });
+
+  it("should return empty string for empty command", () => {
+    expect(formatBashCommand("", 40)).toBe("");
+  });
+
+  it("should truncate to budget with very small width", () => {
+    expect(formatBashCommand("some-command", 5)).toBe("so...");
+  });
+
+  it("should truncate long command without && delimiters", () => {
+    expect(formatBashCommand("a-very-long-command-without-ampersands", 20)).toBe(
+      "a-very-long-comma...",
+    );
+  });
+
+  it("should keep all segments on one line when they fit together", () => {
+    expect(formatBashCommand("a && b && c", 15)).toBe("a && b && c");
   });
 });
 

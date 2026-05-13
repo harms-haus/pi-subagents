@@ -129,6 +129,7 @@ export function getProfilesDir(scope: ProfileScope, cwd?: string): string {
 
 interface SubagentSettings {
   maxLinesPerWindow?: number;
+  commandPreviewWidth?: number;
   [key: string]: unknown;
 }
 
@@ -430,6 +431,37 @@ export async function loadMaxLinesPerWindow(cwd?: string): Promise<number> {
   }
 
   return maxLines;
+}
+
+/**
+ * Load commandPreviewWidth from the terminal or settings files.
+ *
+ * If stdout is a TTY (process.stdout.columns is a number), returns
+ * columns - 4 (accounting for 2-char indent + "→ " prefix).
+ * Otherwise falls back to settings files (project overrides global),
+ * defaulting to 160 if no setting is found.
+ * Result is clamped to a minimum of 20.
+ */
+export async function loadCommandPreviewWidth(cwd?: string): Promise<number> {
+  // If we have a real terminal, use its width
+  if (typeof process.stdout.columns === "number") {
+    return Math.max(process.stdout.columns - 4, 20);
+  }
+
+  // Non-TTY: read from settings files
+  const globalSettings = await readSettingsFile(getGlobalSettingsPath());
+  const globalSubagents: SubagentSettings = globalSettings.subagents ?? {};
+  let width = globalSubagents.commandPreviewWidth ?? 160;
+
+  if (cwd) {
+    const projectSettings = await readSettingsFile(getProjectSettingsPath(cwd));
+    const projectSubagents: SubagentSettings = projectSettings.subagents ?? {};
+    if (projectSubagents.commandPreviewWidth !== undefined) {
+      width = projectSubagents.commandPreviewWidth;
+    }
+  }
+
+  return Math.max(width, 20);
 }
 
 /**

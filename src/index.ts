@@ -59,12 +59,17 @@ interface SubAgentTask {
   profile?: string;
 }
 
+interface WindowLine {
+  text: string;
+  kind: "text" | "tool";
+}
+
 interface SubAgentWindow {
   name: string;
   sessionId: string;
   status: "running" | "completed" | "error";
-  lines: string[];
-  allMessages: string[];
+  lines: WindowLine[];
+  allMessages: WindowLine[];
   exitCode: number | null;
   model?: string;
   stopReason?: string;
@@ -126,14 +131,15 @@ function stripAnsi(text: string): string {
 
 // ── Rolling Buffer ─────────────────────────────────────────────────────
 
-function appendLineToWindow(win: SubAgentWindow, line: string, maxLines: number) {
+function appendLineToWindow(win: SubAgentWindow, line: string, maxLines: number, kind: "text" | "tool" = "text") {
   const clean = stripAnsi(line).trimEnd();
   if (!clean) return;
-  win.lines.push(clean);
+  const entry: WindowLine = { text: clean, kind };
+  win.lines.push(entry);
   while (win.lines.length > maxLines) {
     win.lines.shift();
   }
-  win.allMessages.push(clean);
+  win.allMessages.push(entry);
 }
 
 // ── Sub-Agent Spawner ────────────────────────────────────────────────
@@ -212,8 +218,8 @@ async function runSubAgent(
             }
             if (part.type === "toolCall") {
               const args = (part as any).arguments || {};
-              const preview = JSON.stringify(args).slice(0, 60);
-              appendLineToWindow(win, `→ ${(part as any).name}: ${preview}`, maxLines);
+              const preview = JSON.stringify(args);
+              appendLineToWindow(win, `→ ${(part as any).name}: ${preview}`, maxLines, "tool");
             }
           }
           if (msg.model) {
@@ -687,16 +693,24 @@ export default function (pi: ExtensionAPI) {
         }
         container.addChild(new Text(headerLine, 0, 0));
 
+        const renderLine = (entry: WindowLine) => {
+          const textLines = entry.text.split("\n");
+          for (const line of textLines) {
+            if (entry.kind === "tool") {
+              container.addChild(new Text("  " + theme.fg("muted", line), 0, 0));
+            } else {
+              container.addChild(new Text("  " + line, 0, 0));
+            }
+          }
+        };
+
         if (expanded) {
           // Expanded (Ctrl+O): show all captured messages, not just latest N
           if (win.allMessages.length === 0) {
             container.addChild(new Text(theme.fg("muted", "  (no output)"), 0, 0));
           } else {
-            for (const msg of win.allMessages) {
-              const lines = msg.split("\n");
-              for (const line of lines) {
-                container.addChild(new Text("  " + line, 0, 0));
-              }
+            for (const entry of win.allMessages) {
+              renderLine(entry);
             }
           }
         } else {
@@ -704,8 +718,8 @@ export default function (pi: ExtensionAPI) {
           if (win.lines.length === 0) {
             container.addChild(new Text(theme.fg("muted", "  (starting...)"), 0, 0));
           } else {
-            for (const line of win.lines) {
-              container.addChild(new Text("  " + line, 0, 0));
+            for (const entry of win.lines) {
+              renderLine(entry);
             }
           }
         }

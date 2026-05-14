@@ -2,7 +2,7 @@
 
 A pi extension that allows the main agent to spawn parallel sub-agents, with each sub-agent's latest output rendered in a rolling TUI window inline with the main agent's conversation history.
 
-Sub-agents can optionally use **named profiles** that pre-configure provider/model, system prompts, thinking levels, and other model settings.
+Sub-agents can optionally use **named profiles** that pre-configure provider/model, system prompts, thinking levels, and other model settings. Profiles are stored as individual `.md` files with YAML frontmatter.
 
 ## Installation
 
@@ -51,14 +51,19 @@ After `delegate_to_subagents` completes, it returns **session IDs** for each tas
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `tasks` | `Array<{name, prompt, cwd?, profile?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
+| `tasks` | `Array<{name, prompt, cwd?, profile?, timeout?, resume?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
 | `profile` | `string` | No | Default profile for all tasks (overridden by per-task profile) |
 
 Each task:
-- `name`: Display label shown in the TUI window header
-- `prompt`: Prompt sent to the sub-agent (same as typing into pi directly)
-- `cwd`: Working directory for the sub-agent (default: current directory)
-- `profile`: Named profile to use for this sub-agent (see below)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Display label shown in the TUI window header |
+| `prompt` | `string` | Yes | Prompt sent to the sub-agent (same as typing into pi directly) |
+| `cwd` | `string` | No | Working directory for the sub-agent (default: current directory) |
+| `profile` | `string` | No | Named profile to use for this sub-agent (see below) |
+| `timeout` | `number` | No | Timeout in seconds for this sub-agent. Default: 600. If exceeded, the sub-agent is aborted and marked as error. |
+| `resume` | `string` | No | Previous session ID to resume from. The resumed sub-agent receives the prior session's transcript as context. Only completed or errored sessions can be resumed. |
 
 The `maxLinesPerWindow` setting is configured in `settings.json` under `subagents.maxLinesPerWindow` (default: 15).
 
@@ -66,76 +71,129 @@ The `maxLinesPerWindow` setting is configured in `settings.json` under `subagent
 
 After `delegate_to_subagents` completes, each task has a session ID. Use these tools to retrieve results:
 
-- **`get_subagent_output(sessionId)`** — Returns the last assistant text output from a sub-agent session. This is the primary way to get results.
-- **`get_subagent_session(sessionId)`** — Returns the full session transcript including all messages, tool calls, and results. Use for debugging.
+- **`get_subagent_output(sessionId)`** — Returns the last assistant text output from a sub-agent session. For resumed sessions, returns the latest run's output. This is the primary way to get results.
+- **`get_subagent_session(sessionId)`** — Returns the full session transcript including all messages, tool calls, and results. For resumed sessions, returns all runs' data concatenated. Use for debugging.
 - **`list_subagent_profiles()`** — Lists all available subagent profiles that can be used with `delegate_to_subagents`.
 
 ```json
 {
   "get_subagent_output": {
-    "sessionId": "abc12345"
+    "sessionId": "a1b2c3d4e5f6a7b8"
   }
 }
 ```
 
-## Subagent Profiles
+### Resuming Sessions
 
-Profiles let you pre-configure the provider, model, system prompt, thinking level, and other settings for sub-agents. They are defined in `settings.json` under `subagents.profiles`.
-
-### Defining Profiles
-
-Add profiles to your global `~/.pi/agent/settings.json` or project-local `.pi/settings.json`:
+Use the `resume` parameter to continue work from a previously completed (or errored) sub-agent session. The resumed agent receives the full transcript of all prior runs prepended to its prompt:
 
 ```json
 {
-  "subagents": {
-    "profiles": {
-      "code-reviewer": {
-        "model": "anthropic/claude-sonnet-4-5",
-        "systemPrompt": "You are an expert code reviewer. Focus on bugs, security issues, and performance. Be thorough but concise.",
-        "thinkingLevel": "high",
-        "tools": ["read", "bash", "grep", "find"]
-      },
-      "fast-worker": {
-        "model": "dashscope/qwen3.5-plus",
-        "appendSystemPrompt": "Be concise. Skip explanations unless asked.",
-        "thinkingLevel": "off"
-      },
-      "researcher": {
-        "provider": "openai",
-        "model": "gpt-4o",
-        "systemPrompt": "You are a research assistant. Use web search to find information.",
-        "thinkingLevel": "medium",
-        "noExtensions": true
-      },
-      "planner": {
-        "model": "dashscope/glm-5",
-        "systemPrompt": "You are a planning agent. Break down tasks into steps. Do not execute, only plan.",
-        "thinkingLevel": "high",
-        "noTools": true
+  "delegate_to_subagents": {
+    "tasks": [
+      {
+        "name": "continue-refactor",
+        "prompt": "Continue the refactoring. Focus on the remaining utility modules.",
+        "resume": "a1b2c3d4e5f6a7b8"
       }
-    }
+    ]
   }
 }
 ```
 
-### Profile Options
+Key behaviors:
+
+- The resumed agent's prompt is prefixed with `Previously:\n\n<transcript>\n\nInstructions:\n\n<your prompt>`, giving it full context of prior work.
+- Only **completed** or **errored** sessions can be resumed. Running sessions will throw an error.
+- A session can be resumed multiple times — each resume creates a new "run" appended to the session record.
+- `get_subagent_output` returns output from the **latest run** only.
+- `get_subagent_session` returns **all runs** concatenated with run separators.
+
+## Subagent Profiles
+
+Profiles let you pre-configure the provider, model, system prompt, thinking level, and other settings for sub-agents. Each profile is a `.md` file with YAML frontmatter.
+
+### Profile Locations
+
+| Scope | Directory |
+|-------|-----------|
+| Global | `~/.pi/agent/agent-profiles/*.md` |
+| Project | `.pi/agent-profiles/*.md` |
+
+Project-local profiles override global profiles with the same name.
+
+### Example Profiles
+
+**`~/.pi/agent/agent-profiles/code-reviewer.md`**:
+
+```markdown
+---
+name: code-reviewer
+provider: anthropic
+model: claude-sonnet-4-5
+thinkingLevel: high
+tools: read,bash,grep,find
+---
+You are an expert code reviewer. Focus on bugs, security issues, and performance problems. Be thorough but concise.
+```
+
+**`~/.pi/agent/agent-profiles/fast-worker.md`**:
+
+```markdown
+---
+name: fast-worker
+model: dashscope/qwen3.5-plus
+appendSystemPrompt: Be concise. Skip explanations unless asked.
+thinkingLevel: off
+---
+```
+
+**`.pi/agent-profiles/researcher.md`** (project-local):
+
+```markdown
+---
+name: researcher
+provider: openai
+model: gpt-4o
+appendSystemPrompt: Use web search to find information. Cite sources when possible.
+noTools: false
+---
+You are a research assistant.
+```
+
+### Profile Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `provider` | `string` | Provider name (e.g., `"anthropic"`, `"openai"`, `"dashscope"`)
-| `model` | `string` | Model pattern or ID. Supports `"provider/id"` format and `":thinking"` shorthand (e.g., `"sonnet:high"`)
-| `systemPrompt` | `string` | Replace the default system prompt entirely
-| `appendSystemPrompt` | `string` | Append text to the default system prompt
-| `thinkingLevel` | `string` | Thinking level: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`
-| `noTools` | `boolean` | Disable all tools
-| `tools` | `string[]` | Allowlist of tool names to enable
-| `noExtensions` | `boolean` | Disable all extensions
-| `extensions` | `string[]` | Extension paths to load
-| `noSkills` | `boolean` | Disable skills
-| `noContextFiles` | `boolean` | Disable AGENTS.md/CLAUDE.md context files
-| `apiKey` | `string` | Custom API key
-| `extraArgs` | `string[]` | Additional CLI arguments passed verbatim
+| `name` | `string` | **Required.** Profile identifier (filename without `.md`) |
+| `provider` | `string` | Provider name (e.g., `"anthropic"`, `"openai"`, `"dashscope"`) |
+| `model` | `string` | Model pattern or ID. Supports `"provider/id"` format and `":thinking"` shorthand (e.g., `"sonnet:high"`) |
+| `systemPrompt` | N/A | Set via the **body** of the markdown file (text after `---`). Replaces the default system prompt entirely. |
+| `appendSystemPrompt` | `string` | Append text to the default system prompt |
+| `thinkingLevel` | `string` | Thinking level: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` |
+| `noTools` | `boolean` | Disable all tools |
+| `tools` | `string` or `string[]` | Comma-separated string or YAML array of tool names to enable |
+| `noExtensions` | `boolean` | Disable all extensions |
+| `extensions` | `string` or `string[]` | Comma-separated string or YAML array of extension paths to load |
+| `noSkills` | `boolean` | Disable skills |
+| `noContextFiles` | `boolean` | Disable AGENTS.md/CLAUDE.md context files |
+| `apiKey` | `string` | Custom API key (stored as `PI_API_KEY` env var, not in CLI args) |
+| `extraArgs` | `string` or `string[]` | Comma-separated string or YAML array of additional CLI arguments |
+
+Array fields (`tools`, `extensions`, `extraArgs`) support both YAML arrays and comma-separated strings:
+
+```yaml
+tools:
+  - read
+  - bash
+  - grep
+```
+
+or equivalently:
+
+```yaml
+tools: read,bash,grep
+```
 
 ### Using Profiles
 
@@ -166,36 +224,33 @@ Add profiles to your global `~/.pi/agent/settings.json` or project-local `.pi/se
 }
 ```
 
-### Backward Compatibility: agentOverrides
-
-The existing `subagents.agentOverrides` pattern continues to work. Entries in `agentOverrides` are treated as simple profiles with just model/provider settings:
-
-```json
-{
-  "subagents": {
-    "agentOverrides": {
-      "worker": { "model": "dashscope/qwen3.5-plus" },
-      "scout": { "model": "nvidia-nim/z-ai/glm4.7" }
-    }
-  }
-}
-```
-
-If a name exists in both `profiles` and `agentOverrides`, the `profiles` entry takes precedence.
-
 ### Profile Resolution Order
 
 1. Per-task `profile` field (highest priority)
 2. Top-level `profile` parameter
 3. If neither is specified, no profile is applied (uses pi defaults)
 
-Settings are loaded from:
-1. Global: `~/.pi/agent/settings.json`
-2. Project-local: `.pi/settings.json` (overrides global)
+Profiles are loaded from `.md` files:
+
+1. Global: `~/.pi/agent/agent-profiles/*.md`
+2. Project-local: `.pi/agent-profiles/*.md` (overrides global profiles with the same name)
+
+The profile cache refreshes every 5 seconds.
+
+### Settings
+
+Additional settings are configured in `settings.json` under the `subagents` key:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `maxLinesPerWindow` | `number` | `15` | Number of lines shown in each sub-agent's rolling TUI window |
+| `commandPreviewWidth` | `number` | Terminal width − 4 (TTY) or `160` (non-TTY) | Controls tool call preview truncation width in the rolling window. **In TTY mode, terminal width − 4 is used as a hard override — settings files are never consulted.** In non-TTY mode, falls back through settings files (global → project → default 160). Minimum: 20 |
+
+Settings are loaded from `~/.pi/agent/settings.json` (global) and `.pi/settings.json` (project-local, overrides global). **Note:** `commandPreviewWidth` settings are only consulted in non-TTY mode.
 
 ## The `/profile` Command
 
-Use `/profile` interactively to manage subagent profiles without editing JSON by hand:
+Use `/profile` interactively to manage subagent profiles without editing files by hand:
 
 | Command | Description |
 |---------|-------------|
@@ -210,15 +265,15 @@ Use `/profile` interactively to manage subagent profiles without editing JSON by
 
 `/profile create` and `/profile edit` walk you through each setting:
 
-1. **Scope** — save to global or project-local settings
+1. **Scope** — save to global (`~/.pi/agent/agent-profiles/`) or project-local (`.pi/agent-profiles/`) directory
 2. **Provider** — e.g. `anthropic`, `openai`, `dashscope`
 3. **Model** — supports `provider/id` and `:thinking` shorthand
-4. **System prompt** — optionally set or replace the default
+4. **System prompt** — the body text of the `.md` file (replaces default system prompt)
 5. **Append system prompt** — optionally append to the default
 6. **Thinking level** — off, minimal, low, medium, high, xhigh
 7. **Tools** — restrict to an allowlist or disable all
 8. **Extensions** — restrict or disable
-9. **Review & save** — shows full profile before confirming
+9. **Review & save** — shows full profile as markdown before confirming
 
 You can skip any field by answering "No" — it will be omitted from the profile (using pi defaults).
 
@@ -230,17 +285,36 @@ You can skip any field by answering "No" — it will be omitted from the profile
 - **Expandable (Ctrl+O)**: Collapse to rolling window, expand to see full sub-agent output
 - **Error handling**: Non-zero exit codes and errors are highlighted
 - **Abort support**: Hitting Escape cancels all running sub-agents
+- **Session resume**: Continue work from completed/errored sessions with full transcript context
+- **Per-task timeouts**: Configurable timeout per sub-agent (default 600s)
 
 ## Architecture
 
 ```
 Main Agent TUI
-  └── Tool: delegate_to_subagents
-        ├── Sub-agent A (pi --mode json -p)
-        │       └── Latest 10 lines → TUI Window
-        ├── Sub-agent B (pi --mode json -p)
-        │       └── Latest 10 lines → TUI Window
-        └── ...
+  │
+  └── delegate_to_subagents
+        │
+        ├── Resolve profiles from .md files
+        │   ├── Global: ~/.pi/agent/agent-profiles/*.md
+        │   └── Project: .pi/agent-profiles/*.md
+        │
+        ├── Validate resume targets (must be completed/errored)
+        │
+        ├── For each task (concurrency ≤ 4):
+        │   │
+        │   ├── [resume?] Inject prior session transcript into prompt
+        │   │
+        │   ├── Spawn: pi --mode json -p --no-session [profile args...] "prompt"
+        │   │   │
+        │   │   ├── Parse JSONL stdout events
+        │   │   ├── Update rolling window (latest N lines)
+        │   │   ├── Track tool calls & results
+        │   │   └── [timeout?] Abort if task timeout exceeded
+        │   │
+        │   └── Store session data (messages, status, exit code)
+        │
+        └── Return session IDs → get_subagent_output / get_subagent_session
 ```
 
 Each sub-agent is a separate `pi` process in JSON mode. We parse JSONL events from stdout and maintain a rolling line buffer per agent. The tool's `renderResult` builds a `Container` of `Text` components, displayed inline with the conversation history.

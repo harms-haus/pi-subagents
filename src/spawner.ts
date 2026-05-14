@@ -103,37 +103,30 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
       return "list_todos";
 
     // LSP tools
-    case "lsp-diagnostics":
     case "lsp_diagnostics": {
       const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp-diagnostics → ${file}`;
+      return `lsp_diagnostics → ${file}`;
     }
-    case "lsp-find-references":
     case "lsp_find_references": {
       const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp-find-refs → ${file}:${args.line}:${args.column}`;
+      return `lsp_find_references → ${file}:${args.line}:${args.column}`;
     }
-    case "lsp-goto-definition":
     case "lsp_goto_definition": {
       const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp-goto-def → ${file}:${args.line}:${args.column}`;
+      return `lsp_goto_definition → ${file}:${args.line}:${args.column}`;
     }
-    case "lsp-find-symbol":
     case "lsp_find_symbol":
-      return `lsp-find-symbol → ${args.query ?? "..."}`;
-    case "lsp-call-hierarchy":
+      return `lsp_find_symbol → ${args.query ?? "..."}`;
     case "lsp_call_hierarchy": {
       const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp-call-hierarchy → ${file}:${args.line}:${args.column}`;
+      return `lsp_call_hierarchy → ${file}:${args.line}:${args.column}`;
     }
-    case "lsp-refactor-symbol":
     case "lsp_refactor_symbol": {
       const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp-rename → ${file}:${args.line}:${args.column} → ${args.newName ?? "..."}`;
+      return `lsp_refactor_symbol → ${file}:${args.line}:${args.column} → ${args.newName ?? "..."}`;
     }
 
     // Lint
-    case "lint-files":
     case "lint_files": {
       const files = args.files;
       if (files && files.length > 0) {
@@ -148,7 +141,6 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
     }
 
     // Fetch tools
-    case "fetch-content":
     case "fetch_content":
     case "web_search": {
       const url = args.url ?? args.query ?? "...";
@@ -156,10 +148,9 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
       const truncated = url.length > urlBudget ? `${url.slice(0, urlBudget - 3)}...` : url;
       return `${toolName} → ${truncated}`;
     }
-    case "fetch-repo":
     case "fetch_repo": {
       const url = args.url ?? "...";
-      return `fetch-repo → ${url}`;
+      return `fetch_repo → ${url}`;
     }
 
     // Session retrieval

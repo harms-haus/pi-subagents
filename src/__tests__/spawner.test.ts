@@ -507,7 +507,7 @@ describe("spawner", () => {
       await promise;
     });
 
-    it("should shorten lsp-diagnostics file path", async () => {
+    it("should shorten lsp_diagnostics file path", async () => {
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
@@ -518,18 +518,18 @@ describe("spawner", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      await emitToolCall("lsp-diagnostics", {
+      await emitToolCall("lsp_diagnostics", {
         file: "/home/user/projects/my-app/src/app.tsx",
       });
 
-      const toolLine = findToolLine("lsp-diagnostics");
-      expect(toolLine.text).toBe("→ lsp-diagnostics → src/app.tsx");
+      const toolLine = findToolLine("lsp_diagnostics");
+      expect(toolLine.text).toBe("→ lsp_diagnostics → src/app.tsx");
 
       mockProcess.emit("close", 0);
       await promise;
     });
 
-    it("should shorten lint-files paths", async () => {
+    it("should shorten lint_files paths", async () => {
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
@@ -540,7 +540,7 @@ describe("spawner", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      await emitToolCall("lint-files", {
+      await emitToolCall("lint_files", {
         files: ["/home/user/projects/my-app/src/a.ts", "/home/user/projects/my-app/src/b.ts"],
       });
 

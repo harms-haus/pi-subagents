@@ -610,11 +610,13 @@ describe("spawner", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Command is: npm run build && npm run test && npm run lint
-      // With width 40, the "→ bash → " prefix is 7 chars of the formatToolCall,
-      // so widthBudget passed to formatBashCommand is 40 - 7 = 33
-      // "npm run build && npm run test" = 30 chars, fits
-      // Adding " && npm run lint" would be 30 + 16 = 46, over budget
-      // So it should split at && boundary with a newline
+      // With width 40, the prefix accounts for 12 chars (indent, arrow, "bash → "),
+      // so firstLineBudget passed to formatBashCommand is 40 - 12 = 28
+      // contBudget is 40 - 5 = 35
+      // "npm run build && npm run test" = 30 chars, over firstLineBudget (28)
+      // "npm run build &&" = 16 chars, fits → flush, then new line
+      // "npm run test &&" = 15 chars, fits in contBudget (35)
+      // Then "npm run lint" = 13 chars, fits in contBudget (35)
       await emitToolCall("bash", {
         command: "npm run build && npm run test && npm run lint",
       });

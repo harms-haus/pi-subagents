@@ -71,7 +71,7 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
         return `bash → cd .`;
       }
       cmd = shortenPathsInText(cmd, cwd);
-      return `bash → ${formatBashCommand(cmd, widthBudget - 7, widthBudget)}`;
+      return `bash → ${formatBashCommand(cmd, widthBudget - 12, widthBudget - 5)}`;
     }
 
     case "read": {

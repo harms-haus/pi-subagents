@@ -12,3 +12,4 @@ build/
 !.env.example
 coverage/
 .vitest/
+.bifrost.yaml

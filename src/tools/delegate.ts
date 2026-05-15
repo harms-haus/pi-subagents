@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text } from "@earendil-works/pi-tui";
-import { loadMaxLinesPerWindow, loadProfiles, profileSummary, resolveProfile } from "../profiles";
+import { applyExcludeTools, loadMaxLinesPerWindow, loadProfiles, profileSummary, resolveProfile, validateProfileTools } from "../profiles";
 import { DelegateParams } from "../schemas";
 import { runSubAgent } from "../spawner";
 import type { SessionRecord, SubAgentWindow, SubagentSessionData, WindowedSubagentDetails, WindowLine } from "../types";
@@ -70,6 +70,19 @@ export function registerDelegateTool(
         const profile = name ? resolveProfile(profiles, name) : undefined;
         return { name, profile };
       });
+
+      // Resolve excludeTools: validate and compute tool allowlists
+      let allToolNames: string[] | undefined;
+      for (let i = 0; i < resolvedProfiles.length; i++) {
+        const { name, profile } = resolvedProfiles[i];
+        if (profile?.excludeTools && profile.excludeTools.length > 0) {
+          if (!allToolNames) {
+            allToolNames = pi.getAllTools().map((t) => t.name);
+          }
+          validateProfileTools(profile, name);
+          resolvedProfiles[i] = { name, profile: applyExcludeTools(profile, allToolNames) };
+        }
+      }
 
       // Validate resume parameters
       const activeIds = getActiveSessionIds();

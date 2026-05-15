@@ -156,7 +156,6 @@ name: researcher
 provider: openai
 model: gpt-4o
 appendSystemPrompt: Use web search to find information. Cite sources when possible.
-noTools: false
 ---
 You are a research assistant.
 ```
@@ -172,7 +171,8 @@ You are a research assistant.
 | `appendSystemPrompt` | `string` | Append text to the default system prompt |
 | `thinkingLevel` | `string` | Thinking level: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` |
 | `noTools` | `boolean` | Disable all tools |
-| `tools` | `string` or `string[]` | Comma-separated string or YAML array of tool names to enable |
+| `tools` | `string` or `string[]` | Comma-separated string or YAML array of tool names to enable (allowlist) |
+| `excludeTools` | `string` or `string[]` | Comma-separated string or YAML array of tool names to exclude (blacklist; mutually exclusive with `tools`) |
 | `noExtensions` | `boolean` | Disable all extensions |
 | `extensions` | `string` or `string[]` | Comma-separated string or YAML array of extension paths to load |
 | `noSkills` | `boolean` | Disable skills |
@@ -271,7 +271,7 @@ Use `/profile` interactively to manage subagent profiles without editing files b
 4. **System prompt** — the body text of the `.md` file (replaces default system prompt)
 5. **Append system prompt** — optionally append to the default
 6. **Thinking level** — off, minimal, low, medium, high, xhigh
-7. **Tools** — restrict to an allowlist or disable all
+7. **Tools** — choose to disable all (`noTools`), enable a specific set (`tools`), or exclude specific tools (`excludeTools`)
 8. **Extensions** — restrict or disable
 9. **Review & save** — shows full profile as markdown before confirming
 

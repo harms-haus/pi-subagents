@@ -368,7 +368,7 @@ Project-local profiles **override** global profiles with the same name. Loading 
 // Frontmatter keys → SubagentProfile fields
 name, provider, model, thinkingLevel, appendSystemPrompt, apiKey,
 noTools, noExtensions, noSkills, noContextFiles,
-tools (string or comma-separated), extensions, extraArgs
+tools (string or comma-separated), excludeTools (comma-separated), extensions, extraArgs
 
 // Body (after frontmatter) → systemPrompt
 ```
@@ -382,7 +382,24 @@ const CACHE_TTL = 5000;
 
 The cache key includes the `cwd` — different working directories get separate cache entries. Cache is invalidated by `saveProfile()`, `deleteProfile()`, and `invalidateProfilesCache()`.
 
-### 8.3 `profileToArgs()` Conversion
+### 8.3 `excludeTools` Resolution (in delegate.ts)
+
+Before `profileToArgs()` is called, profiles with `excludeTools` are resolved to concrete tool allowlists in the delegate tool's execute handler:
+
+1. For each task whose profile has `excludeTools` set, `pi.getAllTools()` is called once to obtain the full list of available tool names.
+2. `validateProfileTools(profile, name)` throws if both `tools` (allowlist) and `excludeTools` (blacklist) are set — they are mutually exclusive.
+3. `applyExcludeTools(profile, allToolNames)` computes the allowlist:
+   ```ts
+   const excludeSet = new Set(profile.excludeTools);
+   const computedTools = allToolNames.filter((name) => !excludeSet.has(name));
+   return { ...profile, tools: computedTools, excludeTools: undefined };
+   ```
+4. The resolved profile (now with `tools` populated and `excludeTools` cleared) replaces the original in the `resolvedProfiles` array.
+5. This resolved profile flows through `profileToArgs()` as a normal `--tools <computed-list>` argument.
+
+If no profile has `excludeTools` set, `pi.getAllTools()` is never called.
+
+### 8.4 `profileToArgs()` Conversion
 
 Converts a `SubagentProfile` to CLI arguments and environment variables:
 
@@ -400,7 +417,18 @@ interface ProfileInvocation {
 - Characters at the start of an arg: whitespace, `|`, `&`, `;`, `$`, `\`, `` ` ``, `!`
 - Command separators anywhere in the arg: `&&`, `||`, `;`, `>`, `>>`, `<`, `<<`
 
-### 8.4 Settings Files
+**Tool-override blocking:** When any tool restriction is active on the profile (`noTools`, `tools`, or `excludeTools`), `extraArgs` containing tool-override flags are rejected. The blocked flags are:
+
+| Flag | Variants |
+|------|----------|
+| `--tools` | `--tools`, `--tools=value` |
+| `-t` | `-t`, `-t=value` |
+| `--no-tools` | `--no-tools`, `--no-tools=value` |
+| `-nt` | `-nt`, `-nt=value` |
+
+This prevents `extraArgs` from bypassing the profile's intended tool restrictions via equals-sign forms or short flags.
+
+### 8.5 Settings Files
 
 Two settings locations are checked (project overrides global):
 

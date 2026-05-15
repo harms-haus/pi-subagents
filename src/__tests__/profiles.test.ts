@@ -5,20 +5,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubagentProfile } from "../profiles";
 import {
+  applyExcludeTools,
   formatProfileDetail,
   getProfilesDir,
   invalidateProfilesCache,
   loadCommandPreviewWidth,
   loadMaxLinesPerWindow,
+  loadProfiles,
   profileSummary,
   profileToArgs,
   resolveProfile,
+  validateProfileTools,
 } from "../profiles";
 
 // Mock filesystem functions
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
+  readdirSync: vi.fn(),
 }));
 
 vi.mock("node:fs/promises", () => ({
@@ -33,8 +37,9 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   parseFrontmatter: vi.fn(),
 }));
 
-import { existsSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 
 describe("profileToArgs", () => {
   beforeEach(() => {
@@ -639,5 +644,229 @@ describe("getProfilesDir", () => {
     const originalCwd = process.cwd();
     const result = getProfilesDir("project");
     expect(result).toBe(`${originalCwd}/.pi/agent-profiles`);
+  });
+});
+
+describe("validateProfileTools", () => {
+  it("should not throw when only tools is set", () => {
+    const profile: SubagentProfile = { tools: ["read", "bash"] };
+    expect(() => validateProfileTools(profile)).not.toThrow();
+  });
+
+  it("should not throw when only excludeTools is set", () => {
+    const profile: SubagentProfile = { excludeTools: ["write", "bash"] };
+    expect(() => validateProfileTools(profile)).not.toThrow();
+  });
+
+  it("should throw error when both tools and excludeTools are set", () => {
+    const profile: SubagentProfile = { tools: ["read"], excludeTools: ["write"] };
+    expect(() => validateProfileTools(profile)).toThrow(/mutually exclusive/);
+  });
+
+  it("should include profile name in error when both are set", () => {
+    const profile: SubagentProfile = { tools: ["read"], excludeTools: ["write"] };
+    expect(() => validateProfileTools(profile, "my-profile")).toThrow(/"my-profile"/);
+  });
+
+  it("should not throw when neither tools nor excludeTools is set", () => {
+    const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
+    expect(() => validateProfileTools(profile)).not.toThrow();
+  });
+});
+
+describe("applyExcludeTools", () => {
+  it("should return unchanged profile when no excludeTools", () => {
+    const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
+    const result = applyExcludeTools(profile, ["read", "bash", "write"]);
+    expect(result).toEqual(profile);
+  });
+
+  it("should filter out excluded tools from allToolNames", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash", "write"] };
+    const result = applyExcludeTools(profile, ["read", "bash", "write", "grep"]);
+    expect(result.tools).toEqual(["read", "grep"]);
+  });
+
+  it("should return profile with computed tools and excludeTools removed", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash"], model: "anthropic/claude-sonnet-4" };
+    const result = applyExcludeTools(profile, ["read", "bash", "write"]);
+    expect(result.tools).toEqual(["read", "write"]);
+    expect(result.excludeTools).toBeUndefined();
+    expect(result.model).toBe("anthropic/claude-sonnet-4");
+  });
+
+  it("should handle empty excludeTools array", () => {
+    const profile: SubagentProfile = { excludeTools: [] };
+    const result = applyExcludeTools(profile, ["read", "bash"]);
+    expect(result).toEqual(profile);
+  });
+});
+
+describe("profileToArgs extraArgs tool-override security", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should throw when extraArgs contains --tools and tools is set", () => {
+    const profile: SubagentProfile = { tools: ["read", "bash"], extraArgs: ["--tools", "write,delete"] };
+    expect(() => profileToArgs(profile)).toThrow(
+      /Refusing extraArg "--tools" which would override profile tool restrictions/,
+    );
+  });
+
+  it("should throw when extraArgs contains --tools and excludeTools is set", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash"], extraArgs: ["--tools", "all"] };
+    expect(() => profileToArgs(profile)).toThrow(
+      /Refusing extraArg "--tools" which would override profile tool restrictions/,
+    );
+  });
+
+  it("should throw when extraArgs contains --no-tools and tools is set", () => {
+    const profile: SubagentProfile = { tools: ["read"], extraArgs: ["--no-tools"] };
+    expect(() => profileToArgs(profile)).toThrow(
+      /Refusing extraArg "--no-tools" which would override profile tool restrictions/,
+    );
+  });
+
+  it("should throw when extraArgs contains -t and tools is set", () => {
+    const profile: SubagentProfile = { tools: ["read"], extraArgs: ["-t", "all"] };
+    expect(() => profileToArgs(profile)).toThrow(
+      /Refusing extraArg "-t" which would override profile tool restrictions/,
+    );
+  });
+
+  it("should throw when extraArgs contains -nt and excludeTools is set", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash"], extraArgs: ["-nt"] };
+    expect(() => profileToArgs(profile)).toThrow(
+      /Refusing extraArg "-nt" which would override profile tool restrictions/,
+    );
+  });
+
+  it("should throw when extraArgs contains --tools and noTools is true", () => {
+    const profile: SubagentProfile = { noTools: true, extraArgs: ["--tools", "bash"] };
+    expect(() => profileToArgs(profile)).toThrow(/Refusing extraArg/);
+  });
+
+  it("should throw when extraArgs contains --no-tools and noTools is true", () => {
+    const profile: SubagentProfile = { noTools: true, extraArgs: ["--no-tools"] };
+    expect(() => profileToArgs(profile)).toThrow(/Refusing extraArg/);
+  });
+
+  it("should throw when extraArgs contains --tools=value equals-sign form and tools is set", () => {
+    const profile: SubagentProfile = { tools: ["read", "bash"], extraArgs: ["--tools=bash,write"] };
+    expect(() => profileToArgs(profile)).toThrow(
+      /Refusing extraArg "--tools=bash,write" which would override profile tool restrictions/,
+    );
+  });
+
+  it("should throw when extraArgs contains --no-tools=value equals-sign form and noTools is true", () => {
+    const profile: SubagentProfile = { noTools: true, extraArgs: ["--no-tools=read"] };
+    expect(() => profileToArgs(profile)).toThrow(
+      /Refusing extraArg "--no-tools=read" which would override profile tool restrictions/,
+    );
+  });
+
+  it("should allow --tools in extraArgs when no tool restrictions are active", () => {
+    const profile: SubagentProfile = { extraArgs: ["--tools", "read,bash"] };
+    const result = profileToArgs(profile);
+    expect(result.args).toContain("--tools");
+    expect(result.args).toContain("read,bash");
+  });
+
+  it("should allow extraArgs without tool flags when tools is set", () => {
+    const profile: SubagentProfile = { tools: ["read"], extraArgs: ["--verbose"] };
+    const result = profileToArgs(profile);
+    expect(result.args).toContain("--tools");
+    expect(result.args).toContain("read");
+    expect(result.args).toContain("--verbose");
+  });
+});
+
+describe("profileToArgs with excludeTools", () => {
+  it("should NOT add --tools when only excludeTools is set (unresolved)", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash"] };
+    const result = profileToArgs(profile);
+    expect(result.args).not.toContain("--tools");
+  });
+
+  it("should pass computed tools as --tools after applyExcludeTools", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash", "write"] };
+    const resolved = applyExcludeTools(profile, ["read", "bash", "write", "grep"]);
+    const result = profileToArgs(resolved);
+    expect(result.args).toContain("--tools");
+    expect(result.args).toContain("read,grep");
+  });
+});
+
+describe("profileSummary with excludeTools", () => {
+  it("should show excludeTools in summary", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash", "write"] };
+    const result = profileSummary("test-profile", profile);
+    expect(result).toContain("excludeTools=[bash,write]");
+  });
+});
+
+describe("formatProfileDetail with excludeTools", () => {
+  it("should show excludeTools in detail view", () => {
+    const profile: SubagentProfile = { excludeTools: ["bash", "write"] };
+    const result = formatProfileDetail("test-profile", profile);
+    expect(result).toContain("excludeTools:      [bash, write]");
+  });
+});
+
+describe("loadProfilesFromDir (excludeTools parsing)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should parse excludeTools from comma-separated string", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "string-exclude.md", isFile: () => true } as Dirent,
+    ]);
+    vi.mocked(readFileSync).mockReturnValue(
+      [
+        "---",
+        "name: string-exclude",
+        "excludeTools: bash,write",
+        "---",
+        "",
+      ].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "string-exclude", excludeTools: "bash,write" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["string-exclude"]).toBeDefined();
+    expect(profiles["string-exclude"].excludeTools).toEqual(["bash", "write"]);
+  });
+
+  it("should parse excludeTools from YAML array", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "array-exclude.md", isFile: () => true } as Dirent,
+    ]);
+    vi.mocked(readFileSync).mockReturnValue(
+      [
+        "---",
+        "name: array-exclude",
+        "excludeTools:",
+        "  - bash",
+        "  - write",
+        "---",
+        "",
+      ].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "array-exclude", excludeTools: ["bash", "write"] },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["array-exclude"]).toBeDefined();
+    expect(profiles["array-exclude"].excludeTools).toEqual(["bash", "write"]);
   });
 });

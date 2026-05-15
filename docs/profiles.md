@@ -52,7 +52,8 @@ Every field in the frontmatter is **optional**. Only `name` is required for the 
 | `model` | `string` | Model ID or pattern. Supports `provider/id` format (e.g., `anthropic/claude-sonnet-4-5`) and `:thinking` shorthand (e.g., `sonnet:high`). Maps to `--model`. |
 | `thinkingLevel` | `string` | Extended thinking level. Valid values: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`. Maps to `--thinking`. |
 | `tools` | `string` or `string[]` | Comma-separated string **or** YAML array of tool names to **allow**. If set, only these tools are available. E.g., `read,bash,grep` or `[read, bash, grep]`. Maps to `--tools`. |
-| `noTools` | `boolean` | If `true`, disables all tools for the sub-agent. Maps to `--no-tools`. Mutually exclusive with `tools` — if both are set, `noTools` takes precedence. |
+| `noTools` | `boolean` | If `true`, disables all tools for the sub-agent. Maps to `--no-tools`. Mutually exclusive with `tools` and `excludeTools` — if multiple are set, precedence is `noTools` > `tools` > `excludeTools`. |
+| `excludeTools` | `string` or `string[]` | Comma-separated string **or** YAML array of tool names to **exclude** from the parent session's full tool set. The allowed tools are computed at spawn time: all available tools minus the blacklisted ones, passed as `--tools` to the child process. Mutually exclusive with `tools` — if both are set, an error is thrown. If `noTools` is also set, `noTools` takes precedence and `excludeTools` is silently ignored. |
 | `noExtensions` | `boolean` | If `true`, disables all extensions. Maps to `--no-extensions`. |
 | `extensions` | `string` or `string[]` | Comma-separated string **or** YAML array of extension file paths to load. Each entry maps to a separate `--extension` flag. |
 | `noSkills` | `boolean` | If `true`, disables skills. Maps to `--no-skills`. |
@@ -166,6 +167,22 @@ noContextFiles: true
 ---
 
 You are in a restricted environment with no tool access. Answer questions using your training knowledge only. If you need to read files or run commands, explain what you would do but cannot execute it.
+```
+
+### Read-Only Worker
+
+A profile that excludes write-capable tools while retaining read and search access.
+
+```markdown
+---
+name: read-only-worker
+provider: zai
+model: glm-5.1
+thinkingLevel: medium
+excludeTools: write,edit,bash
+---
+
+You are a read-only analyst. You can read files and search but cannot modify anything.
 ```
 
 ### Profile with API Key
@@ -297,7 +314,10 @@ Both `/profile create` and `/profile edit` launch a step-by-step wizard:
 4. **System prompt** — confirm whether to set/keep a custom system prompt; if yes, opens a full editor for the prompt text
 5. **Append system prompt** — confirm whether to set/keep appended text; if yes, enter the text
 6. **Thinking level** — confirm whether to set; if yes, select from: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`
-7. **Tools** — confirm whether to configure; if yes, choose to disable all tools (`noTools`) or enter a comma-separated allowlist
+7. **Tools** — confirm whether to configure; if yes, choose from three options:
+   - **Disable all tools** (`noTools`) — sub-agent runs with no tool access
+   - **Allowlist** — enter a comma-separated list of tools to *allow* (all others excluded)
+   - **Blacklist** — enter a comma-separated list of tools to *exclude* (all others allowed)
 8. **Extensions** — confirm whether to configure; if yes, choose to disable all extensions (`noExtensions`) or enter comma-separated paths
 9. **Review** — displays the full profile summary; confirm to save or cancel
 
@@ -318,6 +338,7 @@ Profiles are converted to CLI arguments and environment variables via `profileTo
 | `thinkingLevel` | `--thinking <value>` | |
 | `tools` | `--tools <comma-separated>` | Joined with commas: `read,bash,grep` |
 | `noTools` | `--no-tools` | Boolean flag; no value |
+| `excludeTools` | `--tools <computed>` | Resolved at runtime via `applyExcludeTools()`: all parent tools minus blacklisted names, joined into a comma-separated `--tools` value |
 | `noExtensions` | `--no-extensions` | Boolean flag; no value |
 | `extensions` | `--extension <value>` (×N) | One `--extension` flag per entry |
 | `noSkills` | `--no-skills` | Boolean flag; no value |
@@ -325,9 +346,15 @@ Profiles are converted to CLI arguments and environment variables via `profileTo
 | `apiKey` | *(env var)* | Set as `PI_API_KEY` in process environment — **not a CLI flag** |
 | `extraArgs` | *(appended verbatim)* | Each array element appended directly to the args array |
 
-### `noTools` vs `tools` Precedence
+### `noTools` vs `tools` vs `excludeTools` Precedence
 
-If both `noTools` and `tools` are set, `noTools` takes precedence — only `--no-tools` is emitted, and `--tools` is ignored. This matches the behavior in `profileToArgs()`:
+Tool configuration follows three-way precedence: **`noTools` > `tools` > `excludeTools`**.
+
+- If `noTools` is `true`, only `--no-tools` is emitted — both `tools` and `excludeTools` are ignored.
+- If `noTools` is not set but `tools` is, only `--tools` is emitted with the allowlist — `excludeTools` is ignored.
+- If neither `noTools` nor `tools` is set but `excludeTools` is, the blacklisted tools are subtracted from the parent session's full tool set via `applyExcludeTools()`, and the resulting allowed set is passed as `--tools`.
+
+This matches the behavior in `profileToArgs()`:
 
 ```typescript
 if (profile.noTools) {
@@ -335,7 +362,13 @@ if (profile.noTools) {
 } else if (profile.tools && profile.tools.length > 0) {
   args.push("--tools", profile.tools.join(","));
 }
+// else: excludeTools is resolved at runtime via applyExcludeTools()
+// to produce a computed tools array, which is then passed as --tools
 ```
+
+> **Note:** `applyExcludeTools()` resolves `excludeTools` to a computed `tools` array **before** `profileToArgs()` runs. By the time the extraArgs validation guard executes, the profile already has `tools` set (not `excludeTools`), so the guard checks against `profile.tools` regardless of whether the original profile used `tools` or `excludeTools`.
+
+If both `tools` and `excludeTools` are set without `noTools`, an error is thrown — they are mutually exclusive.
 
 ### API Key Handling
 
@@ -397,13 +430,28 @@ The `extraArgs` field is subject to security validation before being passed to t
 | Shell operators at start | `"| ls"`, `"& rm"`, `"; echo"` | `Refusing extraArg: potentially unsafe argument '\| ls...'` |
 | Command separators | `"&& rm"`, `"|| exit"`, `"; ls"` | `Refusing extraArg: potentially unsafe argument '&& rm...'` |
 | Shell redirection | `"> file"`, `">> file"`, `"< file"` | `Refusing extraArg: potentially unsafe argument '> file...'` |
-| Backticks / `$()` | ``"`whoami`"`` | ``Refusing extraArg: potentially unsafe argument '`whoami`...'`` |
+| Backticks / leading `$` | ``"`whoami`"``, `"$HOME"` | ``Refusing extraArg: potentially unsafe argument '`whoami`...'`` |
+
+> **Note:** The validation regex catches backticks and `$` only at the **start** of an argument. It does **not** detect `$()` command substitution when it appears later in the string (e.g., `"arg$(whoami)"` passes validation).
 
 The validation regex:
 
 ```
 /^[\s|&;$\\`!]|&&|\|\||;|>|>>|<|<</
 ```
+
+### Tool Restriction Override Guard
+
+When `excludeTools`, `tools`, or `noTools` is set in a profile, passing tool-restriction flags via `extraArgs` is **blocked**. The following `extraArgs` patterns are rejected:
+
+| Blocked Flag | Example `extraArgs` | Error |
+|---|---|---|
+| `--tools` | `"--tools=read,write"` | `Cannot pass --tools in extraArgs when tools are configured in profile` |
+| `-t` | `"-t read"` | `Cannot pass -t in extraArgs when tools are configured in profile` |
+| `--no-tools` | `"--no-tools"` | `Cannot pass --no-tools in extraArgs when tools are configured in profile` |
+| `-nt` | `"-nt"` | `Cannot pass -nt in extraArgs when tools are configured in profile` |
+
+Both space-separated (`--tools read`) and equals-sign (`--tools=read`) forms are caught. This prevents `extraArgs` from silently overriding the profile's tool restrictions.
 
 ### Profile File Permissions
 

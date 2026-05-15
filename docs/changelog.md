@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+- `excludeTools` profile field — blacklist of tool names to exclude from the parent session's full tool set. Mutually exclusive with `tools` (allowlist). Resolved at spawn time by computing `all tools - excluded tools` and passing the result via `--tools`.
+- Security: `extraArgs` containing `--tools`, `--no-tools`, or their short/equals-sign forms are now blocked when tool restrictions (`tools`, `excludeTools`, or `noTools`) are active.
+
 ## [0.1.0] — 2025-05-14
 
 ### Added

@@ -1,6 +1,7 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerProfileCommand } from "../commands/profile";
+import { resolveProfile } from "../profiles";
 import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
 import { registerRetrievalTools } from "../tools/retrieval";
@@ -43,6 +44,20 @@ vi.mock("../profiles", () => ({
   loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
+  validateProfileTools: (profile: { tools?: string[]; excludeTools?: string[] }, profileName?: string) => {
+    if (profile.tools && profile.tools.length > 0 && profile.excludeTools && profile.excludeTools.length > 0) {
+      throw new Error(
+        `Profile${profileName ? ` "${profileName}"` : ""} has both "tools" (allowlist) and "excludeTools" (blacklist) set. These are mutually exclusive — choose one or the other.`,
+      );
+    }
+  },
+  applyExcludeTools: (profile: Record<string, unknown>, allToolNames: string[]) => {
+    const excludeTools = profile.excludeTools as string[] | undefined;
+    if (!excludeTools || excludeTools.length === 0) return profile;
+    const excludeSet = new Set(excludeTools);
+    const computedTools = allToolNames.filter((name) => !excludeSet.has(name));
+    return { ...profile, tools: computedTools, excludeTools: undefined };
+  },
 }));
 
 describe("tools", () => {
@@ -59,6 +74,7 @@ describe("tools", () => {
         registerTool: vi.fn(),
         registerCommand: vi.fn(),
         on: vi.fn(),
+        getAllTools: vi.fn().mockReturnValue([]),
         ui: {
           notify: vi.fn(),
           confirm: vi.fn(),
@@ -141,6 +157,7 @@ describe("tools", () => {
         registerTool: vi.fn(),
         registerCommand: vi.fn(),
         on: vi.fn(),
+        getAllTools: vi.fn().mockReturnValue([]),
       } as unknown as ExtensionAPI;
       vi.mocked(runSubAgent).mockClear();
     });
@@ -468,6 +485,89 @@ describe("tools", () => {
         // Verify a signal was passed
         const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
         expect(callArgs.signal).toBeInstanceOf(AbortSignal);
+      });
+    });
+
+    describe("delegate_to_subagents - excludeTools resolution", () => {
+      it("should compute tools allowlist from excludeTools and getAllTools", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+        // Mock getAllTools to return a set of tools
+        vi.mocked(mockPi.getAllTools).mockReturnValue([
+          { name: "read" },
+          { name: "bash" },
+          { name: "write" },
+        ]);
+
+        // Mock resolveProfile to return a profile with excludeTools
+        vi.mocked(resolveProfile).mockReturnValue({
+          excludeTools: ["bash"],
+        });
+
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        await executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", profile: "restricted" }],
+          },
+          null,
+          vi.fn(),
+          { cwd: process.cwd() },
+        );
+
+        // Verify runSubAgent was called with the computed tools allowlist
+        expect(runSubAgent).toHaveBeenCalledTimes(1);
+        const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+        expect(callArgs.profile).toBeDefined();
+        expect(callArgs.profile!.tools).toEqual(["read", "write"]);
+        expect(callArgs.profile!.excludeTools).toBeUndefined();
+      });
+
+      it("should throw an error when profile has both tools and excludeTools", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+        // Mock resolveProfile to return a profile with both tools and excludeTools
+        vi.mocked(resolveProfile).mockReturnValue({
+          tools: ["read"],
+          excludeTools: ["bash"],
+        });
+
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        await expect(
+          executeFn(
+            "tool-call-id",
+            {
+              tasks: [{ name: "test-task", prompt: "test prompt", profile: "conflicted" }],
+            },
+            null,
+            vi.fn(),
+            { cwd: process.cwd() },
+          ),
+        ).rejects.toThrow(/mutually exclusive/i);
       });
     });
 

@@ -81,27 +81,53 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
   // Tools
   const hasTools = await ctx.ui.confirm(
     "Configure tools?",
-    profile.tools || profile.noTools ? "Tool config is set. Change it?" : "Restrict which tools the subagent can use?",
+    profile.tools || profile.excludeTools || profile.noTools
+      ? "Tool config is set. Change it?"
+      : "Restrict which tools the subagent can use?",
   );
   if (hasTools) {
     const noTools = await ctx.ui.confirm("Disable all tools?", "");
     if (noTools) {
       profile.noTools = true;
       delete profile.tools;
+      delete profile.excludeTools;
     } else {
       delete profile.noTools;
-      const toolsStr = await ctx.ui.input(
-        "Tool allowlist (comma-separated, e.g. read,bash,grep):",
-        profile.tools?.join(",") ?? "",
-      );
-      if (toolsStr === undefined) return;
-      if (toolsStr.trim()) {
-        profile.tools = toolsStr
-          .split(",")
-          .map((t: string) => t.trim())
-          .filter(Boolean);
-      } else {
+      const toolMode = await ctx.ui.select<string>("Select tool mode:", [
+        "Allowlist (only these tools)",
+        "Blacklist (all tools except these)",
+      ]);
+      if (!toolMode) return;
+      if (toolMode.startsWith("Blacklist")) {
         delete profile.tools;
+        const excludeStr = await ctx.ui.input(
+          "Tool blacklist (comma-separated, e.g. read,bash,grep):",
+          profile.excludeTools?.join(",") ?? "",
+        );
+        if (excludeStr === undefined) return;
+        if (excludeStr.trim()) {
+          profile.excludeTools = excludeStr
+            .split(",")
+            .map((t: string) => t.trim())
+            .filter(Boolean);
+        } else {
+          delete profile.excludeTools;
+        }
+      } else {
+        delete profile.excludeTools;
+        const toolsStr = await ctx.ui.input(
+          "Tool allowlist (comma-separated, e.g. read,bash,grep):",
+          profile.tools?.join(",") ?? "",
+        );
+        if (toolsStr === undefined) return;
+        if (toolsStr.trim()) {
+          profile.tools = toolsStr
+            .split(",")
+            .map((t: string) => t.trim())
+            .filter(Boolean);
+        } else {
+          delete profile.tools;
+        }
       }
     }
   }

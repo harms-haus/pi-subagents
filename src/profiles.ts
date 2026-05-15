@@ -54,6 +54,9 @@ export interface SubagentProfile {
   /** Comma-separated allowlist of tool names to enable */
   tools?: string[];
 
+  /** Blacklist of tool names to exclude from the full set */
+  excludeTools?: string[];
+
   /** Disable all extensions */
   noExtensions?: boolean;
 
@@ -158,6 +161,23 @@ async function readSettingsFile(filePath: string): Promise<SettingsFile> {
   }
 }
 
+// ── Profile Tool Validation ───────────────────────────────────────────
+
+export function validateProfileTools(profile: SubagentProfile, profileName?: string): void {
+  if (profile.tools && profile.tools.length > 0 && profile.excludeTools && profile.excludeTools.length > 0) {
+    throw new Error(
+      `Profile${profileName ? ` "${profileName}"` : ""} has both "tools" (allowlist) and "excludeTools" (blacklist) set. These are mutually exclusive — choose one or the other.`,
+    );
+  }
+}
+
+export function applyExcludeTools(profile: SubagentProfile, allToolNames: string[]): SubagentProfile {
+  if (!profile.excludeTools || profile.excludeTools.length === 0) return profile;
+  const excludeSet = new Set(profile.excludeTools);
+  const computedTools = allToolNames.filter((name) => !excludeSet.has(name));
+  return { ...profile, tools: computedTools, excludeTools: undefined };
+}
+
 // ── Profile Loading from Markdown Files ──────────────────────────────
 
 function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
@@ -197,6 +217,9 @@ function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
 
       const tools = parseStringOrArray(frontmatter.tools);
       if (tools) profile.tools = tools;
+
+      const excludeTools = parseStringOrArray(frontmatter.excludeTools);
+      if (excludeTools) profile.excludeTools = excludeTools;
 
       if (frontmatter.noTools === true) profile.noTools = true;
       if (frontmatter.noExtensions === true) profile.noExtensions = true;
@@ -252,6 +275,23 @@ export function resolveProfile(profiles: SubagentProfiles, profileName: string):
 }
 
 // ── CLI Argument Building ────────────────────────────────────────────
+
+/**
+ * Check whether a CLI argument is a tool-override flag (exact or equals-sign form).
+ * Used to prevent extraArgs from bypassing profile tool restrictions.
+ */
+function isDangerousFlag(arg: string): boolean {
+  return (
+    arg === "--tools" ||
+    arg.startsWith("--tools=") ||
+    arg === "-t" ||
+    arg.startsWith("-t=") ||
+    arg === "--no-tools" ||
+    arg.startsWith("--no-tools=") ||
+    arg === "-nt" ||
+    arg.startsWith("-nt=")
+  );
+}
 
 /**
  * Convert a SubagentProfile into invocation parameters for the pi subprocess.
@@ -313,7 +353,18 @@ export function profileToArgs(profile: SubagentProfile): ProfileInvocation {
 
   // Validate extraArgs for safety before pushing
   if (profile.extraArgs) {
+    const hasToolRestrictions =
+      profile.noTools === true ||
+      (profile.tools !== undefined && profile.tools.length > 0) ||
+      (profile.excludeTools !== undefined && profile.excludeTools.length > 0);
+
     for (const arg of profile.extraArgs) {
+      // Block tool-override flags when profile has tool restrictions
+      if (hasToolRestrictions && isDangerousFlag(arg)) {
+        throw new Error(
+          `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.`,
+        );
+      }
       // Block null bytes
       if (arg.includes("\0")) {
         throw new Error("Invalid extraArg: contains null byte");
@@ -340,7 +391,9 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
   if (profile.systemPrompt) parts.push("custom-system-prompt");
   if (profile.appendSystemPrompt) parts.push("appended-system-prompt");
   if (profile.noTools) parts.push("no-tools");
-  else if (profile.tools) parts.push(`tools=[${profile.tools.join(",")}]`);
+  else if (profile.tools && profile.tools.length > 0) parts.push(`tools=[${profile.tools.join(",")}]`);
+  else if (profile.excludeTools && profile.excludeTools.length > 0)
+    parts.push(`excludeTools=[${profile.excludeTools.join(",")}]`);
   return parts.join(", ");
 }
 
@@ -362,6 +415,8 @@ function serializeProfileToMarkdown(name: string, profile: SubagentProfile): str
   if (profile.noContextFiles !== undefined) fmLines.push(`noContextFiles: ${profile.noContextFiles}`);
 
   if (profile.tools && profile.tools.length > 0) fmLines.push(`tools: ${profile.tools.join(",")}`);
+  if (profile.excludeTools && profile.excludeTools.length > 0)
+    fmLines.push(`excludeTools: ${profile.excludeTools.join(",")}`);
   if (profile.extensions && profile.extensions.length > 0) fmLines.push(`extensions: ${profile.extensions.join(",")}`);
   if (profile.extraArgs && profile.extraArgs.length > 0) fmLines.push(`extraArgs: ${profile.extraArgs.join(",")}`);
 
@@ -477,6 +532,8 @@ export function formatProfileDetail(name: string, profile: SubagentProfile): str
   if (profile.appendSystemPrompt) lines.push(`  appendSystemPrompt: ${profile.appendSystemPrompt}`);
   if (profile.noTools) lines.push(`  noTools:           true`);
   else if (profile.tools) lines.push(`  tools:             [${profile.tools.join(", ")}]`);
+  else if (profile.excludeTools && profile.excludeTools.length > 0)
+    lines.push(`  excludeTools:      [${profile.excludeTools.join(", ")}]`);
   if (profile.noExtensions) lines.push(`  noExtensions:      true`);
   if (profile.extensions) lines.push(`  extensions:        [${profile.extensions.join(", ")}]`);
   if (profile.noSkills) lines.push(`  noSkills:          true`);

@@ -228,7 +228,7 @@ describe("delegate_to_subagents render functions", () => {
 
       // The theme.fg should have been called with status counts
       const fgCalls = vi.mocked(theme.fg).mock.calls;
-      const allFgText = fgCalls.map((c) => c[1]).join(" ");
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
 
       expect(allFgText).toContain("1 running");
       expect(allFgText).toContain("1 done");
@@ -251,7 +251,7 @@ describe("delegate_to_subagents render functions", () => {
       );
 
       const fgCalls = vi.mocked(theme.fg).mock.calls;
-      const allFgText = fgCalls.map((c) => c[1]).join(" ");
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
 
       // Running status uses ⏳ icon and "warning" color
       expect(allFgText).toContain("⏳");
@@ -280,7 +280,7 @@ describe("delegate_to_subagents render functions", () => {
       );
 
       const fgCalls = vi.mocked(theme.fg).mock.calls;
-      const allFgText = fgCalls.map((c) => c[1]).join(" ");
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
 
       expect(allFgText).toContain("✓");
       expect(allFgText).toContain("done-task");
@@ -309,7 +309,7 @@ describe("delegate_to_subagents render functions", () => {
       );
 
       const fgCalls = vi.mocked(theme.fg).mock.calls;
-      const allFgText = fgCalls.map((c) => c[1]).join(" ");
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
 
       expect(allFgText).toContain("✗");
       expect(allFgText).toContain("fail-task");
@@ -348,14 +348,14 @@ describe("delegate_to_subagents render functions", () => {
 
       // The lines should be rendered as children (filter out Spacers which have no text)
       const allTexts = addChildCalls
-        .map((c) => (c[0] as { text?: string }).text)
-        .filter((t): t is string => typeof t === "string");
-      expect(allTexts.some((t) => t.includes("line 1 output"))).toBe(true);
+        .map((c: [unknown]) => (c[0] as { text?: string }).text)
+        .filter((t: unknown): t is string => typeof t === "string");
+      expect(allTexts.some((t: string) => t.includes("line 1 output"))).toBe(true);
 
       // Tool lines should use "muted" color
       const fgCalls = vi.mocked(theme.fg).mock.calls;
-      const mutedCalls = fgCalls.filter((c) => c[0] === "muted");
-      expect(mutedCalls.some((c) => (c[1] as string).includes("tool invocation"))).toBe(true);
+      const mutedCalls = fgCalls.filter((c: [string, string]) => c[0] === "muted");
+      expect(mutedCalls.some((c: [string, string]) => (c[1] as string).includes("tool invocation"))).toBe(true);
     });
 
     it("renders expanded mode (all messages - win.allMessages)", () => {
@@ -391,13 +391,13 @@ describe("delegate_to_subagents render functions", () => {
       const addChildCalls = vi.mocked(containerInstance.addChild).mock.calls;
 
       const allTexts = addChildCalls
-        .map((c) => (c[0] as { text?: string }).text)
-        .filter((t): t is string => typeof t === "string");
+        .map((c: [unknown]) => (c[0] as { text?: string }).text)
+        .filter((t: unknown): t is string => typeof t === "string");
 
       // Should show allMessages content, not just lines
-      expect(allTexts.some((t) => t.includes("first message"))).toBe(true);
-      expect(allTexts.some((t) => t.includes("second message"))).toBe(true);
-      expect(allTexts.some((t) => t.includes("third message"))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("first message"))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("second message"))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("third message"))).toBe(true);
     });
 
     it("renders footer with session IDs when done", () => {
@@ -432,13 +432,13 @@ describe("delegate_to_subagents render functions", () => {
       const addChildCalls = vi.mocked(containerInstance.addChild).mock.calls;
 
       const allTexts = addChildCalls
-        .map((c) => (c[0] as { text?: string }).text)
-        .filter((t): t is string => typeof t === "string");
+        .map((c: [unknown]) => (c[0] as { text?: string }).text)
+        .filter((t: unknown): t is string => typeof t === "string");
 
       // Footer should contain session IDs
-      expect(allTexts.some((t) => t.includes("Session IDs"))).toBe(true);
-      expect(allTexts.some((t) => t.includes("sid-aaa"))).toBe(true);
-      expect(allTexts.some((t) => t.includes("sid-bbb"))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("Session IDs"))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("sid-aaa"))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("sid-bbb"))).toBe(true);
     });
 
     it('renders "running..." footer when still running', () => {
@@ -468,12 +468,12 @@ describe("delegate_to_subagents render functions", () => {
       const addChildCalls = vi.mocked(containerInstance.addChild).mock.calls;
 
       const allTexts = addChildCalls
-        .map((c) => (c[0] as { text?: string }).text)
-        .filter((t): t is string => typeof t === "string");
+        .map((c: [unknown]) => (c[0] as { text?: string }).text)
+        .filter((t: unknown): t is string => typeof t === "string");
 
-      expect(allTexts.some((t) => t.includes("running..."))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("running..."))).toBe(true);
       // Should NOT show session ID footer while running
-      expect(allTexts.some((t) => t.includes("Session IDs"))).toBe(false);
+      expect(allTexts.some((t: string) => t.includes("Session IDs"))).toBe(false);
     });
   });
 });

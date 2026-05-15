@@ -129,6 +129,14 @@ export function registerDelegateTool(
           profileName: resolvedProfileName,
           profileInfo:
             resolvedProfile && resolvedProfileName ? profileSummary(resolvedProfileName, resolvedProfile) : undefined,
+          provider: resolvedProfile?.provider,
+          model: resolvedProfile?.model,
+          thinkingLevel: resolvedProfile?.thinkingLevel,
+          startedAt: Date.now(),
+          timeout: t.timeout ?? DEFAULT_TIMEOUT,
+          todoTotal: undefined,
+          todoCompleted: undefined,
+          toolCount: 0,
         };
       });
 
@@ -166,6 +174,13 @@ export function registerDelegateTool(
         }
       };
 
+      const timerInterval = setInterval(() => {
+        if (windows.some(w => w.status === "running")) {
+          emitUpdate();
+        }
+      }, 1000);
+
+      try {
       await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (task, index) => {
         const win = windows[index];
         const session = sessions[index];
@@ -233,9 +248,13 @@ export function registerDelegateTool(
           session.errorMessage = win.errorMessage;
           win.exitCode = 1;
           session.exitCode = 1;
+          win.completedAt = Date.now();
           emitUpdate();
         }
       });
+      } finally {
+        clearInterval(timerInterval);
+      }
 
       const summaryLines: string[] = [];
       for (const win of windows) {
@@ -293,32 +312,56 @@ export function registerDelegateTool(
         if (done > 0) {parts.push(theme.fg("success", `${done} done`));}
         if (errors > 0) {parts.push(theme.fg("error", `${errors} error${errors > 1 ? "s" : ""}`));}
         header += parts.join(theme.fg("dim", ", "));
-        header += theme.fg("dim", ` (${details.maxLinesPerWindow}-line window)`);
         container.addChild(new Text(header, 0, 0));
         container.addChild(new Spacer(1));
       }
 
       // ── Per-agent windows ──
+      const renderLine = (entry: WindowLine) => {
+        const textLines = entry.text.split("\n");
+        for (const line of textLines) {
+          if (entry.kind === "tool") {
+            container.addChild(new Text(`  ${theme.fg("muted", line)}`, 0, 0));
+          } else {
+            container.addChild(new Text(`  ${line}`, 0, 0));
+          }
+        }
+      };
+
       for (const win of details.windows) {
         const icon = win.status === "running" ? "⏳" : win.status === "error" ? "✗" : "✓";
         const color = win.status === "running" ? "warning" : win.status === "error" ? "error" : "success";
 
         let headerLine = `${theme.fg(color, icon)} ${theme.fg("accent", theme.bold(win.name))}`;
-        if (win.profileName) {
-          headerLine += theme.fg("dim", ` [${win.profileInfo ?? win.profileName}]`);
-        }
-        container.addChild(new Text(headerLine, 0, 0));
 
-        const renderLine = (entry: WindowLine) => {
-          const textLines = entry.text.split("\n");
-          for (const line of textLines) {
-            if (entry.kind === "tool") {
-              container.addChild(new Text(`  ${theme.fg("muted", line)}`, 0, 0));
-            } else {
-              container.addChild(new Text(`  ${line}`, 0, 0));
-            }
+        // Profile info segment
+        const headerParts: string[] = [];
+        if (win.profileName) {
+          let profilePart = win.profileName;
+          const provModel = [win.provider, win.model].filter(Boolean).join("/");
+          if (provModel) {profilePart += ` (${provModel}`;}
+          if (win.thinkingLevel) {
+            profilePart += provModel ? ` ${win.thinkingLevel}` : ` (${win.thinkingLevel})`;
           }
-        };
+          if (provModel) {profilePart += ")";}
+          headerParts.push(profilePart);
+        }
+
+        // Tool count
+        headerParts.push(`${win.toolCount} tools`);
+
+        // Todo segment - only show if todos are active and not all complete
+        if (win.todoTotal !== undefined && win.todoTotal > 0 && win.todoCompleted !== win.todoTotal) {
+          headerParts.push(`[${win.todoCompleted ?? 0}/${win.todoTotal}]`);
+        }
+
+        // Time segment
+        const endTime = win.completedAt ?? Date.now();
+        const elapsed = Math.floor((endTime - win.startedAt) / 1000);
+        headerParts.push(`${elapsed}s/${win.timeout}s`);
+
+        headerLine += theme.fg("dim", ` • ${headerParts.join(" • ")}`);
+        container.addChild(new Text(headerLine, 0, 0));
 
         if (_expanded) {
           // Expanded (Ctrl+O): show all captured messages, not just latest N

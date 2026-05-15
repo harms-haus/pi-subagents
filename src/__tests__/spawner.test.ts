@@ -71,6 +71,9 @@ describe("spawner", () => {
       lines: [],
       allMessages: [],
       exitCode: null,
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     mockSession = {
@@ -721,6 +724,400 @@ describe("spawner", () => {
       // Should fit on a single line
       expect(bashLines.length).toBe(1);
       expect(bashLines[0].text).toBe("→ bash → npm test && npm run lint");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("formatToolCall default case", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    async function emitToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", name: toolName, arguments: args }],
+        },
+      });
+
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    function findToolLine(keyword: string) {
+      const line = mockWindow.lines.find((l) => l.text.includes(keyword));
+      if (!line) {
+        throw new Error(
+          `Expected to find a line containing "${keyword}" in: ${mockWindow.lines.map((l) => l.text).join(", ")}`,
+        );
+      }
+      return line;
+    }
+
+    it("should render unknown tool with empty args as just toolName", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("my_tool", {});
+      const toolLine = findToolLine("my_tool");
+      expect(toolLine.text).toBe("\u2192 my_tool");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should render unknown tool with single arg as toolName {JSON args}", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("custom_tool", { target: "build-output" });
+      const toolLine = findToolLine("custom_tool");
+      expect(toolLine.text).toContain('custom_tool {"target":"build-output"}');
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should render unknown tool with multiple args as toolName {JSON args}", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("multi_arg_tool", { a: 1, b: "two", c: true });
+      const toolLine = findToolLine("multi_arg_tool");
+      expect(toolLine.text).toContain('multi_arg_tool {"a":1,"b":"two","c":true}');
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should truncate very long args with ellipsis", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      // Use a very narrow width to force truncation
+      vi.mocked(loadCommandPreviewWidth).mockResolvedValueOnce(30);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const longValue = "x".repeat(200);
+      await emitToolCall("big_tool", { data: longValue });
+      const toolLine = findToolLine("big_tool");
+      expect(toolLine.text).toContain("big_tool");
+      expect(toolLine.text).toContain("...");
+      // Should NOT contain the full 200-char string
+      expect(toolLine.text).not.toContain(longValue);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("todo tool renderers", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    async function emitToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", name: toolName, arguments: args }],
+        },
+      });
+
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    function findToolLine(keyword: string) {
+      const line = mockWindow.lines.find((l) => l.text.includes(keyword));
+      if (!line) {
+        throw new Error(
+          `Expected to find a line containing "${keyword}" in: ${mockWindow.lines.map((l) => l.text).join(", ")}`,
+        );
+      }
+      return line;
+    }
+
+    it("should render write_todos with count", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("write_todos", {
+        mode: "replace",
+        todos: [{ text: "Task A" }, { text: "Task B" }],
+      });
+      const writeLine = findToolLine("write_todos");
+      expect(writeLine.text).toContain("write_todos → 2 todos written");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should render edit_todos with action and indices when no todos array", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("edit_todos", {
+        action: "complete",
+        indices: [0, 2, 4],
+      });
+      const editLine = findToolLine("edit_todos");
+      expect(editLine.text).toContain("edit_todos → complete [0,2,4]");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should render edit_todos with todo text descriptions", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("edit_todos", {
+        action: "add",
+        indices: [5],
+        todos: [{ text: "Fix bug in auth" }, { text: "Add tests" }],
+      });
+      const editLine = findToolLine("edit_todos");
+      expect(editLine.text).toContain("edit_todos → Fix bug in auth, Add tests");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should truncate edit_todos descriptions at 48 chars", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const longDesc = "This is a very long todo description that should be truncated because it exceeds 48 chars";
+      await emitToolCall("edit_todos", {
+        action: "add",
+        indices: [0],
+        todos: [{ text: longDesc }],
+      });
+      const editLine = findToolLine("edit_todos");
+      // The description is joined and truncated to 48 chars (45 chars + "...")
+      expect(editLine.text).toContain("edit_todos → This is a very long todo description that sho...");
+      // The full description should NOT appear
+      expect(editLine.text).not.toContain("exceeds 48 chars");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should render list_todos with no arguments", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("list_todos", {});
+      const listLine = findToolLine("list_todos");
+      expect(listLine.text).toBe("\u2192 list_todos");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("tool count and todo tracking in handleStdoutLine", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    async function emitToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", name: toolName, arguments: args }],
+        },
+      });
+
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    it("should increment toolCount for each tool call", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockWindow.toolCount).toBe(0);
+
+      await emitToolCall("bash", { command: "echo hello" });
+      expect(mockWindow.toolCount).toBe(1);
+
+      await emitToolCall("read", { path: "/some/file.ts" });
+      expect(mockWindow.toolCount).toBe(2);
+
+      await emitToolCall("write", { path: "/some/out.ts", content: "hi" });
+      expect(mockWindow.toolCount).toBe(3);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should set todoTotal and reset todoCompleted on write_todos replace", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockWindow.todoTotal).toBeUndefined();
+      expect(mockWindow.todoCompleted).toBeUndefined();
+
+      await emitToolCall("write_todos", {
+        mode: "replace",
+        todos: [{ text: "A" }, { text: "B" }, { text: "C" }, { text: "D" }, { text: "E" }],
+      });
+      expect(mockWindow.todoTotal).toBe(5);
+      expect(mockWindow.todoCompleted).toBe(0);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should increment todoCompleted on edit_todos complete", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // First write todos
+      await emitToolCall("write_todos", {
+        mode: "replace",
+        todos: [{ text: "A" }, { text: "B" }, { text: "C" }],
+      });
+      expect(mockWindow.todoTotal).toBe(3);
+      expect(mockWindow.todoCompleted).toBe(0);
+
+      // Complete indices 0 and 2
+      await emitToolCall("edit_todos", {
+        action: "complete",
+        indices: [0, 2],
+      });
+      expect(mockWindow.todoCompleted).toBe(2);
+
+      // Complete index 1
+      await emitToolCall("edit_todos", {
+        action: "complete",
+        indices: [1],
+      });
+      expect(mockWindow.todoCompleted).toBe(3);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should add to todoTotal on write_todos append mode", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Initial write
+      await emitToolCall("write_todos", {
+        mode: "replace",
+        todos: [{ text: "A" }, { text: "B" }],
+      });
+      expect(mockWindow.todoTotal).toBe(2);
+
+      // Append 3 more
+      await emitToolCall("write_todos", {
+        mode: "append",
+        todos: [{ text: "C" }, { text: "D" }, { text: "E" }],
+      });
+      expect(mockWindow.todoTotal).toBe(2 + 3);
+
+      // Append 1 more
+      await emitToolCall("write_todos", {
+        mode: "append",
+        todos: [{ text: "F" }],
+      });
+      expect(mockWindow.todoTotal).toBe(2 + 3 + 1);
+
+      // todoCompleted should remain unchanged from append
+      expect(mockWindow.todoCompleted).toBe(0);
 
       mockProcess.emit("close", 0);
       await promise;

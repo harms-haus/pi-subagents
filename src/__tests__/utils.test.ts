@@ -49,6 +49,9 @@ describe("appendLineToWindow", () => {
       name: "test-window",
       lines: [],
       allMessages: [],
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     appendLineToWindow(win, "line 1", 10);
@@ -70,6 +73,9 @@ describe("appendLineToWindow", () => {
       name: "test-window",
       lines: [],
       allMessages: [],
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     for (let i = 1; i <= 15; i++) {
@@ -91,6 +97,9 @@ describe("appendLineToWindow", () => {
       name: "test-window",
       lines: [],
       allMessages: [],
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     for (let i = 1; i <= 20; i++) {
@@ -112,6 +121,9 @@ describe("appendLineToWindow", () => {
       name: "test-window",
       lines: [],
       allMessages: [],
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     appendLineToWindow(win, "   ", 10);
@@ -132,6 +144,9 @@ describe("appendLineToWindow", () => {
       name: "test-window",
       lines: [],
       allMessages: [],
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     appendLineToWindow(win, "hello   ", 10);
@@ -149,6 +164,9 @@ describe("appendLineToWindow", () => {
       name: "test-window",
       lines: [],
       allMessages: [],
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     appendLineToWindow(win, "\u001b[31merror\u001b[0m message", 10);
@@ -164,6 +182,9 @@ describe("appendLineToWindow", () => {
       name: "test-window",
       lines: [],
       allMessages: [],
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     appendLineToWindow(win, "tool output", 10, "tool");
@@ -325,6 +346,9 @@ describe("getSummaryText", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -333,6 +357,9 @@ describe("getSummaryText", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "3",
@@ -341,6 +368,9 @@ describe("getSummaryText", () => {
         name: "test3",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(getSummaryText(windows)).toBe("3 running");
@@ -355,6 +385,9 @@ describe("getSummaryText", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -363,6 +396,9 @@ describe("getSummaryText", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "3",
@@ -371,6 +407,9 @@ describe("getSummaryText", () => {
         name: "test3",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "4",
@@ -379,6 +418,9 @@ describe("getSummaryText", () => {
         name: "test4",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(getSummaryText(windows)).toBe("1 running, 2 done, 1 error");
@@ -397,6 +439,9 @@ describe("getSummaryText", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -405,6 +450,9 @@ describe("getSummaryText", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(getSummaryText(windows)).toBe("2 errors");
@@ -419,6 +467,9 @@ describe("getSummaryText", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(getSummaryText(windows)).toBe("1 error");
@@ -433,6 +484,9 @@ describe("getSummaryText", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -441,6 +495,9 @@ describe("getSummaryText", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(getSummaryText(windows)).toBe("2 done");
@@ -457,6 +514,9 @@ describe("countWindowStatuses", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -465,6 +525,9 @@ describe("countWindowStatuses", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "3",
@@ -473,6 +536,9 @@ describe("countWindowStatuses", () => {
         name: "test3",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 3, completed: 0, error: 0 });
@@ -487,6 +553,9 @@ describe("countWindowStatuses", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -495,6 +564,9 @@ describe("countWindowStatuses", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 0, completed: 2, error: 0 });
@@ -509,6 +581,9 @@ describe("countWindowStatuses", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -517,6 +592,9 @@ describe("countWindowStatuses", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "3",
@@ -525,6 +603,9 @@ describe("countWindowStatuses", () => {
         name: "test3",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 0, completed: 0, error: 3 });
@@ -539,6 +620,9 @@ describe("countWindowStatuses", () => {
         name: "test1",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "2",
@@ -547,6 +631,9 @@ describe("countWindowStatuses", () => {
         name: "test2",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "3",
@@ -555,6 +642,9 @@ describe("countWindowStatuses", () => {
         name: "test3",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "4",
@@ -563,6 +653,9 @@ describe("countWindowStatuses", () => {
         name: "test4",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
       {
         sessionId: "5",
@@ -571,6 +664,9 @@ describe("countWindowStatuses", () => {
         name: "test5",
         lines: [],
         allMessages: [],
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
       },
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 2, completed: 2, error: 1 });

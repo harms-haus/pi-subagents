@@ -308,6 +308,9 @@ describe("spawner: formatToolCall remaining branches", () => {
       lines: [],
       allMessages: [],
       exitCode: null,
+      startedAt: Date.now(),
+      timeout: 600,
+      toolCount: 0,
     };
 
     mockSession = {
@@ -404,8 +407,9 @@ describe("spawner: formatToolCall remaining branches", () => {
     const { finish } = startRun();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // write_todos
+    // write_todos replace
     await emitToolCall("write_todos", {
+      mode: "replace",
       todos: [
         { text: "Task A" },
         { text: "Task B" },
@@ -413,7 +417,16 @@ describe("spawner: formatToolCall remaining branches", () => {
       ],
     });
     const writeLine = findToolLine("write_todos");
-    expect(writeLine.text).toContain("write_todos → 3 todos");
+    expect(writeLine.text).toContain("write_todos → 3 todos written");
+
+    // write_todos append
+    await emitToolCall("write_todos", {
+      mode: "append",
+      todos: [{ text: "New task" }],
+    });
+    const appendLines = mockWindow.lines.filter((l) => l.text.includes("write_todos"));
+    const appendLine = appendLines[appendLines.length - 1];
+    expect(appendLine.text).toContain("write_todos → 1 todos written");
 
     // edit_todos
     await emitToolCall("edit_todos", {
@@ -426,7 +439,7 @@ describe("spawner: formatToolCall remaining branches", () => {
     // list_todos
     await emitToolCall("list_todos", {});
     const listLine = findToolLine("list_todos");
-    expect(listLine.text).toContain("list_todos");
+    expect(listLine.text).toBe("→ list_todos");
 
     await finish();
   });
@@ -503,7 +516,7 @@ describe("spawner: formatToolCall remaining branches", () => {
     });
 
     const customLine = findToolLine("custom_tool");
-    expect(customLine.text).toContain("custom_tool → build-output");
+    expect(customLine.text).toContain('custom_tool {"target":"build-output"}');
 
     // An unknown tool with no args
     await emitToolCall("mystery_tool", {});

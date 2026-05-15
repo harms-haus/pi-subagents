@@ -156,8 +156,8 @@ The tool provides custom `renderCall` and `renderResult` implementations:
   ```
 
 - **`renderResult`**: Shows a live rolling window display with:
-  - **Global status header**: `Sub-agents: 2 running, 1 done, 1 error (15-line window)`
-  - **Per-agent windows**: Each with a header (icon + name + profile), followed by rolling output lines. Tool calls are rendered in muted color.
+  - **Global status header**: `Sub-agents: 2 running, 1 done, 1 error`
+  - **Per-agent windows**: Each with a condensed header: `{icon} {bold name} • {profile-name} ({provider}/{model} {thinking-level}) • {n} tools • [{completed}/{total}] • {elapsed}s/{timeout}s`. Tool calls are rendered in muted color. The todo segment `[completed/total]` only appears when todos are active and incomplete. Elapsed time updates live every second and freezes when the subagent completes.
   - **Expanded mode** (Ctrl+O): Shows all captured messages instead of just the latest N lines.
   - **Error display**: Red-colored error message beneath the agent's output.
   - **Footer**: When all agents are done, displays session IDs for use with retrieval tools.

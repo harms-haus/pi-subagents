@@ -96,11 +96,20 @@ function formatToolCall(toolName: string, args: Record<string, unknown>, cwd: st
     // Todo tools
     case "write_todos": {
       const n = (args.todos as unknown[] | undefined)?.length ?? 0;
-      return `write_todos → ${n} todo${n !== 1 ? "s" : ""}`;
+      return `write_todos → ${n} todos written`;
     }
     case "edit_todos": {
-      const indices = (args.indices as number[] | undefined)?.join(",") ?? "...";
-      return `edit_todos → ${a.action ?? "?"} [${indices}]`;
+      const action = String(args.action ?? "?");
+      const indices = (args.indices as number[] | undefined) ?? [];
+      const todos = args.todos as Array<{text?: string}> | undefined;
+      let desc: string;
+      if (todos && todos.length > 0) {
+        desc = todos.map(t => t.text ?? "").join(", ");
+        if (desc.length > 48) {desc = `${desc.slice(0, 45)}...`;}
+      } else {
+        desc = `${action} [${indices.join(",")}]`;
+      }
+      return `edit_todos → ${desc}`;
     }
     case "list_todos":
       return "list_todos";
@@ -171,12 +180,13 @@ function formatToolCall(toolName: string, args: Record<string, unknown>, cwd: st
     }
 
     default: {
-      // Generic fallback: show name + first arg value if short
-      const keys = Object.keys(args);
-      if (keys.length === 0) {return toolName;}
-      const firstVal = String(args[keys[0]] ?? "");
-      if (firstVal.length > 60) {return `${toolName} → ...`;}
-      return `${toolName} → ${firstVal}`;
+      const argsStr = JSON.stringify(args);
+      const budget = widthBudget - toolName.length - 1;
+      if (argsStr === '{}') {return toolName;}
+      if (argsStr.length > budget) {
+        return `${toolName} ${argsStr.slice(0, Math.max(0, budget - 3))}...`;
+      }
+      return `${toolName} ${argsStr}`;
     }
   }
 }
@@ -230,8 +240,34 @@ function handleStdoutLine(
       for (const part of msg.content) {
         if (part.type === "toolCall") {
           const toolArgs = (part as ToolCallPart).arguments || {};
-          const preview = formatToolCall((part as ToolCallPart).name, toolArgs, cwd, widthBudget);
+          const toolName = (part as ToolCallPart).name;
+          const preview = formatToolCall(toolName, toolArgs, cwd, widthBudget);
           appendLineToWindow(win, `→ ${preview}`, maxLines, "tool");
+
+          // Track tool count
+          win.toolCount += 1;
+
+          // Track todo progress
+          if (toolName === "write_todos") {
+            const newCount = (toolArgs.todos as unknown[] | undefined)?.length ?? 0;
+            const mode = toolArgs.mode as string | undefined;
+            if (mode === "append") {
+              win.todoTotal = (win.todoTotal ?? 0) + newCount;
+            } else {
+              win.todoTotal = newCount;
+              win.todoCompleted = 0;
+            }
+          } else if (toolName === "edit_todos") {
+            const editAction = toolArgs.action as string | undefined;
+            const editIndices = toolArgs.indices as number[] | undefined;
+            if (editAction === "complete" && editIndices) {
+              win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
+            } else if (editAction === "add" && toolArgs.todos) {
+              win.todoTotal = (win.todoTotal ?? 0) + ((toolArgs.todos as unknown[] | undefined)?.length ?? 0);
+            } else if (editAction === "abandon" && editIndices) {
+              win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
+            }
+          }
         }
       }
     }
@@ -280,6 +316,7 @@ function handleProcessExit(
   const status = isError ? "error" : "completed";
 
   win.status = status;
+  win.completedAt = Date.now();
   syncState(win, session);
 
   onUpdate();

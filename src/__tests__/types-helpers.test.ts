@@ -22,6 +22,9 @@ describe("syncState", () => {
 			exitCode: null,
 			lines: [],
 			allMessages: [],
+			startedAt: Date.now(),
+			timeout: 600,
+			toolCount: 0,
 			...overrides,
 		};
 	}

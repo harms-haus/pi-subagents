@@ -83,6 +83,22 @@ export interface SubAgentWindow extends SubagentState {
   allMessages: WindowLine[];
   /** Human-readable profile summary for display */
   profileInfo?: string;
+  /** Provider from the agent profile (e.g. "anthropic", "openai") */
+  provider?: string;
+  /** Thinking level from the agent profile */
+  thinkingLevel?: string;
+  /** Date.now() timestamp when the sub-agent started */
+  startedAt: number;
+  /** Date.now() timestamp when the sub-agent completed (if applicable) */
+  completedAt?: number;
+  /** Task timeout in seconds */
+  timeout: number;
+  /** Total number of todo items written */
+  todoTotal?: number;
+  /** Number of completed todo items */
+  todoCompleted?: number;
+  /** Number of tool calls made */
+  toolCount: number;
 }
 
 /** Persistent session data stored for retrieval */

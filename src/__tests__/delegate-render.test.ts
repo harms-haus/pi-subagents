@@ -89,8 +89,11 @@ function makeWindow(overrides: Partial<SubAgentWindow> = {}): SubAgentWindow {
     lines: [],
     allMessages: [],
     exitCode: null,
+    startedAt: Date.now(),
+    timeout: 600,
+    toolCount: 0,
     ...overrides,
-  } as SubAgentWindow;
+  };
 }
 
 /** Factory for WindowedSubagentDetails */
@@ -474,6 +477,236 @@ describe("delegate_to_subagents render functions", () => {
       expect(allTexts.some((t: string) => t.includes("running..."))).toBe(true);
       // Should NOT show session ID footer while running
       expect(allTexts.some((t: string) => t.includes("Session IDs"))).toBe(false);
+    });
+
+    // ── New header format tests ────────────────────────────────────
+
+    it("renders condensed header with all fields present", () => {
+      const fixedStart = Date.now() - 45_000; // 45 seconds ago
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "full-header-task",
+            status: "running",
+            profileName: "researcher",
+            provider: "anthropic",
+            model: "claude-sonnet-4-20250514",
+            thinkingLevel: "high",
+            toolCount: 7,
+            todoTotal: 5,
+            todoCompleted: 2,
+            startedAt: fixedStart,
+            timeout: 600,
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        theme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(theme.fg).mock.calls;
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
+
+      // Icon and name
+      expect(allFgText).toContain("⏳");
+      expect(allFgText).toContain("full-header-task");
+      // Profile segment: profile-name (provider/model thinking)
+      expect(allFgText).toContain("researcher");
+      expect(allFgText).toContain("anthropic/claude-sonnet-4-20250514");
+      expect(allFgText).toContain("high");
+      // Tool count
+      expect(allFgText).toContain("7 tools");
+      // Todo segment: [completed/total]
+      expect(allFgText).toContain("2/5");
+      // Time segment: elapsed/timeout
+      expect(allFgText).toContain("45s/600s");
+    });
+
+    it("renders header with minimal fields (no profile, no provider, no model)", () => {
+      const fixedStart = Date.now() - 10_000; // 10 seconds ago
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "minimal-task",
+            status: "running",
+            startedAt: fixedStart,
+            timeout: 300,
+            toolCount: 0,
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        theme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(theme.fg).mock.calls;
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
+
+      // Icon and name should be present
+      expect(allFgText).toContain("⏳");
+      expect(allFgText).toContain("minimal-task");
+      // Tool count should still be present
+      expect(allFgText).toContain("0 tools");
+      // Time segment
+      expect(allFgText).toContain("10s/300s");
+      // No profile name or provider/model parenthetical should appear
+      // Note: (starting...) may still appear from the empty-lines placeholder
+      const dimCalls = fgCalls.filter((c: [string, string]) => c[0] === "dim");
+      const dimText = dimCalls.map((c: [string, string]) => c[1]).join(" ");
+      // The dim header parts should NOT contain a profile parenthetical like "name (provider/model)"
+      expect(dimText).not.toMatch(/\w+ \([\w/]+\)/);
+    });
+
+    it("hides todo segment when todoTotal is undefined", () => {
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "no-todo-task",
+            status: "running",
+            todoTotal: undefined,
+            todoCompleted: undefined,
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        theme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(theme.fg).mock.calls;
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
+
+      // Should not contain any todo-style bracket pattern
+      expect(allFgText).not.toMatch(/\d+\/\d+/);
+    });
+
+    it("hides todo segment when todoTotal is 0", () => {
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "zero-todo-task",
+            status: "running",
+            todoTotal: 0,
+            todoCompleted: 0,
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        theme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(theme.fg).mock.calls;
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
+
+      // Should not contain todo bracket pattern when total is 0
+      expect(allFgText).not.toMatch(/\[\d+\/\d+\]/);
+    });
+
+    it("hides todo segment when all todos are complete", () => {
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "all-done-task",
+            status: "running",
+            todoTotal: 5,
+            todoCompleted: 5,
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        theme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(theme.fg).mock.calls;
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
+
+      // When all complete (todoCompleted === todoTotal), todo segment should be hidden
+      expect(allFgText).not.toContain("0/5");
+    });
+
+    it("shows todo segment when active and incomplete", () => {
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "active-todo-task",
+            status: "running",
+            todoTotal: 8,
+            todoCompleted: 3,
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        theme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(theme.fg).mock.calls;
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
+
+      // Should show [completed/total] = [3/8]
+      expect(allFgText).toContain("3/8");
+    });
+
+    it("does not include (N-line window) in global header", () => {
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "window-label-task",
+            status: "running",
+          }),
+        ],
+        maxLinesPerWindow: 15,
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        theme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(theme.fg).mock.calls;
+      const allFgText = fgCalls.map((c: [string, string]) => c[1]).join(" ");
+
+      // The old (N-line window) label should NOT appear anywhere
+      expect(allFgText).not.toContain("-line window");
+      expect(allFgText).not.toContain("15-line window");
     });
   });
 });

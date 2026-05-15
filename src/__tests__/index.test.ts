@@ -83,7 +83,7 @@ describe("index.ts — default export", () => {
     mod.default(mockPi);
 
     // Capture the session_shutdown handler
-    const onCalls = vi.mocked(mockPi.on).mock.calls;
+    const onCalls = vi.mocked(mockPi.on).mock.calls as [string, any][];
     const shutdownCall = onCalls.find(([event]) => event === "session_shutdown");
     if (shutdownCall) {
       capturedShutdownHandler = shutdownCall[1] as () => Promise<void>;

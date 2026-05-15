@@ -6,15 +6,10 @@
 
 import { editProfileInteractive } from "../profile-editor";
 import { deleteProfile, formatProfileDetail, loadProfiles, profileSummary } from "../profiles";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
-interface ProfileCommandContext {
-  cwd: string;
-  ui: {
-    notify(message: string, type: string): void;
-    confirm(title: string, message: string): Promise<boolean>;
-  };
-}
+/** Subset of ExtensionCommandContext used by the profile command */
+type ProfileCommandContext = Pick<ExtensionCommandContext, "cwd" | "ui">;
 
 /**
  * Register the /profile command.

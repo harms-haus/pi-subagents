@@ -22,7 +22,7 @@
  * You are a coding agent...
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { type Dirent, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -183,9 +183,9 @@ export function applyExcludeTools(profile: SubagentProfile, allToolNames: string
 function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
   if (!existsSync(dir)) {return;}
 
-  let entries: ReturnType<typeof readdirSync>;
+  let entries: Dirent<string>[];
   try {
-    entries = readdirSync(dir, { withFileTypes: true });
+    entries = readdirSync(dir, { withFileTypes: true }) as Dirent<string>[];
   } catch {
     return;
   }

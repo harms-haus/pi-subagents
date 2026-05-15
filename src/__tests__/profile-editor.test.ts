@@ -25,7 +25,7 @@ interface MockUI {
 }
 
 function createCtx(ui: MockUI) {
-  return { ui, cwd: "/tmp/project" };
+  return { ui, cwd: "/tmp/project" } as unknown as Parameters<typeof editProfileInteractive>[2];
 }
 
 /**

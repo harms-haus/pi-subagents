@@ -1,11 +1,12 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+import type { Message } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerProfileCommand } from "../commands/profile";
 import { resolveProfile } from "../profiles";
 import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
 import { registerRetrievalTools } from "../tools/retrieval";
-import type { SessionRecord, SubagentSessionData } from "../types";
+import type { SessionRecord, SubAgentWindow, SubagentSessionData } from "../types";
 import { countWindowStatuses } from "../utils";
 
 // Mock the TUI components
@@ -177,7 +178,7 @@ describe("tools", () => {
             {
               role: "assistant",
               content: [{ type: "text", text: "Final output from sub-agent" }],
-            },
+            } as unknown as Message,
           ],
           exitCode: 0,
           startedAt: Date.now(),
@@ -194,11 +195,11 @@ describe("tools", () => {
         if (!executeFn) {
           throw new Error("Tool not registered");
         }
-        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, null, vi.fn(), null);
+        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any);
 
         expect(result.content[0].type).toBe("text");
-        expect(result.content[0].text).toBe("Final output from sub-agent");
-        expect(result.details.sessionId).toBe("test-session");
+        expect((result.content[0] as { text: string }).text).toBe("Final output from sub-agent");
+        expect((result.details as Record<string, unknown>).sessionId).toBe("test-session");
       });
 
       it("should throw error for invalid session ID", async () => {
@@ -215,7 +216,7 @@ describe("tools", () => {
         }
 
         await expect(
-          executeFn("tool-call-id", { sessionId: "non-existent-session" }, null, vi.fn(), null),
+          executeFn("tool-call-id", { sessionId: "non-existent-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any),
         ).rejects.toThrow('Session "non-existent-session" not found');
       });
 
@@ -241,9 +242,9 @@ describe("tools", () => {
         if (!executeFn) {
           throw new Error("Tool not registered");
         }
-        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, null, vi.fn(), null);
+        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any);
 
-        expect(result.content[0].text).toBe("(no text output from sub-agent)");
+        expect((result.content[0] as { text: string }).text).toBe("(no text output from sub-agent)");
       });
     });
 
@@ -267,9 +268,9 @@ describe("tools", () => {
                   name: "test-tool",
                   arguments: { arg1: "value1" },
                   id: "tool-call-1",
-                } as const,
+                },
               ],
-            },
+            } as unknown as Message,
           ],
           exitCode: 0,
           startedAt: Date.now(),
@@ -283,11 +284,11 @@ describe("tools", () => {
         if (!executeFn) {
           throw new Error("Tool not registered");
         }
-        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, null, vi.fn(), null);
+        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any);
 
         expect(result.content[0].type).toBe("text");
-        expect(result.content[0].text).toContain("First response");
-        expect(result.details.messageCount).toBe(1);
+        expect((result.content[0] as { text: string }).text).toContain("First response");
+        expect((result.details as Record<string, unknown>).messageCount).toBe(1);
       });
 
       it("should throw error for invalid session ID", async () => {
@@ -302,7 +303,7 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        await expect(executeFn("tool-call-id", { sessionId: "non-existent" }, null, vi.fn(), null)).rejects.toThrow(
+        await expect(executeFn("tool-call-id", { sessionId: "non-existent" }, undefined, vi.fn(), { cwd: process.cwd() } as any)).rejects.toThrow(
           'Session "non-existent" not found',
         );
       });
@@ -325,7 +326,7 @@ describe("tools", () => {
           bold: vi.fn((text: string) => text),
         } as unknown as Theme;
 
-        renderCall({ sessionId: "test-123" }, mockTheme, null as unknown);
+        renderCall({ sessionId: "test-123" }, mockTheme, null as any);
 
         expect(mockTheme.fg).toHaveBeenCalledWith("accent", "test-123");
       });
@@ -346,7 +347,7 @@ describe("tools", () => {
           bold: vi.fn((text: string) => text),
         } as unknown as Theme;
 
-        renderCall({}, mockTheme, null as unknown);
+        renderCall({}, mockTheme, null as any);
 
         expect(mockTheme.fg).toHaveBeenCalledWith("accent", "...");
       });
@@ -367,7 +368,7 @@ describe("tools", () => {
           bold: vi.fn((text: string) => text),
         } as unknown as Theme;
 
-        renderCall({ sessionId: "session-456" }, mockTheme, null as unknown);
+        renderCall({ sessionId: "session-456" }, mockTheme, null as any);
 
         expect(mockTheme.fg).toHaveBeenCalledWith("accent", "session-456");
       });
@@ -391,9 +392,10 @@ describe("tools", () => {
 
         const result = {
           content: [{ type: "text", text: "Test output content" }],
+          details: {},
         };
 
-        renderResult(result, { expanded: false }, mockTheme, null as unknown);
+        renderResult(result as any, { expanded: false, isPartial: false }, mockTheme, null as any);
 
         expect(mockTheme.fg).toHaveBeenCalledWith("toolOutput", "Test output content");
       });
@@ -416,9 +418,10 @@ describe("tools", () => {
         // When content is not text type, it should use default label
         const result = {
           content: [{} as { type: string }],
+          details: {},
         };
 
-        renderResult(result, { expanded: false }, mockTheme, null as unknown);
+        renderResult(result as any, { expanded: false, isPartial: false }, mockTheme, null as any);
 
         expect(mockTheme.fg).toHaveBeenCalledWith("toolOutput", "(no output)");
       });
@@ -445,9 +448,9 @@ describe("tools", () => {
           {
             tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
           },
-          null,
+          undefined,
           vi.fn(),
-          { cwd: process.cwd() },
+          { cwd: process.cwd() } as any,
         );
 
         expect(result).toBeDefined();
@@ -474,9 +477,9 @@ describe("tools", () => {
           {
             tasks: [{ name: "test-task", prompt: "test prompt" }],
           },
-          null,
+          undefined,
           vi.fn(),
-          { cwd: process.cwd() },
+          { cwd: process.cwd() } as any,
         );
 
         expect(result).toBeDefined();
@@ -494,7 +497,7 @@ describe("tools", () => {
         const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
 
         // Mock getAllTools to return a set of tools
-        vi.mocked(mockPi.getAllTools).mockReturnValue([{ name: "read" }, { name: "bash" }, { name: "write" }]);
+        vi.mocked(mockPi.getAllTools).mockReturnValue([{ name: "read", description: "", parameters: {} as any, sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" } }, { name: "bash", description: "", parameters: {} as any, sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" } }, { name: "write", description: "", parameters: {} as any, sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" } }]);
 
         // Mock resolveProfile to return a profile with excludeTools
         vi.mocked(resolveProfile).mockReturnValue({
@@ -518,9 +521,9 @@ describe("tools", () => {
           {
             tasks: [{ name: "test-task", prompt: "test prompt", profile: "restricted" }],
           },
-          null,
+          undefined,
           vi.fn(),
-          { cwd: process.cwd() },
+          { cwd: process.cwd() } as any,
         );
 
         // Verify runSubAgent was called with the computed tools allowlist
@@ -559,9 +562,9 @@ describe("tools", () => {
             {
               tasks: [{ name: "test-task", prompt: "test prompt", profile: "conflicted" }],
             },
-            null,
+            undefined,
             vi.fn(),
-            { cwd: process.cwd() },
+            { cwd: process.cwd() } as any,
           ),
         ).rejects.toThrow(/mutually exclusive/i);
       });
@@ -589,9 +592,9 @@ describe("tools", () => {
             {
               tasks: [{ name: "test-task", prompt: "test prompt", resume: "nonexistent" }],
             },
-            null,
+            undefined,
             vi.fn(),
-            { cwd: process.cwd() },
+            { cwd: process.cwd() } as any,
           ),
         ).rejects.toThrow(/not found/i);
       });
@@ -631,9 +634,9 @@ describe("tools", () => {
             {
               tasks: [{ name: "test-task", prompt: "test prompt", resume: runningSessionId }],
             },
-            null,
+            undefined,
             vi.fn(),
-            { cwd: process.cwd() },
+            { cwd: process.cwd() } as any,
           ),
         ).rejects.toThrow(/still running/i);
       });
@@ -654,7 +657,7 @@ describe("tools", () => {
             {
               role: "assistant",
               content: [{ type: "text", text: "Previous assistant response" }],
-            },
+            } as unknown as Message,
           ],
           exitCode: 0,
           startedAt: Date.now(),
@@ -676,9 +679,9 @@ describe("tools", () => {
           {
             tasks: [{ name: "test-task", prompt: "new instructions", resume: previousSessionId }],
           },
-          null,
+          undefined,
           vi.fn(),
-          { cwd: process.cwd() },
+          { cwd: process.cwd() } as any,
         );
 
         // Verify the prompt passed to runSubAgent contains the resume formatting
@@ -721,13 +724,13 @@ describe("tools", () => {
           {
             tasks: [{ name: "test-task", prompt: "new instructions", resume: previousSessionId }],
           },
-          null,
+          undefined,
           vi.fn(),
-          { cwd: process.cwd() },
+          { cwd: process.cwd() } as any,
         );
 
         // Verify the session ID in the result matches the original
-        expect(result.details.sessionIds).toContain(previousSessionId);
+        expect((result.details as Record<string, unknown>).sessionIds).toContain(previousSessionId);
       });
     });
 
@@ -746,7 +749,7 @@ describe("tools", () => {
             {
               role: "assistant",
               content: [{ type: "text", text: "First run output" }],
-            },
+            } as unknown as Message,
           ],
           exitCode: 0,
           startedAt: Date.now(),
@@ -761,7 +764,7 @@ describe("tools", () => {
             {
               role: "assistant",
               content: [{ type: "text", text: "Second run output" }],
-            },
+            } as unknown as Message,
           ],
           exitCode: 0,
           startedAt: Date.now(),
@@ -776,9 +779,9 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const result = await executeFn("tool-call-id", { sessionId }, null, vi.fn(), null);
+        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), { cwd: process.cwd() } as any);
 
-        expect(result.content[0].text).toBe("Second run output");
+        expect((result.content[0] as { text: string }).text).toBe("Second run output");
       });
     });
 
@@ -797,7 +800,7 @@ describe("tools", () => {
             {
               role: "assistant",
               content: [{ type: "text", text: "First run message" }],
-            },
+            } as unknown as Message,
           ],
           exitCode: 0,
           startedAt: Date.now(),
@@ -812,7 +815,7 @@ describe("tools", () => {
             {
               role: "assistant",
               content: [{ type: "text", text: "Second run message" }],
-            },
+            } as unknown as Message,
           ],
           exitCode: 0,
           startedAt: Date.now(),
@@ -827,12 +830,12 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const result = await executeFn("tool-call-id", { sessionId }, null, vi.fn(), null);
+        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), { cwd: process.cwd() } as any);
 
-        expect(result.content[0].text).toContain("Run 1/2");
-        expect(result.content[0].text).toContain("Run 2/2");
-        expect(result.content[0].text).toContain("First run message");
-        expect(result.content[0].text).toContain("Second run message");
+        expect((result.content[0] as { text: string }).text).toContain("Run 1/2");
+        expect((result.content[0] as { text: string }).text).toContain("Run 2/2");
+        expect((result.content[0] as { text: string }).text).toContain("First run message");
+        expect((result.content[0] as { text: string }).text).toContain("Second run message");
       });
 
       it("should include runCount in details", async () => {
@@ -869,9 +872,9 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const result = await executeFn("tool-call-id", { sessionId }, null, vi.fn(), null);
+        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), { cwd: process.cwd() } as any);
 
-        expect(result.details.runCount).toBe(2);
+        expect((result.details as any).runCount).toBe(2);
       });
     });
   });
@@ -879,7 +882,7 @@ describe("tools", () => {
   describe("utils", () => {
     describe("countWindowStatuses", () => {
       it("should count all running windows", () => {
-        const windows = [{ status: "running" }, { status: "running" }, { status: "running" }] as const[];
+        const windows = [{ status: "running" }, { status: "running" }, { status: "running" }] as any as SubAgentWindow[];
 
         const result = countWindowStatuses(windows);
 
@@ -889,7 +892,7 @@ describe("tools", () => {
       });
 
       it("should count all completed windows", () => {
-        const windows = [{ status: "completed" }, { status: "completed" }] as const[];
+        const windows = [{ status: "completed" }, { status: "completed" }] as any as SubAgentWindow[];
 
         const result = countWindowStatuses(windows);
 
@@ -899,7 +902,7 @@ describe("tools", () => {
       });
 
       it("should count all error windows", () => {
-        const windows = [{ status: "error" }, { status: "error" }, { status: "error" }] as const[];
+        const windows = [{ status: "error" }, { status: "error" }, { status: "error" }] as any as SubAgentWindow[];
 
         const result = countWindowStatuses(windows);
 
@@ -915,7 +918,7 @@ describe("tools", () => {
           { status: "error" },
           { status: "running" },
           { status: "completed" },
-        ] as const[];
+        ] as any as SubAgentWindow[];
 
         const result = countWindowStatuses(windows);
 
@@ -925,7 +928,7 @@ describe("tools", () => {
       });
 
       it("should handle empty array", () => {
-        const windows: readonly { status: string }[] = [];
+        const windows: SubAgentWindow[] = [];
 
         const result = countWindowStatuses(windows);
 

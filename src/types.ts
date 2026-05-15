@@ -163,7 +163,7 @@ function getTextContent(msg: { content?: unknown }): string | undefined {
   if (Array.isArray(msg.content)) {
     const texts: string[] = [];
     for (const part of msg.content as ContentPart[]) {
-      if (part.type === "text" && "text" in part && part.text) {texts.push(part.text);}
+      if (part.type === "text" && "text" in part && typeof part.text === "string") {texts.push(part.text);}
     }
     return texts.join("\n") || undefined;
   }

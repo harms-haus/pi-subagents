@@ -9,7 +9,7 @@ import { Type } from "typebox";
 import { loadMaxLinesPerWindow, loadProfiles, profileSummary } from "../profiles";
 import { getLastAssistantText, getTextParts } from "../utils";
 import type { SessionRecord, ToolCallPart } from "../types";
-import type { ExtensionAPI, Theme, ToolExecutionResult } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, Theme, AgentToolResult } from "@earendil-works/pi-coding-agent";
 
 // ── Rendering Helpers ───────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ import type { ExtensionAPI, Theme, ToolExecutionResult } from "@earendil-works/p
  * Used by list_subagent_profiles (no truncation needed).
  */
 function createSimpleRenderResult(defaultLabel: string = "(no output)") {
-  return (result: ToolExecutionResult, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
+  return (result: AgentToolResult<unknown>, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
     const text = result.content[0];
     const content = text?.type === "text" ? text.text : defaultLabel;
     return new Text(theme.fg("toolOutput", content), 0, 0);
@@ -31,7 +31,7 @@ function createSimpleRenderResult(defaultLabel: string = "(no output)") {
  * The full content is still injected into context; only the TUI display is shortened.
  */
 function createTruncatingRenderResult(defaultLabel: string = "(no output)") {
-  return (result: ToolExecutionResult, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
+  return (result: AgentToolResult<unknown>, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
     const text = result.content[0];
     const content = text?.type === "text" ? text.text : defaultLabel;
     const lines = content.split("\n");

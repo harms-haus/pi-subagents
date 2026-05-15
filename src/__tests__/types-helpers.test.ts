@@ -3,10 +3,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { Message } from "@earendil-works/pi-ai";
 import type {
 	SubAgentWindow,
 	SubagentSessionData,
-	SubagentState,
 } from "../types";
 import { formatRunsForResume, syncState } from "../types";
 
@@ -14,7 +14,7 @@ import { formatRunsForResume, syncState } from "../types";
 
 describe("syncState", () => {
 	/** Helper to create a minimal SubAgentWindow (extends SubagentState) */
-	function makeWindow(overrides: Partial<SubagentState> = {}): SubAgentWindow {
+	function makeWindow(overrides: Partial<SubAgentWindow> = {}): SubAgentWindow {
 		return {
 			sessionId: "window-1",
 			name: "test-window",
@@ -187,7 +187,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "user",
 					content: [{ type: "text", text: "Please do something" }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -204,7 +204,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "assistant",
 					content: [{ type: "text", text: "I will help you with that." }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -226,7 +226,7 @@ describe("formatRunsForResume", () => {
 							arguments: { path: "/tmp/test.txt" },
 						},
 					],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -246,7 +246,7 @@ describe("formatRunsForResume", () => {
 					content: [
 						{ type: "toolCall", name: "big_tool", arguments: longArgs },
 					],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -268,7 +268,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "toolResult",
 					content: [{ type: "text", text: "file contents here" }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -284,7 +284,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "toolResult",
 					content: [{ type: "text", text: longText }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -308,7 +308,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "toolResult",
 					content: [{ type: "text", text: shortText }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -326,12 +326,12 @@ describe("formatRunsForResume", () => {
 	it("should include run separators for multiple runs", () => {
 		const run1 = makeRun({
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "first prompt" }] },
+				{ role: "user", content: [{ type: "text", text: "first prompt" }] } as unknown as Message,
 			],
 		});
 		const run2 = makeRun({
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "second prompt" }] },
+				{ role: "user", content: [{ type: "text", text: "second prompt" }] } as unknown as Message,
 			],
 		});
 
@@ -347,8 +347,8 @@ describe("formatRunsForResume", () => {
 		const run = makeRun({
 			status: "completed",
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "hi" }] },
-				{ role: "assistant", content: [{ type: "text", text: "hello" }] },
+				{ role: "user", content: [{ type: "text", text: "hi" }] } as unknown as Message,
+				{ role: "assistant", content: [{ type: "text", text: "hello" }] } as unknown as Message,
 			],
 		});
 
@@ -363,7 +363,7 @@ describe("formatRunsForResume", () => {
 			status: "error",
 			errorMessage: "Process timed out",
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "do work" }] },
+				{ role: "user", content: [{ type: "text", text: "do work" }] } as unknown as Message,
 			],
 		});
 
@@ -377,7 +377,7 @@ describe("formatRunsForResume", () => {
 			status: "completed",
 			errorMessage: undefined,
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "do work" }] },
+				{ role: "user", content: [{ type: "text", text: "do work" }] } as unknown as Message,
 			],
 		});
 
@@ -404,7 +404,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "user",
 					content: [],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -422,7 +422,7 @@ describe("formatRunsForResume", () => {
 						{ type: "text", text: "Part one" },
 						{ type: "text", text: "Part two" },
 					],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -437,7 +437,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "assistant",
 					content: [{ type: "toolCall", name: "simple_tool" }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -450,7 +450,7 @@ describe("formatRunsForResume", () => {
 		const run = makeRun({
 			status: "completed",
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "Read the file" }] },
+				{ role: "user", content: [{ type: "text", text: "Read the file" }] } as unknown as Message,
 				{
 					role: "assistant",
 					content: [
@@ -461,15 +461,15 @@ describe("formatRunsForResume", () => {
 							arguments: { path: "/tmp/test.txt" },
 						},
 					],
-				},
+				} as unknown as Message,
 				{
 					role: "toolResult",
 					content: [{ type: "text", text: "Hello World" }],
-				},
+				} as unknown as Message,
 				{
 					role: "assistant",
 					content: [{ type: "text", text: "The file contains: Hello World" }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -485,8 +485,8 @@ describe("formatRunsForResume", () => {
 	it("should separate parts with double newlines", () => {
 		const run = makeRun({
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "msg1" }] },
-				{ role: "assistant", content: [{ type: "text", text: "msg2" }] },
+				{ role: "user", content: [{ type: "text", text: "msg1" }] } as unknown as Message,
+				{ role: "assistant", content: [{ type: "text", text: "msg2" }] } as unknown as Message,
 			],
 		});
 
@@ -502,7 +502,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "toolResult",
 					content: [{ type: "text", text: exactText }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -524,7 +524,7 @@ describe("formatRunsForResume", () => {
 				{
 					role: "toolResult",
 					content: [{ type: "text", text: text501 }],
-				},
+				} as unknown as Message,
 			],
 		});
 
@@ -540,7 +540,7 @@ describe("formatRunsForResume", () => {
 
 	it("should not produce run separator header for a single run", () => {
 		const run = makeRun({
-			messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+			messages: [{ role: "user", content: [{ type: "text", text: "hello" }] } as unknown as Message],
 		});
 
 		const result = formatRunsForResume([run]);

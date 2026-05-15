@@ -67,8 +67,8 @@ function getRenderFunctions() {
   expect(toolRegistration).toBeDefined();
 
   return {
-    renderCall: toolRegistration[0].renderCall,
-    renderResult: toolRegistration[0].renderResult,
+    renderCall: toolRegistration![0].renderCall,
+    renderResult: toolRegistration![0].renderResult,
   };
 }
 
@@ -131,12 +131,12 @@ describe("delegate_to_subagents render functions", () => {
       const result = renderCall(
         { tasks: [{ name: "build", prompt: "build the project" }] },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       // Should be a Text instance with the right content
       expect(result).toEqual({ text: expect.any(String) });
-      const text = (result as { text: string }).text;
+      const text = (result as unknown as { text: string }).text;
 
       expect(text).toContain("delegate_to_subagents");
       expect(text).toContain("1 sub-agent");
@@ -154,10 +154,10 @@ describe("delegate_to_subagents render functions", () => {
           ],
         },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
-      const text = (result as { text: string }).text;
+      const text = (result as unknown as { text: string }).text;
       expect(text).toContain("3 sub-agents");
     });
 
@@ -168,10 +168,10 @@ describe("delegate_to_subagents render functions", () => {
           profile: "researcher",
         },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
-      const text = (result as { text: string }).text;
+      const text = (result as unknown as { text: string }).text;
       expect(text).toContain("default profile: researcher");
     });
 
@@ -184,10 +184,10 @@ describe("delegate_to_subagents render functions", () => {
           ],
         },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
-      const text = (result as { text: string }).text;
+      const text = (result as unknown as { text: string }).text;
       expect(text).toContain("profiles: [code-reviewer, researcher]");
     });
   });
@@ -197,10 +197,10 @@ describe("delegate_to_subagents render functions", () => {
   describe("renderResult", () => {
     it("renders when no details provided", () => {
       const result = renderResult(
-        { content: [{ type: "text", text: "done" }] },
+        { content: [{ type: "text", text: "done" }] } as any,
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       // Without details it should return a simple Text
@@ -223,7 +223,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       // The theme.fg should have been called with status counts
@@ -247,7 +247,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       const fgCalls = vi.mocked(theme.fg).mock.calls;
@@ -276,7 +276,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       const fgCalls = vi.mocked(theme.fg).mock.calls;
@@ -305,7 +305,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       const fgCalls = vi.mocked(theme.fg).mock.calls;
@@ -337,7 +337,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       // A Container should have been created
@@ -382,7 +382,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: true },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       const MockContainer = vi.mocked(Container);
@@ -423,7 +423,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       const MockContainer = vi.mocked(Container);
@@ -459,7 +459,7 @@ describe("delegate_to_subagents render functions", () => {
         { content: [{ type: "text", text: "..." }], details },
         { isPartial: false, expanded: false },
         theme,
-        null as unknown,
+        null as unknown as any,
       );
 
       const MockContainer = vi.mocked(Container);

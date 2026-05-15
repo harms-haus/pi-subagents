@@ -226,7 +226,7 @@ function handleStdoutLine(
       }
     }
 
-    if (msg.content) {
+    if (msg.content && typeof msg.content !== "string") {
       for (const part of msg.content) {
         if (part.type === "toolCall") {
           const toolArgs = (part as ToolCallPart).arguments || {};
@@ -237,7 +237,7 @@ function handleStdoutLine(
     }
   }
 
-  if (msg.model || msg.stopReason || msg.errorMessage) {
+  if (msg.role === "assistant" && (msg.model || msg.stopReason || msg.errorMessage)) {
     win.model = msg.model;
     win.stopReason = msg.stopReason;
     win.errorMessage = msg.errorMessage;

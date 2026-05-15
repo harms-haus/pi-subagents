@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import type { ChildProcess } from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runSubAgent } from "../spawner";
 import type { SubAgentWindow, SubagentSessionData } from "../types";
@@ -61,7 +62,7 @@ describe("spawner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcess = createMockProcess();
-    vi.mocked(spawn).mockReturnValue(mockProcess);
+    vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess);
 
     mockWindow = {
       name: "test-task",

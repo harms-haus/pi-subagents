@@ -12,20 +12,15 @@ import {
   type SubagentProfile,
   type ThinkingLevel,
 } from "./profiles";
+import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 
 /** Subset of ExtensionContext used by the profile editor. */
-interface ProfileEditorUIContext {
-  select<T = string>(title: string, options: string[]): Promise<T | undefined>;
-  input(title: string, placeholder?: string): Promise<string | undefined>;
-  confirm(title: string, message: string): Promise<boolean>;
-  editor(title: string, prefill?: string): Promise<string | undefined>;
-  notify(message: string, type?: "info" | "warning" | "error"): void;
-}
+type ProfileEditorUIContext = ExtensionUIContext;
 
-interface ProfileEditorContext {
+type ProfileEditorContext = {
   ui: ProfileEditorUIContext;
   cwd: string;
-}
+};
 
 /**
  * Interactive profile editor wizard.
@@ -42,10 +37,10 @@ export async function editProfileInteractive(
   const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
   // Scope
-  const scope = await ctx.ui.select<ProfileScope>("Save to which scope?", [
+  const scope = (await ctx.ui.select("Save to which scope?", [
     `Global (~/.pi/agent-profiles/${name}.md)`,
     `Project (.pi/agent-profiles/${name}.md)`,
-  ]);
+  ]));
   if (!scope) {return;}
   const scopeValue: ProfileScope = scope.startsWith("Global") ? "global" : "project";
 
@@ -95,8 +90,8 @@ export async function editProfileInteractive(
     profile.thinkingLevel ? `Thinking level is ${profile.thinkingLevel}. Set one?` : "Set a thinking level?",
   );
   if (hasThinking) {
-    const tl = await ctx.ui.select<ThinkingLevel>("Thinking level:", THINKING_LEVELS);
-    if (tl) {profile.thinkingLevel = tl;}
+    const tl = await ctx.ui.select("Thinking level:", THINKING_LEVELS);
+    if (tl) {profile.thinkingLevel = tl as ThinkingLevel;}
   } else {
     delete profile.thinkingLevel;
   }
@@ -116,7 +111,7 @@ export async function editProfileInteractive(
       delete profile.excludeTools;
     } else {
       delete profile.noTools;
-      const toolMode = await ctx.ui.select<string>("Select tool mode:", [
+      const toolMode = await ctx.ui.select("Select tool mode:", [
         "Allowlist (only these tools)",
         "Blacklist (all tools except these)",
       ]);

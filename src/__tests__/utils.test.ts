@@ -239,7 +239,7 @@ describe("getLastAssistantText", () => {
   });
 
   it("should return undefined when no assistant messages", () => {
-    const messages: Message[] = [
+    const messages = [
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -248,12 +248,12 @@ describe("getLastAssistantText", () => {
         role: "toolResult",
         content: [{ type: "text", text: "tool output" }],
       },
-    ];
+    ] as unknown as Message[];
     expect(getLastAssistantText(messages)).toBe("");
   });
 
   it("should return text from single assistant message", () => {
-    const messages: Message[] = [
+    const messages = [
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -262,12 +262,12 @@ describe("getLastAssistantText", () => {
         role: "assistant",
         content: [{ type: "text", text: "assistant response" }],
       },
-    ];
+    ] as unknown as Message[];
     expect(getLastAssistantText(messages)).toBe("assistant response");
   });
 
   it("should return text from last assistant message", () => {
-    const messages: Message[] = [
+    const messages = [
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -284,12 +284,12 @@ describe("getLastAssistantText", () => {
         role: "assistant",
         content: [{ type: "text", text: "second response" }],
       },
-    ];
+    ] as unknown as Message[];
     expect(getLastAssistantText(messages)).toBe("second response");
   });
 
   it("should handle mixed roles and return last assistant text", () => {
-    const messages: Message[] = [
+    const messages = [
       {
         role: "assistant",
         content: [{ type: "text", text: "response 1" }],
@@ -310,7 +310,7 @@ describe("getLastAssistantText", () => {
         role: "assistant",
         content: [{ type: "text", text: "response 3" }],
       },
-    ];
+    ] as unknown as Message[];
     expect(getLastAssistantText(messages)).toBe("response 3");
   });
 });
@@ -583,52 +583,52 @@ describe("countWindowStatuses", () => {
 
 describe("getTextParts", () => {
   it("should extract text parts from assistant message", () => {
-    const message: Message = {
+    const message = {
       role: "assistant",
       content: [
         { type: "text", text: "Hello" },
         { type: "text", text: " world" },
       ],
-    };
+    } as unknown as Message;
     expect(getTextParts(message)).toEqual(["Hello", " world"]);
   });
 
   it("should return empty array for non-assistant message", () => {
-    const message: Message = {
+    const message = {
       role: "user",
       content: [{ type: "text", text: "hello" }],
-    };
+    } as unknown as Message;
     expect(getTextParts(message)).toEqual([]);
   });
 
   it("should return empty array for message with no content", () => {
-    const message: Message = {
+    const message = {
       role: "assistant",
-      content: undefined,
-    };
+      content: [] as any,
+    } as unknown as Message;
     expect(getTextParts(message)).toEqual([]);
   });
 
   it("should filter out non-text parts", () => {
-    const message: Message = {
+    const message = {
       role: "assistant",
       content: [
         { type: "text", text: "text part" },
-        { type: "toolCall", name: "someTool", arguments: {} },
+        { type: "toolCall", id: "tc-1", name: "someTool", arguments: {} },
         { type: "text", text: "another text" },
       ],
-    };
+    } as unknown as Message;
     expect(getTextParts(message)).toEqual(["text part", "another text"]);
   });
 
   it("should return empty array when no text parts exist", () => {
-    const message: Message = {
+    const message = {
       role: "assistant",
       content: [
-        { type: "toolCall", name: "tool1", arguments: {} },
-        { type: "toolCall", name: "tool2", arguments: {} },
+        { type: "toolCall", id: "tc-1", name: "tool1", arguments: {} },
+        { type: "toolCall", id: "tc-2", name: "tool2", arguments: {} },
       ],
-    };
+    } as unknown as Message;
     expect(getTextParts(message)).toEqual([]);
   });
 });

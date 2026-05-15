@@ -53,7 +53,7 @@ vi.mock("../profiles", () => ({
   },
   applyExcludeTools: (profile: Record<string, unknown>, allToolNames: string[]) => {
     const excludeTools = profile.excludeTools as string[] | undefined;
-    if (!excludeTools || excludeTools.length === 0) return profile;
+    if (!excludeTools || excludeTools.length === 0) {return profile;}
     const excludeSet = new Set(excludeTools);
     const computedTools = allToolNames.filter((name) => !excludeSet.has(name));
     return { ...profile, tools: computedTools, excludeTools: undefined };
@@ -118,7 +118,7 @@ describe("tools", () => {
 
         expect(mockPi.registerTool).toHaveBeenCalledTimes(3);
 
-        const toolNames = vi.mocked(mockPi.registerTool).mock.calls.map((call) => call[0].name);
+        const toolNames = vi.mocked(mockPi.registerTool).mock.calls.map((call: [{ name: string }]) => call[0].name);
         expect(toolNames).toContain("get_subagent_output");
         expect(toolNames).toContain("get_subagent_session");
         expect(toolNames).toContain("list_subagent_profiles");
@@ -187,7 +187,7 @@ describe("tools", () => {
         // Get the tool execute function
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -206,7 +206,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -236,7 +236,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         const executeFn = toolRegistration?.[0].execute;
         if (!executeFn) {
           throw new Error("Tool not registered");
@@ -278,7 +278,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_session");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
         const executeFn = toolRegistration?.[0].execute;
         if (!executeFn) {
           throw new Error("Tool not registered");
@@ -295,7 +295,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_session");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
 
         const executeFn = toolRegistration?.[0].execute;
         if (!executeFn) {
@@ -314,7 +314,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         const renderCall = toolRegistration?.[0].renderCall;
         if (!renderCall) {
           throw new Error("Tool not registered");
@@ -335,7 +335,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         const renderCall = toolRegistration?.[0].renderCall;
         if (!renderCall) {
           throw new Error("Tool not registered");
@@ -356,7 +356,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_session");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
         const renderCall = toolRegistration?.[0].renderCall;
         if (!renderCall) {
           throw new Error("Tool not registered");
@@ -379,7 +379,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         const renderResult = toolRegistration?.[0].renderResult;
         if (!renderResult) {
           throw new Error("Tool not registered");
@@ -403,7 +403,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         const renderResult = toolRegistration?.[0].renderResult;
         if (!renderResult) {
           throw new Error("Tool not registered");
@@ -432,7 +432,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -461,7 +461,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -494,11 +494,7 @@ describe("tools", () => {
         const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
 
         // Mock getAllTools to return a set of tools
-        vi.mocked(mockPi.getAllTools).mockReturnValue([
-          { name: "read" },
-          { name: "bash" },
-          { name: "write" },
-        ]);
+        vi.mocked(mockPi.getAllTools).mockReturnValue([{ name: "read" }, { name: "bash" }, { name: "write" }]);
 
         // Mock resolveProfile to return a profile with excludeTools
         vi.mocked(resolveProfile).mockReturnValue({
@@ -509,7 +505,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -531,8 +527,8 @@ describe("tools", () => {
         expect(runSubAgent).toHaveBeenCalledTimes(1);
         const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
         expect(callArgs.profile).toBeDefined();
-        expect(callArgs.profile!.tools).toEqual(["read", "write"]);
-        expect(callArgs.profile!.excludeTools).toBeUndefined();
+        expect(callArgs.profile?.tools).toEqual(["read", "write"]);
+        expect(callArgs.profile?.excludeTools).toBeUndefined();
       });
 
       it("should throw an error when profile has both tools and excludeTools", async () => {
@@ -549,7 +545,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -579,7 +575,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -621,7 +617,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -667,7 +663,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -712,7 +708,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "delegate_to_subagents");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
         expect(toolRegistration).toBeDefined();
 
         const executeFn = toolRegistration?.[0].execute;
@@ -774,7 +770,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_output");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
         const executeFn = toolRegistration?.[0].execute;
         if (!executeFn) {
           throw new Error("Tool not registered");
@@ -825,7 +821,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_session");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
         const executeFn = toolRegistration?.[0].execute;
         if (!executeFn) {
           throw new Error("Tool not registered");
@@ -867,7 +863,7 @@ describe("tools", () => {
 
         const toolRegistration = vi
           .mocked(mockPi.registerTool)
-          .mock.calls.find((call) => call[0].name === "get_subagent_session");
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
         const executeFn = toolRegistration?.[0].execute;
         if (!executeFn) {
           throw new Error("Tool not registered");

@@ -32,14 +32,15 @@ There is **no build step** — Bun executes `.ts` files directly, so changes tak
 
 ## Scripts
 
-| Script          | Command                     | Description                                    |
-| --------------- | --------------------------- | ---------------------------------------------- |
-| `lint`          | `biome check src/`          | Run Biome linter on all source files           |
-| `check`         | `biome check src/`          | Alias for `lint`                               |
-| `test`          | `vitest run`                | Run the full test suite once                   |
-| `test:watch`    | `vitest`                    | Run tests in watch mode during development     |
-| `format`        | `biome format --write src/` | Auto-format all source files                   |
-| `format:check`  | `biome format src/`         | Check formatting without modifying files       |
+| Script           | Command                     | Description                                    |
+| ---------------- | --------------------------- | ---------------------------------------------- |
+| `lint`           | `eslint src/`               | Run ESLint on all source files                 |
+| `lint:fix`       | `eslint --fix src/`         | Auto-fix ESLint errors                         |
+| `typecheck`      | `tsc --noEmit`              | Run TypeScript type checking                   |
+| `test`           | `vitest run`                | Run the full test suite once                   |
+| `test:watch`     | `vitest`                    | Run tests in watch mode during development     |
+| `test:coverage`  | `vitest run --coverage`     | Run tests with coverage report                 |
+| `check`          | `eslint src/`               | Alias for `lint`                               |
 
 ## Project Structure
 
@@ -97,14 +98,21 @@ bun run test:watch
 
 ### Test Files & Coverage
 
-| Test File                 | What It Covers                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| `smoke.test.ts`           | Verifies the test harness is functional                                        |
-| `schemas.test.ts`         | `TaskSchema` and `DelegateParams` validation — required fields, optional fields, type mismatches, array constraints |
-| `profiles.test.ts`        | `profileToArgs` CLI generation, `extraArgs` safety validation (null bytes, shell operators), `resolveProfile`, `profileSummary`, `formatProfileDetail` (API key masking), `loadMaxLinesPerWindow` settings resolution, `loadCommandPreviewWidth` (TTY vs settings), `getProfilesDir` |
-| `spawner.test.ts`         | `runSubAgent` lifecycle — spawn arguments, stdout line processing, JSON `message_end` event parsing, malformed JSON handling, process exit codes, `AbortSignal` with SIGTERM escalation, profile argument injection, path shortening in tool call display, smart `&&` splitting with width budgets |
-| `tools.test.ts`           | Tool registration (`registerDelegateTool`, `registerRetrievalTools`, `registerProfileCommand`), session store operations, retrieval tool execution (valid/invalid sessions, multi-run), delegate timeout via `AbortSignal`, resume validation (non-existent, still-running), resume prompt formatting, session ID reuse, `countWindowStatuses` |
-| `utils.test.ts`           | `stripAnsi`, `appendLineToWindow` (rolling buffer eviction, ANSI removal, whitespace handling, tool kind), `mapWithConcurrencyLimit` (concurrency enforcement, ordering, error propagation, sequential), `getLastAssistantText`, `getSummaryText`, `getTextParts`, `shortenPath`, `shortenPathsInText`, `formatBashCommand` (truncation, `&&` splitting, continuation lines), `collapseCdDot` |
+| Test File                    | What It Covers                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| `smoke.test.ts`              | Basic smoke test ensuring the test harness works                                |
+| `index.test.ts`              | Tests session store: `registerSession` (creation, resume, eviction, capping), `getActiveSessionIds`, shutdown handler |
+| `types-helpers.test.ts`      | Tests `syncState`, `formatRunsForResume`, `getTextContent` |
+| `schemas.test.ts`            | `TaskSchema` and `DelegateParams` validation — required fields, optional fields, type mismatches, array constraints |
+| `profiles.test.ts`           | `profileToArgs` CLI generation, `extraArgs` safety validation (null bytes, shell operators), `resolveProfile`, `profileSummary`, `formatProfileDetail` (API key masking), `loadMaxLinesPerWindow` settings resolution, `loadCommandPreviewWidth` (TTY vs settings), `getProfilesDir` |
+| `profile-command.test.ts`    | Tests `/profile` command handler: list, show, create, edit, delete, bare name, completions |
+| `profile-editor.test.ts`     | Tests `editProfileInteractive` wizard with mocked UI (all paths) |
+| `spawner.test.ts`            | `runSubAgent` lifecycle — spawn arguments, stdout line processing, JSON `message_end` event parsing, malformed JSON handling, process exit codes, `AbortSignal` with SIGTERM escalation, profile argument injection, path shortening in tool call display, smart `&&` splitting with width budgets |
+| `tools.test.ts`              | Tool registration (`registerDelegateTool`, `registerRetrievalTools`, `registerProfileCommand`), session store operations, retrieval tool execution (valid/invalid sessions, multi-run), delegate timeout via `AbortSignal`, resume validation (non-existent, still-running), resume prompt formatting, session ID reuse, `countWindowStatuses` |
+| `delegate-render.test.ts`    | Tests `renderCall` and `renderResult` for delegate tool (TUI rendering) |
+| `retrieval-tools.test.ts`    | Tests retrieval tools: `list_subagent_profiles`, `createTruncatingRenderResult`, toolResult extraction |
+| `profiles-spawner.test.ts`   | Tests `saveProfile`/`deleteProfile`, `serializeProfileToMarkdown`, `formatToolCall` branches, `handleStderrData` |
+| `utils.test.ts`              | `stripAnsi`, `appendLineToWindow` (rolling buffer eviction, ANSI removal, whitespace handling, tool kind), `mapWithConcurrencyLimit` (concurrency enforcement, ordering, error propagation, sequential), `getLastAssistantText`, `getSummaryText`, `getTextParts`, `shortenPath`, `shortenPathsInText`, `formatBashCommand` (truncation, `&&` splitting, continuation lines), `collapseCdDot` |
 
 ### Mocking Approach
 
@@ -116,39 +124,37 @@ bun run test:watch
 
 ## Code Style
 
-The project uses [Biome](https://biomejs.dev/) v2.4.4 for linting and formatting.
+The project uses [ESLint](https://eslint.org/) v10 (flat config) with `@typescript-eslint`, `eslint-plugin-import`, and `eslint-plugin-unicorn`.
 
-### Key Conventions (`biome.json`)
+### Configuration (`eslint.config.js`)
 
-| Rule                                      | Setting | Notes                                        |
-| ----------------------------------------- | ------- | -------------------------------------------- |
-| Indent style                              | spaces  | 2-space indentation                          |
-| Line width                                | 120     |                                              |
-| Quotes                                    | double  |                                              |
-| Semicolons                                | always  |                                              |
-| `organizeImports`                         | on      | Auto-sorts imports on save                   |
-| `useTemplate`                             | error   | Prefer template literals over concatenation  |
-| `useConst`                                | error   | Use `const` when a variable is never reassigned |
-| `noParameterAssign`                       | off     | Parameter reassignment is allowed            |
-| `noExplicitAny`                           | warn    | Discouraged but not enforced                 |
-| `noForEach`                               | warn    | Discouraged in favor of `for...of`           |
-| `useSimplifiedLogicExpression`            | warn    | Simplify boolean expressions                 |
+ESLint uses the flat config format. Key rules:
 
-There is one override for `src/index.ts` that disables `noControlCharactersInRegex` (needed for the ANSI escape code regex).
+| Rule                       | Setting | Notes                                              |
+| -------------------------- | ------- | -------------------------------------------------- |
+| `no-explicit-any`          | error   | Explicit `any` is forbidden                        |
+| `no-non-null-assertion`    | error   | `!` operator forbidden                             |
+| `no-unused-vars`           | error   | `_` prefix allowed for intentionally unused        |
+| `consistent-type-imports`  | error   | Use `import type` for type-only imports            |
+| `eqeqeq`                   | error   | Always use `===` / `!==`                           |
+| `prefer-template`          | error   | Template literals over concatenation               |
+| `prefer-const`             | error   | Prefer `const` over `let`                          |
+| `curly`                    | error   | Require braces on all if/for/while statements      |
+| `import/order`             | error   | Organized import groups                            |
+
+Test files (`src/__tests__/**/*.test.ts`) have relaxed rules for `any`, non-null assertions, import ordering, and `unicorn/consistent-function-scoping` since mock-heavy code requires these patterns.
 
 ### Before Committing
 
 ```bash
-bun run format    # Auto-format
-bun run lint      # Check for lint errors
-bun run test      # Run tests
+bun run typecheck && bun run lint && bun run test
 ```
 
 ## Pull Request Guidelines
 
 1. **Run lint + tests before submitting.** All CI checks must pass:
    ```bash
-   bun run format && bun run lint && bun run test
+   bun run typecheck && bun run lint && bun run test
    ```
 
 2. **Add tests for new features or bug fixes.** Match the existing testing patterns — mock external dependencies, use `describe`/`it` blocks, and assert specific behaviors.

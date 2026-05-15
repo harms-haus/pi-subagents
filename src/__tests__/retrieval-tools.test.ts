@@ -1,0 +1,369 @@
+import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadProfiles, profileSummary } from "../profiles";
+import { registerRetrievalTools } from "../tools/retrieval";
+import type { SessionRecord, SubagentSessionData } from "../types";
+
+// Mock the TUI components (same pattern as tools.test.ts)
+vi.mock("@earendil-works/pi-tui", () => ({
+  Text: vi.fn().mockImplementation((text: string) => ({ text })),
+  Container: vi.fn().mockImplementation(() => ({
+    addChild: vi.fn(),
+  })),
+  Spacer: vi.fn().mockImplementation(() => ({ spacer: true })),
+}));
+
+// Mock the AI types
+vi.mock("@earendil-works/pi-ai", () => ({
+  Message: {},
+}));
+
+// Mock TypeBox
+vi.mock("typebox", () => ({
+  Type: {
+    Object: vi.fn(() => ({})),
+    String: vi.fn(() => ({})),
+    Number: vi.fn(() => ({})),
+    Optional: vi.fn((fn: unknown) => fn),
+    Array: vi.fn(() => ({})),
+  },
+}));
+
+// Mock the profiles module
+vi.mock("../profiles", () => ({
+  loadProfiles: vi.fn().mockResolvedValue({}),
+  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
+  resolveProfile: vi.fn(),
+  profileSummary: vi.fn().mockReturnValue("profile-summary"),
+  validateProfileTools: vi.fn(),
+  applyExcludeTools: vi.fn(),
+}));
+
+// ── Helpers ───────────────────────────────────────────────────────────
+
+/** Create a minimal mock ExtensionAPI */
+function createMockPi(): ExtensionAPI {
+  return {
+    registerTool: vi.fn(),
+    registerCommand: vi.fn(),
+    on: vi.fn(),
+    getAllTools: vi.fn().mockReturnValue([]),
+    ui: {
+      notify: vi.fn(),
+      confirm: vi.fn(),
+    },
+  } as unknown as ExtensionAPI;
+}
+
+/** Create a SubagentSessionData with sensible defaults */
+function makeSession(overrides: Partial<SubagentSessionData> = {}): SubagentSessionData {
+  return {
+    sessionId: "test-session",
+    taskName: "test-task",
+    prompt: "test prompt",
+    cwd: "/tmp",
+    status: "completed",
+    messages: [],
+    exitCode: 0,
+    startedAt: Date.now(),
+    ...overrides,
+  };
+}
+
+/** Extract a registered tool's execute function by name */
+function getToolExecute(mockPi: ExtensionAPI, toolName: string) {
+  const call = vi
+    .mocked(mockPi.registerTool)
+    .mock.calls.find((c: [{ name: string }]) => c[0].name === toolName);
+  if (!call) {
+    throw new Error(`Tool "${toolName}" not registered`);
+  }
+  const execute = call[0].execute;
+  if (!execute) {
+    throw new Error(`Tool "${toolName}" has no execute`);
+  }
+  return execute;
+}
+
+/** Extract a registered tool's renderResult function by name */
+function getToolRenderResult(mockPi: ExtensionAPI, toolName: string) {
+  const call = vi
+    .mocked(mockPi.registerTool)
+    .mock.calls.find((c: [{ name: string }]) => c[0].name === toolName);
+  if (!call) {
+    throw new Error(`Tool "${toolName}" not registered`);
+  }
+  const renderResult = call[0].renderResult;
+  if (!renderResult) {
+    throw new Error(`Tool "${toolName}" has no renderResult`);
+  }
+  return renderResult;
+}
+
+/** Create a mock theme with spyable fg/bold */
+function createMockTheme() {
+  return {
+    fg: vi.fn((_color: string, text: string) => text),
+    bold: vi.fn((text: string) => text),
+  } as unknown as Theme;
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────
+
+describe("retrieval-tools", () => {
+  let mockPi: ExtensionAPI;
+  let sessionStore: Map<string, SessionRecord>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPi = createMockPi();
+    sessionStore = new Map();
+  });
+
+  // ── list_subagent_profiles execute ──────────────────────────────────
+
+  describe("list_subagent_profiles execute", () => {
+    it("returns empty message when no profiles", async () => {
+      vi.mocked(loadProfiles).mockResolvedValueOnce({});
+
+      registerRetrievalTools(mockPi, sessionStore);
+      const execute = getToolExecute(mockPi, "list_subagent_profiles");
+
+      const result = await execute("tc-id", {}, null, vi.fn(), { cwd: "/tmp" });
+
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "No subagent profiles found. Add .md files to ~/.pi/agent/agent-profiles/ or .pi/agent-profiles/.",
+        },
+      ]);
+      expect(result.details).toEqual({ count: 0 });
+    });
+
+    it("returns summaries when profiles exist", async () => {
+      vi.mocked(loadProfiles).mockResolvedValueOnce({
+        "coder": { model: "claude-sonnet-4-5" },
+        "reviewer": { model: "gpt-4o" },
+      });
+      vi.mocked(profileSummary)
+        .mockReturnValueOnce("coder: claude-sonnet-4-5")
+        .mockReturnValueOnce("reviewer: gpt-4o");
+
+      registerRetrievalTools(mockPi, sessionStore);
+      const execute = getToolExecute(mockPi, "list_subagent_profiles");
+
+      const result = await execute("tc-id", {}, null, vi.fn(), { cwd: "/tmp" });
+
+      expect(result.content[0].type).toBe("text");
+      expect(result.content[0].text).toContain("coder: claude-sonnet-4-5");
+      expect(result.content[0].text).toContain("reviewer: gpt-4o");
+      expect(result.details.count).toBe(2);
+      expect(result.details.profiles).toEqual({
+        coder: "coder: claude-sonnet-4-5",
+        reviewer: "reviewer: gpt-4o",
+      });
+    });
+  });
+
+  // ── createTruncatingRenderResult ────────────────────────────────────
+
+  describe("createTruncatingRenderResult", () => {
+    it("shows full content when under maxLines", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderResult = getToolRenderResult(mockPi, "get_subagent_output");
+      const theme = createMockTheme();
+
+      // 3 lines of content, details.maxLines defaults to 15
+      const shortContent = "line1\nline2\nline3";
+      const result = {
+        content: [{ type: "text", text: shortContent }],
+        details: { maxLines: 15 },
+      };
+
+      renderResult(result, { expanded: false }, theme, null);
+
+      // Should render full content via Text (not Container)
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolOutput", shortContent);
+    });
+
+    it("truncates with indicator when over maxLines", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderResult = getToolRenderResult(mockPi, "get_subagent_output");
+      const theme = createMockTheme();
+
+      // Create 20 lines of content with maxLines = 5
+      const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
+      const fullContent = lines.join("\n");
+      const result = {
+        content: [{ type: "text", text: fullContent }],
+        details: { maxLines: 5 },
+      };
+
+      const output = renderResult(result, { expanded: false }, theme, null);
+
+      // Should return a Container (for truncation layout)
+      expect(output).toHaveProperty("addChild");
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolOutput", lines.slice(0, 5).join("\n"));
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("dim", "... (15 more lines)");
+    });
+
+    it("handles non-text content (default label)", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderResult = getToolRenderResult(mockPi, "get_subagent_output");
+      const theme = createMockTheme();
+
+      // Content with no text type
+      const result = {
+        content: [{} as { type: string }],
+        details: { maxLines: 15 },
+      };
+
+      renderResult(result, { expanded: false }, theme, null);
+
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolOutput", "(no output)");
+    });
+  });
+
+  // ── get_subagent_session - toolResult extraction ────────────────────
+
+  describe("get_subagent_session - toolResult extraction", () => {
+    it("extracts toolResult content properly", async () => {
+      registerRetrievalTools(mockPi, sessionStore);
+
+      const session = makeSession({
+        messages: [
+          {
+            role: "toolResult",
+            content: [{ type: "text", text: "Tool returned successfully" }],
+          },
+        ],
+      });
+      sessionStore.set("s1", { runs: [session] });
+
+      const execute = getToolExecute(mockPi, "get_subagent_session");
+      const result = await execute("tc-id", { sessionId: "s1" }, null, vi.fn(), null);
+
+      expect(result.content[0].text).toContain("[tool result]: Tool returned successfully");
+    });
+
+    it("truncates tool results > 500 chars", async () => {
+      registerRetrievalTools(mockPi, sessionStore);
+
+      const longText = "x".repeat(600);
+      const session = makeSession({
+        messages: [
+          {
+            role: "toolResult",
+            content: [{ type: "text", text: longText }],
+          },
+        ],
+      });
+      sessionStore.set("s1", { runs: [session] });
+
+      const execute = getToolExecute(mockPi, "get_subagent_session");
+      const result = await execute("tc-id", { sessionId: "s1" }, null, vi.fn(), null);
+
+      const outputText = result.content[0].text as string;
+      // Should contain truncated text (500 chars + "...")
+      expect(outputText).toContain("...");
+      const match = outputText.match(/\[tool result\]: (.+)\.\.\./);
+      expect(match).not.toBeNull();
+      expect(match?.[1]?.length).toBe(500);
+    });
+
+    it("handles missing toolResult content", async () => {
+      registerRetrievalTools(mockPi, sessionStore);
+
+      // toolResult message with non-text content
+      const session = makeSession({
+        messages: [
+          {
+            role: "toolResult",
+            content: [{ type: "image", url: "http://example.com/img.png" }],
+          },
+        ],
+      });
+      sessionStore.set("s1", { runs: [session] });
+
+      const execute = getToolExecute(mockPi, "get_subagent_session");
+      const result = await execute("tc-id", { sessionId: "s1" }, null, vi.fn(), null);
+
+      // No text part in toolResult — content should reflect empty messages
+      expect(result.content[0].text).toContain("(no messages in session)");
+    });
+  });
+
+  // ── get_subagent_output - edge cases ────────────────────────────────
+
+  describe("get_subagent_output - edge cases", () => {
+    it("returns details with runCount for multi-run session", async () => {
+      registerRetrievalTools(mockPi, sessionStore);
+
+      const run1 = makeSession({
+        sessionId: "multi",
+        taskName: "task-1",
+        messages: [
+          { role: "assistant", content: [{ type: "text", text: "Run 1 output" }] },
+        ],
+      });
+      const run2 = makeSession({
+        sessionId: "multi",
+        taskName: "task-2",
+        messages: [
+          { role: "assistant", content: [{ type: "text", text: "Run 2 output" }] },
+        ],
+      });
+      const run3 = makeSession({
+        sessionId: "multi",
+        taskName: "task-3",
+        messages: [
+          { role: "assistant", content: [{ type: "text", text: "Run 3 output" }] },
+        ],
+      });
+      sessionStore.set("multi", { runs: [run1, run2, run3] });
+
+      const execute = getToolExecute(mockPi, "get_subagent_output");
+      const result = await execute("tc-id", { sessionId: "multi" }, null, vi.fn(), null);
+
+      // Should return latest (3rd) run output
+      expect(result.content[0].text).toBe("Run 3 output");
+      expect(result.details.runCount).toBe(3);
+      expect(result.details.sessionId).toBe("multi");
+      expect(result.details.status).toBe("completed");
+      expect(result.details.taskName).toBe("task-3");
+    });
+
+    it("handles session with only toolCall messages (no text)", async () => {
+      registerRetrievalTools(mockPi, sessionStore);
+
+      // Session with tool calls but no assistant text output
+      const session = makeSession({
+        sessionId: "tools-only",
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "toolCall",
+                name: "bash",
+                arguments: { command: "ls" },
+                id: "tc-1",
+              } as const,
+            ],
+          },
+          {
+            role: "toolResult",
+            content: [{ type: "text", text: "file1.txt\nfile2.txt" }],
+          },
+        ],
+      });
+      sessionStore.set("tools-only", { runs: [session] });
+
+      const execute = getToolExecute(mockPi, "get_subagent_output");
+      const result = await execute("tc-id", { sessionId: "tools-only" }, null, vi.fn(), null);
+
+      // No assistant text → placeholder message
+      expect(result.content[0].text).toBe("(no text output from sub-agent)");
+    });
+  });
+});

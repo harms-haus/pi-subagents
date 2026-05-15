@@ -101,7 +101,7 @@ export function invalidateProfilesCache(): void {
 // ── Helpers for array/string frontmatter fields ──────────────────────
 
 function parseStringOrArray(value: unknown): string[] | undefined {
-  if (Array.isArray(value)) return value.map(String);
+  if (Array.isArray(value)) {return value.map(String);}
   if (typeof value === "string" && value.trim()) {
     return value
       .split(",")
@@ -151,7 +151,7 @@ function getProjectSettingsPath(cwd: string): string {
 }
 
 async function readSettingsFile(filePath: string): Promise<SettingsFile> {
-  if (!existsSync(filePath)) return {};
+  if (!existsSync(filePath)) {return {};}
   try {
     const content = await readFile(filePath, "utf8");
     return JSON.parse(content);
@@ -172,7 +172,7 @@ export function validateProfileTools(profile: SubagentProfile, profileName?: str
 }
 
 export function applyExcludeTools(profile: SubagentProfile, allToolNames: string[]): SubagentProfile {
-  if (!profile.excludeTools || profile.excludeTools.length === 0) return profile;
+  if (!profile.excludeTools || profile.excludeTools.length === 0) {return profile;}
   const excludeSet = new Set(profile.excludeTools);
   const computedTools = allToolNames.filter((name) => !excludeSet.has(name));
   return { ...profile, tools: computedTools, excludeTools: undefined };
@@ -181,7 +181,7 @@ export function applyExcludeTools(profile: SubagentProfile, allToolNames: string
 // ── Profile Loading from Markdown Files ──────────────────────────────
 
 function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
-  if (!existsSync(dir)) return;
+  if (!existsSync(dir)) {return;}
 
   let entries: ReturnType<typeof readdirSync>;
   try {
@@ -191,7 +191,7 @@ function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
   }
 
   for (const entry of entries) {
-    if (!(entry.isFile() && entry.name.endsWith(".md"))) continue;
+    if (!(entry.isFile() && entry.name.endsWith(".md"))) {continue;}
 
     const filePath = join(dir, entry.name);
     try {
@@ -199,38 +199,38 @@ function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
       const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(content);
 
       const name = frontmatter.name;
-      if (typeof name !== "string") continue;
-      if (!name) continue;
+      if (typeof name !== "string") {continue;}
+      if (!name) {continue;}
 
       const profile: SubagentProfile = {};
 
-      if (typeof frontmatter.provider === "string") profile.provider = frontmatter.provider;
-      if (typeof frontmatter.model === "string") profile.model = frontmatter.model;
+      if (typeof frontmatter.provider === "string") {profile.provider = frontmatter.provider;}
+      if (typeof frontmatter.model === "string") {profile.model = frontmatter.model;}
       if (typeof frontmatter.thinkingLevel === "string")
-        profile.thinkingLevel = frontmatter.thinkingLevel as ThinkingLevel;
+        {profile.thinkingLevel = frontmatter.thinkingLevel as ThinkingLevel;}
       if (typeof frontmatter.appendSystemPrompt === "string")
-        profile.appendSystemPrompt = frontmatter.appendSystemPrompt;
-      if (typeof frontmatter.apiKey === "string") profile.apiKey = frontmatter.apiKey;
+        {profile.appendSystemPrompt = frontmatter.appendSystemPrompt;}
+      if (typeof frontmatter.apiKey === "string") {profile.apiKey = frontmatter.apiKey;}
 
       const trimmedBody = body.trim();
-      if (trimmedBody) profile.systemPrompt = trimmedBody;
+      if (trimmedBody) {profile.systemPrompt = trimmedBody;}
 
       const tools = parseStringOrArray(frontmatter.tools);
-      if (tools) profile.tools = tools;
+      if (tools) {profile.tools = tools;}
 
       const excludeTools = parseStringOrArray(frontmatter.excludeTools);
-      if (excludeTools) profile.excludeTools = excludeTools;
+      if (excludeTools) {profile.excludeTools = excludeTools;}
 
-      if (frontmatter.noTools === true) profile.noTools = true;
-      if (frontmatter.noExtensions === true) profile.noExtensions = true;
-      if (frontmatter.noSkills === true) profile.noSkills = true;
-      if (frontmatter.noContextFiles === true) profile.noContextFiles = true;
+      if (frontmatter.noTools === true) {profile.noTools = true;}
+      if (frontmatter.noExtensions === true) {profile.noExtensions = true;}
+      if (frontmatter.noSkills === true) {profile.noSkills = true;}
+      if (frontmatter.noContextFiles === true) {profile.noContextFiles = true;}
 
       const extensions = parseStringOrArray(frontmatter.extensions);
-      if (extensions) profile.extensions = extensions;
+      if (extensions) {profile.extensions = extensions;}
 
       const extraArgs = parseStringOrArray(frontmatter.extraArgs);
-      if (extraArgs) profile.extraArgs = extraArgs;
+      if (extraArgs) {profile.extraArgs = extraArgs;}
 
       profiles[name] = profile;
     } catch (error) {
@@ -385,15 +385,15 @@ export function profileToArgs(profile: SubagentProfile): ProfileInvocation {
  */
 export function profileSummary(name: string, profile: SubagentProfile): string {
   const parts: string[] = [`profile: ${name}`];
-  if (profile.model) parts.push(`model=${profile.model}`);
-  else if (profile.provider) parts.push(`provider=${profile.provider}`);
-  if (profile.thinkingLevel) parts.push(`thinking=${profile.thinkingLevel}`);
-  if (profile.systemPrompt) parts.push("custom-system-prompt");
-  if (profile.appendSystemPrompt) parts.push("appended-system-prompt");
-  if (profile.noTools) parts.push("no-tools");
-  else if (profile.tools && profile.tools.length > 0) parts.push(`tools=[${profile.tools.join(",")}]`);
+  if (profile.model) {parts.push(`model=${profile.model}`);}
+  else if (profile.provider) {parts.push(`provider=${profile.provider}`);}
+  if (profile.thinkingLevel) {parts.push(`thinking=${profile.thinkingLevel}`);}
+  if (profile.systemPrompt) {parts.push("custom-system-prompt");}
+  if (profile.appendSystemPrompt) {parts.push("appended-system-prompt");}
+  if (profile.noTools) {parts.push("no-tools");}
+  else if (profile.tools && profile.tools.length > 0) {parts.push(`tools=[${profile.tools.join(",")}]`);}
   else if (profile.excludeTools && profile.excludeTools.length > 0)
-    parts.push(`excludeTools=[${profile.excludeTools.join(",")}]`);
+    {parts.push(`excludeTools=[${profile.excludeTools.join(",")}]`);}
   return parts.join(", ");
 }
 
@@ -403,22 +403,22 @@ function serializeProfileToMarkdown(name: string, profile: SubagentProfile): str
   const fmLines: string[] = ["---"];
   fmLines.push(`name: ${name}`);
 
-  if (profile.provider !== undefined) fmLines.push(`provider: ${profile.provider}`);
-  if (profile.model !== undefined) fmLines.push(`model: ${profile.model}`);
-  if (profile.thinkingLevel !== undefined) fmLines.push(`thinkingLevel: ${profile.thinkingLevel}`);
-  if (profile.appendSystemPrompt !== undefined) fmLines.push(`appendSystemPrompt: ${profile.appendSystemPrompt}`);
-  if (profile.apiKey !== undefined) fmLines.push(`apiKey: ${profile.apiKey}`);
+  if (profile.provider !== undefined) {fmLines.push(`provider: ${profile.provider}`);}
+  if (profile.model !== undefined) {fmLines.push(`model: ${profile.model}`);}
+  if (profile.thinkingLevel !== undefined) {fmLines.push(`thinkingLevel: ${profile.thinkingLevel}`);}
+  if (profile.appendSystemPrompt !== undefined) {fmLines.push(`appendSystemPrompt: ${profile.appendSystemPrompt}`);}
+  if (profile.apiKey !== undefined) {fmLines.push(`apiKey: ${profile.apiKey}`);}
 
-  if (profile.noTools !== undefined) fmLines.push(`noTools: ${profile.noTools}`);
-  if (profile.noExtensions !== undefined) fmLines.push(`noExtensions: ${profile.noExtensions}`);
-  if (profile.noSkills !== undefined) fmLines.push(`noSkills: ${profile.noSkills}`);
-  if (profile.noContextFiles !== undefined) fmLines.push(`noContextFiles: ${profile.noContextFiles}`);
+  if (profile.noTools !== undefined) {fmLines.push(`noTools: ${profile.noTools}`);}
+  if (profile.noExtensions !== undefined) {fmLines.push(`noExtensions: ${profile.noExtensions}`);}
+  if (profile.noSkills !== undefined) {fmLines.push(`noSkills: ${profile.noSkills}`);}
+  if (profile.noContextFiles !== undefined) {fmLines.push(`noContextFiles: ${profile.noContextFiles}`);}
 
-  if (profile.tools && profile.tools.length > 0) fmLines.push(`tools: ${profile.tools.join(",")}`);
+  if (profile.tools && profile.tools.length > 0) {fmLines.push(`tools: ${profile.tools.join(",")}`);}
   if (profile.excludeTools && profile.excludeTools.length > 0)
-    fmLines.push(`excludeTools: ${profile.excludeTools.join(",")}`);
-  if (profile.extensions && profile.extensions.length > 0) fmLines.push(`extensions: ${profile.extensions.join(",")}`);
-  if (profile.extraArgs && profile.extraArgs.length > 0) fmLines.push(`extraArgs: ${profile.extraArgs.join(",")}`);
+    {fmLines.push(`excludeTools: ${profile.excludeTools.join(",")}`);}
+  if (profile.extensions && profile.extensions.length > 0) {fmLines.push(`extensions: ${profile.extensions.join(",")}`);}
+  if (profile.extraArgs && profile.extraArgs.length > 0) {fmLines.push(`extraArgs: ${profile.extraArgs.join(",")}`);}
 
   fmLines.push("---");
 
@@ -461,7 +461,7 @@ export async function deleteProfile(name: string, scope: ProfileScope, cwd?: str
   const dir = scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
   const filePath = join(dir, `${name}.md`);
 
-  if (!existsSync(filePath)) return false;
+  if (!existsSync(filePath)) {return false;}
 
   await unlink(filePath);
   invalidateProfilesCache();
@@ -525,23 +525,23 @@ export async function loadCommandPreviewWidth(cwd?: string): Promise<number> {
 export function formatProfileDetail(name: string, profile: SubagentProfile): string {
   const lines: string[] = [];
   lines.push(`Profile: ${name}`);
-  if (profile.provider) lines.push(`  provider:          ${profile.provider}`);
-  if (profile.model) lines.push(`  model:             ${profile.model}`);
-  if (profile.thinkingLevel) lines.push(`  thinkingLevel:     ${profile.thinkingLevel}`);
-  if (profile.systemPrompt) lines.push(`  systemPrompt:      ${profile.systemPrompt}`);
-  if (profile.appendSystemPrompt) lines.push(`  appendSystemPrompt: ${profile.appendSystemPrompt}`);
-  if (profile.noTools) lines.push(`  noTools:           true`);
-  else if (profile.tools) lines.push(`  tools:             [${profile.tools.join(", ")}]`);
+  if (profile.provider) {lines.push(`  provider:          ${profile.provider}`);}
+  if (profile.model) {lines.push(`  model:             ${profile.model}`);}
+  if (profile.thinkingLevel) {lines.push(`  thinkingLevel:     ${profile.thinkingLevel}`);}
+  if (profile.systemPrompt) {lines.push(`  systemPrompt:      ${profile.systemPrompt}`);}
+  if (profile.appendSystemPrompt) {lines.push(`  appendSystemPrompt: ${profile.appendSystemPrompt}`);}
+  if (profile.noTools) {lines.push(`  noTools:           true`);}
+  else if (profile.tools) {lines.push(`  tools:             [${profile.tools.join(", ")}]`);}
   else if (profile.excludeTools && profile.excludeTools.length > 0)
-    lines.push(`  excludeTools:      [${profile.excludeTools.join(", ")}]`);
-  if (profile.noExtensions) lines.push(`  noExtensions:      true`);
-  if (profile.extensions) lines.push(`  extensions:        [${profile.extensions.join(", ")}]`);
-  if (profile.noSkills) lines.push(`  noSkills:          true`);
-  if (profile.noContextFiles) lines.push(`  noContextFiles:    true`);
+    {lines.push(`  excludeTools:      [${profile.excludeTools.join(", ")}]`);}
+  if (profile.noExtensions) {lines.push(`  noExtensions:      true`);}
+  if (profile.extensions) {lines.push(`  extensions:        [${profile.extensions.join(", ")}]`);}
+  if (profile.noSkills) {lines.push(`  noSkills:          true`);}
+  if (profile.noContextFiles) {lines.push(`  noContextFiles:    true`);}
   if (profile.apiKey) {
     const masked = profile.apiKey.length > 8 ? `${profile.apiKey.slice(0, 4)}****${profile.apiKey.slice(-4)}` : "****";
     lines.push(`  apiKey:            ${masked}`);
   }
-  if (profile.extraArgs) lines.push(`  extraArgs:         ${JSON.stringify(profile.extraArgs)}`);
+  if (profile.extraArgs) {lines.push(`  extraArgs:         ${JSON.stringify(profile.extraArgs)}`);}
   return lines.join("\n");
 }

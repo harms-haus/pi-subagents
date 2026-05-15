@@ -4,9 +4,17 @@
  * Command registration for managing subagent profiles.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { editProfileInteractive } from "../profile-editor";
 import { deleteProfile, formatProfileDetail, loadProfiles, profileSummary } from "../profiles";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+interface ProfileCommandContext {
+  cwd: string;
+  ui: {
+    notify(message: string, type: string): void;
+    confirm(title: string, message: string): Promise<boolean>;
+  };
+}
 
 /**
  * Register the /profile command.
@@ -24,7 +32,7 @@ export function registerProfileCommand(pi: ExtensionAPI): void {
       return items.length > 0 ? items : null;
     },
 
-    handler: async (args, ctx) => {
+    handler: async (args: string, ctx: ProfileCommandContext) => {
       const tokens = args.trim().split(/\s+/);
       const sub = tokens[0] ?? "list";
 
@@ -105,7 +113,7 @@ export function registerProfileCommand(pi: ExtensionAPI): void {
           return;
         }
         const ok = await ctx.ui.confirm("Delete profile?", `Delete subagent profile "${name}"?`);
-        if (!ok) return;
+        if (!ok) {return;}
         const deleted = await deleteProfile(name, "global");
         const deletedProject = await deleteProfile(name, "project", ctx.cwd);
         if (deleted || deletedProject) {

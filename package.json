@@ -4,23 +4,56 @@
   "description": "Pi extension for spawning parallel sub-agents with live TUI windows",
   "type": "module",
   "main": "./src/index.ts",
-  "keywords": ["pi-package", "pi-extension", "subagent"],
-  "author": "",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "subagent"
+  ],
+  "author": "Earendil Works",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/earendil-works/pi-subagents"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src/",
+    "docs/",
+    "README.md"
+  ],
   "pi": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "dependencies": {
+    "typebox": "^1.1.38"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "^0.74.0"
   },
   "devDependencies": {
+    "@eslint/compat": "^2.1.0",
+    "@eslint/eslintrc": "^3.3.5",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
-    "typebox": "^1.1.38",
+    "@vitest/coverage-v8": "3",
+    "eslint": "^10.4.0",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import-x": "^4.16.2",
+    "eslint-plugin-unicorn": "^64.0.0",
+    "typescript-eslint": "^8.59.3",
     "vitest": "^3.0.0"
   },
   "scripts": {
-    "lint": "biome check src/",
+    "lint": "eslint src/",
+    "lint:fix": "eslint --fix src/",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "format": "biome format --write src/",
-    "format:check": "biome format src/",
-    "check": "biome check src/"
+    "check": "eslint src/",
+    "typecheck": "tsc --noEmit"
   }
 }

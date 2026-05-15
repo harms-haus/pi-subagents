@@ -6,16 +6,16 @@
 
 import { homedir } from "node:os";
 import { relative } from "node:path";
-import type { Message } from "@earendil-works/pi-ai";
-import type { SubAgentWindow } from "./types";
 import { MAX_MESSAGES_PER_SESSION } from "./types";
+import type { SubAgentWindow } from "./types";
+import type { Message } from "@earendil-works/pi-ai";
 
 const HOME = homedir();
 
 // ── ANSI Stripping ───────────────────────────────────────────────────
 
 /** Regex to match ANSI escape codes */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape codes are required
+// eslint-disable-next-line no-control-regex
 const ANSI_REGEX = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
 
 /**
@@ -33,7 +33,7 @@ export function stripAnsi(text: string): string {
  * - Uses relative path from cwd if shorter
  */
 export function shortenPath(absolutePath: string, cwd: string): string {
-  if (absolutePath === cwd) return ".";
+  if (absolutePath === cwd) {return ".";}
 
   let displayPath = absolutePath;
   if (absolutePath.startsWith(`${HOME}/`)) {
@@ -46,7 +46,7 @@ export function shortenPath(absolutePath: string, cwd: string): string {
     // For ascending paths (..), only use if significantly shorter to avoid confusing output
     if (rel.startsWith("..")) {
       const savings = displayPath.length - rel.length;
-      if (savings < 10) return displayPath;
+      if (savings < 10) {return displayPath;}
     }
     return rel;
   }
@@ -72,7 +72,7 @@ export function shortenPathsInText(text: string, cwd: string): string {
     m = ABSOLUTE_PATH_REGEX.exec(text);
   }
 
-  if (matches.length === 0) return text;
+  if (matches.length === 0) {return text;}
 
   // Build result by replacing each match
   let result = "";
@@ -108,7 +108,7 @@ function getCdPattern(cwd: string): RegExp {
 export function collapseCdDot(command: string, cwd: string): string {
   const match = command.match(getCdPattern(cwd));
 
-  if (!match) return command;
+  if (!match) {return command;}
 
   if (match[1] === undefined) {
     // Exact match: `cd <cwd>` with nothing after → return "."
@@ -145,7 +145,7 @@ export function collapseCdDot(command: string, cwd: string): string {
 export function formatBashCommand(cmd: string, firstLineBudget: number, contBudget?: number): string {
   const contLineBudget = contBudget ?? firstLineBudget;
 
-  if (cmd.length <= firstLineBudget) return cmd;
+  if (cmd.length <= firstLineBudget) {return cmd;}
 
   // Split on " && " boundaries
   const segments = cmd.split(" && ");
@@ -229,7 +229,7 @@ export function appendLineToWindow(
   kind: "text" | "tool" = "text",
 ): void {
   const clean = stripAnsi(line).trimEnd();
-  if (!clean) return;
+  if (!clean) {return;}
   const entry = { text: clean, kind };
   win.lines.push(entry);
   while (win.lines.length > maxLines) {
@@ -248,7 +248,7 @@ export function appendLineToWindow(
  * Returns an array of text strings from the message content.
  */
 export function getTextParts(msg: Message): string[] {
-  if (msg.role !== "assistant" || !msg.content) return [];
+  if (msg.role !== "assistant" || !msg.content) {return [];}
   const parts: string[] = [];
   for (const part of msg.content) {
     if (part.type === "text") {
@@ -265,7 +265,7 @@ export function getTextParts(msg: Message): string[] {
 export function getLastAssistantText(messages: Message[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const parts = getTextParts(messages[i]);
-    if (parts.length > 0) return parts[0];
+    if (parts.length > 0) {return parts[0];}
   }
   return "";
 }
@@ -294,9 +294,9 @@ export function countWindowStatuses(windows: SubAgentWindow[]): {
 export function getSummaryText(windows: SubAgentWindow[]): string {
   const { running, completed: done, error: errors } = countWindowStatuses(windows);
   const parts: string[] = [];
-  if (running > 0) parts.push(`${running} running`);
-  if (done > 0) parts.push(`${done} done`);
-  if (errors > 0) parts.push(`${errors} error${errors > 1 ? "s" : ""}`);
+  if (running > 0) {parts.push(`${running} running`);}
+  if (done > 0) {parts.push(`${done} done`);}
+  if (errors > 0) {parts.push(`${errors} error${errors > 1 ? "s" : ""}`);}
   return parts.join(", ") || "processing...";
 }
 
@@ -311,14 +311,14 @@ export async function mapWithConcurrencyLimit<TIn, TOut>(
   concurrency: number,
   fn: (item: TIn, index: number) => Promise<TOut>,
 ): Promise<TOut[]> {
-  if (items.length === 0) return [];
+  if (items.length === 0) {return [];}
   const limit = Math.max(1, Math.min(concurrency, items.length));
   const results: TOut[] = new Array(items.length);
   let nextIndex = 0;
   const workers = new Array(limit).fill(null).map(async () => {
     while (true) {
       const current = nextIndex++;
-      if (current >= items.length) return;
+      if (current >= items.length) {return;}
       results[current] = await fn(items[current], current);
     }
   });

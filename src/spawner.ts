@@ -7,9 +7,7 @@
 
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import type { SubagentProfile } from "./profiles";
 import { loadCommandPreviewWidth, profileToArgs } from "./profiles";
-import type { SubAgentTask, SubAgentWindow, SubagentSessionData, ToolCallPart } from "./types";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
 import {
   appendLineToWindow,
@@ -20,6 +18,9 @@ import {
   shortenPath,
   shortenPathsInText,
 } from "./utils";
+import type { SubagentProfile } from "./profiles";
+import type { SubAgentTask, SubAgentWindow, SubagentSessionData, ToolCallPart } from "./types";
+import type { Message } from "@earendil-works/pi-ai";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -53,19 +54,21 @@ function validateCwd(cwd: string | undefined, fallback: string): string {
  * Format a tool call as a concise one-liner for the sub-agent rolling window.
  * Avoids dumping full JSON arguments for common tools.
  */
-function formatToolCall(toolName: string, args: Record<string, any>, cwd: string, widthBudget: number): string {
+function formatToolCall(toolName: string, args: Record<string, unknown>, cwd: string, widthBudget: number): string {
+  // Typed view of args for display formatting
+  const a = args as Record<string, string>;
   switch (toolName) {
     // File mutations: just show the filename
     case "edit":
     case "write": {
-      const path = shortenPath(args.path ?? args.filePath ?? "...", cwd);
-      const count = args.edits?.length;
+      const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
+      const count = (args.edits as unknown[] | undefined)?.length;
       const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
       return `${toolName} → ${path}${suffix}`;
     }
 
     case "bash": {
-      let cmd = (args.command ?? "...").split("\n")[0];
+      let cmd = (a.command ?? "...").split("\n")[0];
       cmd = collapseCdDot(cmd, cwd);
       if (cmd === "." || cmd === "") {
         return `bash → cd .`;
@@ -75,62 +78,62 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
     }
 
     case "read": {
-      const path = shortenPath(args.path ?? "...", cwd);
+      const path = shortenPath(a.path ?? "...", cwd);
       const parts = [path];
-      if (args.offset) parts.push(`:${args.offset}`);
-      if (args.limit) parts.push(`+${args.limit}`);
+      if (a.offset) {parts.push(`:${a.offset}`);}
+      if (a.limit) {parts.push(`+${a.limit}`);}
       return `read → ${parts.join("")}`;
     }
 
     // Delegation
     case "delegate_to_subagents": {
-      const tasks = args.tasks ?? [];
-      const profiles = tasks.map((t: any) => t.profile).filter(Boolean);
-      const profileStr = profiles.length > 0 ? ` [${profiles.join(", ")}]` : args.profile ? ` [${args.profile}]` : "";
+      const tasks = (args.tasks ?? []) as { profile?: string }[];
+      const profiles = tasks.map((t) => t.profile).filter(Boolean);
+      const profileStr = profiles.length > 0 ? ` [${profiles.join(", ")}]` : a.profile ? ` [${a.profile}]` : "";
       return `delegate_to_subagents → ${tasks.length} task${tasks.length !== 1 ? "s" : ""}${profileStr}`;
     }
 
     // Todo tools
     case "write_todos": {
-      const n = args.todos?.length ?? 0;
+      const n = (args.todos as unknown[] | undefined)?.length ?? 0;
       return `write_todos → ${n} todo${n !== 1 ? "s" : ""}`;
     }
     case "edit_todos": {
-      const indices = args.indices?.join(",") ?? "...";
-      return `edit_todos → ${args.action ?? "?"} [${indices}]`;
+      const indices = (args.indices as number[] | undefined)?.join(",") ?? "...";
+      return `edit_todos → ${a.action ?? "?"} [${indices}]`;
     }
     case "list_todos":
       return "list_todos";
 
     // LSP tools
     case "lsp_diagnostics": {
-      const file = shortenPath(args.file ?? "...", cwd);
+      const file = shortenPath(a.file ?? "...", cwd);
       return `lsp_diagnostics → ${file}`;
     }
     case "lsp_find_references": {
-      const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp_find_references → ${file}:${args.line}:${args.column}`;
+      const file = shortenPath(a.file ?? "...", cwd);
+      return `lsp_find_references → ${file}:${a.line}:${a.column}`;
     }
     case "lsp_goto_definition": {
-      const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp_goto_definition → ${file}:${args.line}:${args.column}`;
+      const file = shortenPath(a.file ?? "...", cwd);
+      return `lsp_goto_definition → ${file}:${a.line}:${a.column}`;
     }
     case "lsp_find_symbol":
-      return `lsp_find_symbol → ${args.query ?? "..."}`;
+      return `lsp_find_symbol → ${a.query ?? "..."}`;
     case "lsp_call_hierarchy": {
-      const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp_call_hierarchy → ${file}:${args.line}:${args.column}`;
+      const file = shortenPath(a.file ?? "...", cwd);
+      return `lsp_call_hierarchy → ${file}:${a.line}:${a.column}`;
     }
     case "lsp_refactor_symbol": {
-      const file = shortenPath(args.file ?? "...", cwd);
-      return `lsp_refactor_symbol → ${file}:${args.line}:${args.column} → ${args.newName ?? "..."}`;
+      const file = shortenPath(a.file ?? "...", cwd);
+      return `lsp_refactor_symbol → ${file}:${a.line}:${a.column} → ${a.newName ?? "..."}`;
     }
 
     // Lint
     case "lint_files": {
-      const files = args.files;
+      const files = args.files as string[] | undefined;
       if (files && files.length > 0) {
-        const shortened = files.map((f: string) => shortenPath(f, cwd));
+        const shortened = files.map((f) => shortenPath(f, cwd));
         const preview =
           shortened.length <= 3
             ? shortened.join(", ")
@@ -143,13 +146,13 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
     // Fetch tools
     case "fetch_content":
     case "web_search": {
-      const url = args.url ?? args.query ?? "...";
+      const url = a.url ?? a.query ?? "...";
       const urlBudget = widthBudget - toolName.length - 4;
       const truncated = url.length > urlBudget ? `${url.slice(0, urlBudget - 3)}...` : url;
       return `${toolName} → ${truncated}`;
     }
     case "fetch_repo": {
-      const url = args.url ?? "...";
+      const url = a.url ?? "...";
       return `fetch_repo → ${url}`;
     }
 
@@ -170,9 +173,9 @@ function formatToolCall(toolName: string, args: Record<string, any>, cwd: string
     default: {
       // Generic fallback: show name + first arg value if short
       const keys = Object.keys(args);
-      if (keys.length === 0) return toolName;
+      if (keys.length === 0) {return toolName;}
       const firstVal = String(args[keys[0]] ?? "");
-      if (firstVal.length > 60) return `${toolName} → ...`;
+      if (firstVal.length > 60) {return `${toolName} → ...`;}
       return `${toolName} → ${firstVal}`;
     }
   }
@@ -193,18 +196,18 @@ function handleStdoutLine(
   cwd: string,
   widthBudget: number,
 ): void {
-  if (!line.trim()) return;
+  if (!line.trim()) {return;}
 
-  let event: any;
+  let event: { type?: string; message?: Message };
   try {
-    event = JSON.parse(line);
+    event = JSON.parse(line) as { type?: string; message?: Message };
   } catch {
     appendLineToWindow(win, line, maxLines);
     onUpdate();
     return;
   }
 
-  if (event.type !== "message_end" || !event.message) return;
+  if (event.type !== "message_end" || !event.message) {return;}
 
   const msg = event.message;
   session.messages.push(msg);
@@ -249,7 +252,7 @@ function handleStdoutLine(
  */
 function handleStderrData(data: Buffer, win: SubAgentWindow, maxLines: number, onUpdate: () => void): void {
   const text = data.toString().trim();
-  if (!text) return;
+  if (!text) {return;}
 
   appendLineToWindow(win, `[stderr]: ${text}`, maxLines);
   onUpdate();
@@ -267,8 +270,8 @@ function handleProcessExit(
   processLineFn: (line: string) => void,
   onUpdate: () => void,
 ): void {
-  if (buffer.trim()) processLineFn(buffer);
-  if (bufferTimeout) clearTimeout(bufferTimeout);
+  if (buffer.trim()) {processLineFn(buffer);}
+  if (bufferTimeout) {clearTimeout(bufferTimeout);}
 
   const exitCode = code ?? 0;
   win.exitCode = exitCode;
@@ -289,7 +292,7 @@ function setupAbortHandler(proc: ReturnType<typeof spawn>, signal: AbortSignal):
   const killProc = () => {
     proc.kill("SIGTERM");
     setTimeout(() => {
-      if (!proc.killed) proc.kill("SIGKILL");
+      if (!proc.killed) {proc.kill("SIGKILL");}
     }, 5000);
   };
 
@@ -331,7 +334,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
 
   // Debounced onUpdate to reduce TUI pressure
   const debouncedUpdate = () => {
-    if (bufferTimeout) clearTimeout(bufferTimeout);
+    if (bufferTimeout) {clearTimeout(bufferTimeout);}
     bufferTimeout = setTimeout(() => onUpdate(), 50);
   };
 
@@ -364,7 +367,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
     });
 
     const handleError = () => {
-      if (bufferTimeout) clearTimeout(bufferTimeout);
+      if (bufferTimeout) {clearTimeout(bufferTimeout);}
       win.exitCode = 1;
       win.status = "error";
       win.errorMessage = win.errorMessage || "Failed to spawn sub-agent process";

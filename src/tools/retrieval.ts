@@ -4,12 +4,12 @@
  * Tool registrations for retrieving sub-agent output and session data.
  */
 
-import type { ExtensionAPI, Theme, ToolExecutionResult } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { loadMaxLinesPerWindow, loadProfiles, profileSummary } from "../profiles";
-import type { SessionRecord, ToolCallPart } from "../types";
 import { getLastAssistantText, getTextParts } from "../utils";
+import type { SessionRecord, ToolCallPart } from "../types";
+import type { ExtensionAPI, Theme, ToolExecutionResult } from "@earendil-works/pi-coding-agent";
 
 // ── Rendering Helpers ───────────────────────────────────────────────────────
 
@@ -31,16 +31,11 @@ function createSimpleRenderResult(defaultLabel: string = "(no output)") {
  * The full content is still injected into context; only the TUI display is shortened.
  */
 function createTruncatingRenderResult(defaultLabel: string = "(no output)") {
-  return (
-    result: ToolExecutionResult,
-    _options: { expanded: boolean },
-    theme: Theme,
-    _context: unknown,
-  ) => {
+  return (result: ToolExecutionResult, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
     const text = result.content[0];
     const content = text?.type === "text" ? text.text : defaultLabel;
     const lines = content.split("\n");
-    const maxLines: number = (result.details as Record<string, unknown>)?.maxLines as number ?? 15;
+    const maxLines: number = ((result.details as Record<string, unknown>)?.maxLines as number) ?? 15;
 
     if (lines.length <= maxLines) {
       return new Text(theme.fg("toolOutput", content), 0, 0);

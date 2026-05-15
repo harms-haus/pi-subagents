@@ -37,7 +37,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   parseFrontmatter: vi.fn(),
 }));
 
-import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 
@@ -822,17 +822,9 @@ describe("loadProfilesFromDir (excludeTools parsing)", () => {
 
   it("should parse excludeTools from comma-separated string", async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdirSync).mockReturnValue([
-      { name: "string-exclude.md", isFile: () => true } as Dirent,
-    ]);
+    vi.mocked(readdirSync).mockReturnValue([{ name: "string-exclude.md", isFile: () => true }] as unknown as ReturnType<typeof readdirSync>);
     vi.mocked(readFileSync).mockReturnValue(
-      [
-        "---",
-        "name: string-exclude",
-        "excludeTools: bash,write",
-        "---",
-        "",
-      ].join("\n"),
+      ["---", "name: string-exclude", "excludeTools: bash,write", "---", ""].join("\n"),
     );
     vi.mocked(parseFrontmatter).mockReturnValue({
       frontmatter: { name: "string-exclude", excludeTools: "bash,write" },
@@ -846,19 +838,9 @@ describe("loadProfilesFromDir (excludeTools parsing)", () => {
 
   it("should parse excludeTools from YAML array", async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdirSync).mockReturnValue([
-      { name: "array-exclude.md", isFile: () => true } as Dirent,
-    ]);
+    vi.mocked(readdirSync).mockReturnValue([{ name: "array-exclude.md", isFile: () => true }] as unknown as ReturnType<typeof readdirSync>);
     vi.mocked(readFileSync).mockReturnValue(
-      [
-        "---",
-        "name: array-exclude",
-        "excludeTools:",
-        "  - bash",
-        "  - write",
-        "---",
-        "",
-      ].join("\n"),
+      ["---", "name: array-exclude", "excludeTools:", "  - bash", "  - write", "---", ""].join("\n"),
     );
     vi.mocked(parseFrontmatter).mockReturnValue({
       frontmatter: { name: "array-exclude", excludeTools: ["bash", "write"] },

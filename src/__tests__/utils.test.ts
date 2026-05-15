@@ -211,7 +211,7 @@ describe("mapWithConcurrencyLimit", () => {
   it("should reject if any item fails", async () => {
     await expect(
       mapWithConcurrencyLimit([1, 2, 3, 4], 2, async (item) => {
-        if (item === 3) throw new Error("Item 3 failed");
+        if (item === 3) {throw new Error("Item 3 failed");}
         return item * 2;
       }),
     ).rejects.toThrow("Item 3 failed");
@@ -718,15 +718,11 @@ describe("formatBashCommand", () => {
   });
 
   it("should truncate a single segment that exceeds the budget", () => {
-    expect(formatBashCommand("a-very-long-command-that-exceeds-the-budget", 20)).toBe(
-      "a-very-long-comma...",
-    );
+    expect(formatBashCommand("a-very-long-command-that-exceeds-the-budget", 20)).toBe("a-very-long-comma...");
   });
 
   it("should split on && when segments don't fit together", () => {
-    expect(formatBashCommand("short && long-command-exceeds-budget", 15)).toBe(
-      "short &&\n\u2502 long-command...",
-    );
+    expect(formatBashCommand("short && long-command-exceeds-budget", 15)).toBe("short &&\n\u2502 long-command...");
   });
 
   it("should split multiple && segments onto separate lines", () => {
@@ -734,21 +730,15 @@ describe("formatBashCommand", () => {
   });
 
   it("should truncate oversized segment in the middle with more after", () => {
-    expect(
-      formatBashCommand(
-        "short && also-short && very-very-very-long-command && last",
-        25,
-      ),
-    ).toBe("short && also-short &&\n\u2502 very-very-very-long-co... &&\n\u2502 last");
+    expect(formatBashCommand("short && also-short && very-very-very-long-command && last", 25)).toBe(
+      "short && also-short &&\n\u2502 very-very-very-long-co... &&\n\u2502 last",
+    );
   });
 
   it("should truncate oversized segment at the end", () => {
-    expect(
-      formatBashCommand(
-        "short && also-short && very-very-very-long-command",
-        25,
-      ),
-    ).toBe("short && also-short &&\n\u2502 very-very-very-long-co...");
+    expect(formatBashCommand("short && also-short && very-very-very-long-command", 25)).toBe(
+      "short && also-short &&\n\u2502 very-very-very-long-co...",
+    );
   });
 
   it("should return empty string for empty command", () => {
@@ -760,9 +750,7 @@ describe("formatBashCommand", () => {
   });
 
   it("should truncate long command without && delimiters", () => {
-    expect(formatBashCommand("a-very-long-command-without-ampersands", 20)).toBe(
-      "a-very-long-comma...",
-    );
+    expect(formatBashCommand("a-very-long-command-without-ampersands", 20)).toBe("a-very-long-comma...");
   });
 
   it("should keep all segments on one line when they fit together", () => {

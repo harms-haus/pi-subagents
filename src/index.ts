@@ -22,11 +22,11 @@
  *   list_subagent_profiles({})
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerProfileCommand } from "./commands/profile";
 import { registerDelegateTool } from "./tools/delegate";
 import { registerRetrievalTools } from "./tools/retrieval";
 import type { SessionRecord, SubagentSessionData } from "./types";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
   // ── In-memory session store ──────────────────────────────────────
@@ -55,7 +55,7 @@ export default function (pi: ExtensionAPI) {
             oldestKey = key;
           }
         }
-        if (oldestKey) sessionStore.delete(oldestKey);
+        if (oldestKey) {sessionStore.delete(oldestKey);}
       }
       sessionStore.set(session.sessionId, { runs: [session] });
     }

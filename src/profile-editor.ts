@@ -5,8 +5,27 @@
  * Uses the extension API's UI methods to prompt for profile settings.
  */
 
-import type { SubagentProfile, ThinkingLevel } from "./profiles";
-import { formatProfileDetail, type ProfileScope, saveProfile } from "./profiles";
+import {
+  formatProfileDetail,
+  saveProfile,
+  type ProfileScope,
+  type SubagentProfile,
+  type ThinkingLevel,
+} from "./profiles";
+
+/** Subset of ExtensionContext used by the profile editor. */
+interface ProfileEditorUIContext {
+  select<T = string>(title: string, options: string[]): Promise<T | undefined>;
+  input(title: string, placeholder?: string): Promise<string | undefined>;
+  confirm(title: string, message: string): Promise<boolean>;
+  editor(title: string, prefill?: string): Promise<string | undefined>;
+  notify(message: string, type?: "info" | "warning" | "error"): void;
+}
+
+interface ProfileEditorContext {
+  ui: ProfileEditorUIContext;
+  cwd: string;
+}
 
 /**
  * Interactive profile editor wizard.
@@ -14,7 +33,11 @@ import { formatProfileDetail, type ProfileScope, saveProfile } from "./profiles"
  * Prompts the user through a series of UI dialogs to configure or edit a profile.
  * Returns undefined if the user cancels at any point.
  */
-export async function editProfileInteractive(name: string, initial: SubagentProfile, ctx: any): Promise<void> {
+export async function editProfileInteractive(
+  name: string,
+  initial: SubagentProfile,
+  ctx: ProfileEditorContext,
+): Promise<void> {
   const profile = { ...initial };
   const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
@@ -23,20 +46,20 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
     `Global (~/.pi/agent-profiles/${name}.md)`,
     `Project (.pi/agent-profiles/${name}.md)`,
   ]);
-  if (!scope) return;
+  if (!scope) {return;}
   const scopeValue: ProfileScope = scope.startsWith("Global") ? "global" : "project";
 
   // Provider
   const provider = await ctx.ui.input("Provider (e.g. anthropic, openai, dashscope):", profile.provider ?? "");
-  if (provider === undefined) return;
-  if (provider) profile.provider = provider;
-  else delete profile.provider;
+  if (provider === undefined) {return;}
+  if (provider) {profile.provider = provider;}
+  else {delete profile.provider;}
 
   // Model
   const model = await ctx.ui.input("Model (supports provider/id and :thinking shorthand):", profile.model ?? "");
-  if (model === undefined) return;
-  if (model) profile.model = model;
-  else delete profile.model;
+  if (model === undefined) {return;}
+  if (model) {profile.model = model;}
+  else {delete profile.model;}
 
   // System prompt
   const hasSystem = await ctx.ui.confirm(
@@ -45,7 +68,7 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
   );
   if (hasSystem) {
     const sp = await ctx.ui.editor("System prompt:", profile.systemPrompt ?? "You are a helpful coding assistant.");
-    if (sp === undefined) return;
+    if (sp === undefined) {return;}
     profile.systemPrompt = sp;
   } else {
     delete profile.systemPrompt;
@@ -60,8 +83,8 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
   );
   if (hasAppend) {
     const ap = await ctx.ui.input("Append text:", profile.appendSystemPrompt ?? "");
-    if (ap === undefined) return;
-    if (ap) profile.appendSystemPrompt = ap;
+    if (ap === undefined) {return;}
+    if (ap) {profile.appendSystemPrompt = ap;}
   } else {
     delete profile.appendSystemPrompt;
   }
@@ -73,7 +96,7 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
   );
   if (hasThinking) {
     const tl = await ctx.ui.select<ThinkingLevel>("Thinking level:", THINKING_LEVELS);
-    if (tl) profile.thinkingLevel = tl;
+    if (tl) {profile.thinkingLevel = tl;}
   } else {
     delete profile.thinkingLevel;
   }
@@ -97,14 +120,14 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
         "Allowlist (only these tools)",
         "Blacklist (all tools except these)",
       ]);
-      if (!toolMode) return;
+      if (!toolMode) {return;}
       if (toolMode.startsWith("Blacklist")) {
         delete profile.tools;
         const excludeStr = await ctx.ui.input(
           "Tool blacklist (comma-separated, e.g. read,bash,grep):",
           profile.excludeTools?.join(",") ?? "",
         );
-        if (excludeStr === undefined) return;
+        if (excludeStr === undefined) {return;}
         if (excludeStr.trim()) {
           profile.excludeTools = excludeStr
             .split(",")
@@ -119,7 +142,7 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
           "Tool allowlist (comma-separated, e.g. read,bash,grep):",
           profile.tools?.join(",") ?? "",
         );
-        if (toolsStr === undefined) return;
+        if (toolsStr === undefined) {return;}
         if (toolsStr.trim()) {
           profile.tools = toolsStr
             .split(",")
@@ -145,7 +168,7 @@ export async function editProfileInteractive(name: string, initial: SubagentProf
     } else {
       delete profile.noExtensions;
       const extStr = await ctx.ui.input("Extension paths (comma-separated):", profile.extensions?.join(",") ?? "");
-      if (extStr === undefined) return;
+      if (extStr === undefined) {return;}
       if (extStr.trim()) {
         profile.extensions = extStr
           .split(",")

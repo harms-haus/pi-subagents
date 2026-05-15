@@ -29,6 +29,14 @@ export interface ToolCallPart {
   arguments?: Record<string, unknown>;
 }
 
+/** A content part from a Message — text, thinking, or tool call */
+export interface TextPart {
+  type: "text";
+  text: string;
+}
+
+export type ContentPart = TextPart | ToolCallPart | { type: string; [key: string]: unknown };
+
 /** Tool result message (used internally for message processing) */
 export interface ToolResultMessage {
   role: "toolResult";
@@ -120,14 +128,13 @@ export function formatRunsForResume(runs: SubagentSessionData[]): string {
     for (const msg of run.messages) {
       if (msg.role === "user") {
         const text = getTextContent(msg);
-        if (text) parts.push(`User: ${text}`);
+        if (text) {parts.push(`User: ${text}`);}
       } else if (msg.role === "assistant") {
         const text = getTextContent(msg);
-        if (text) parts.push(`Assistant: ${text}`);
+        if (text) {parts.push(`Assistant: ${text}`);}
         // Extract tool calls
         if (msg.content) {
-          // biome-ignore lint/suspicious/noExplicitAny: Message.content type varies
-          for (const part of msg.content as any[]) {
+          for (const part of msg.content as ContentPart[]) {
             if (part.type === "toolCall") {
               const args = JSON.stringify(part.arguments || {}).slice(0, 120);
               parts.push(`Tool Call: ${part.name}(${args})`);
@@ -150,14 +157,13 @@ export function formatRunsForResume(runs: SubagentSessionData[]): string {
 }
 
 /** Extract text content from a Message */
-// biome-ignore lint/suspicious/noExplicitAny: Message.content type varies
-function getTextContent(msg: { content?: any }): string | undefined {
-  if (!msg.content) return undefined;
-  if (typeof msg.content === "string") return msg.content;
+function getTextContent(msg: { content?: unknown }): string | undefined {
+  if (!msg.content) {return undefined;}
+  if (typeof msg.content === "string") {return msg.content;}
   if (Array.isArray(msg.content)) {
     const texts: string[] = [];
-    for (const part of msg.content) {
-      if (part.type === "text" && part.text) texts.push(part.text);
+    for (const part of msg.content as ContentPart[]) {
+      if (part.type === "text" && "text" in part && part.text) {texts.push(part.text);}
     }
     return texts.join("\n") || undefined;
   }

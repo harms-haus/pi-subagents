@@ -5,15 +5,27 @@
  */
 
 import { randomUUID } from "node:crypto";
-
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text } from "@earendil-works/pi-tui";
-import { applyExcludeTools, loadMaxLinesPerWindow, loadProfiles, profileSummary, resolveProfile, validateProfileTools } from "../profiles";
+import {
+  applyExcludeTools,
+  loadMaxLinesPerWindow,
+  loadProfiles,
+  profileSummary,
+  resolveProfile,
+  validateProfileTools,
+} from "../profiles";
 import { DelegateParams } from "../schemas";
 import { runSubAgent } from "../spawner";
-import type { SessionRecord, SubAgentWindow, SubagentSessionData, WindowedSubagentDetails, WindowLine } from "../types";
 import { DEFAULT_TIMEOUT, formatRunsForResume, MAX_CONCURRENCY } from "../types";
 import { countWindowStatuses, getSummaryText, mapWithConcurrencyLimit } from "../utils";
+import type { SessionRecord, SubAgentWindow, SubagentSessionData, WindowedSubagentDetails, WindowLine } from "../types";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+/** Type for the renderCall args parameter (subset of DelegateParams) */
+interface DelegateToolArgs {
+  tasks?: Array<{ name?: string; prompt?: string; profile?: string }>;
+  profile?: string;
+}
 
 /**
  * Register the delegate_to_subagents tool.
@@ -210,7 +222,7 @@ export function registerDelegateTool(
           });
         } finally {
           clearTimeout(taskAbortTimeout);
-          if (signal) signal.removeEventListener("abort", onParentAbort);
+          if (signal) {signal.removeEventListener("abort", onParentAbort);}
         }
 
         // Check if timeout caused the abort
@@ -245,9 +257,9 @@ export function registerDelegateTool(
     },
 
     // ── renderCall ─────────────────────────────────────────────────
-    renderCall(args, theme, _context) {
+    renderCall(args: DelegateToolArgs, theme, _context) {
       const count = args.tasks?.length ?? 1;
-      const taskProfiles = (args.tasks ?? []).map((t: { profile?: string }) => t.profile).filter(Boolean) as string[];
+      const taskProfiles = (args.tasks ?? []).map((t) => t.profile).filter(Boolean) as string[];
       const defaultProfile = args.profile;
 
       let text =
@@ -277,9 +289,9 @@ export function registerDelegateTool(
       {
         let header = theme.fg("toolTitle", theme.bold("Sub-agents: "));
         const parts: string[] = [];
-        if (running > 0) parts.push(theme.fg("warning", `${running} running`));
-        if (done > 0) parts.push(theme.fg("success", `${done} done`));
-        if (errors > 0) parts.push(theme.fg("error", `${errors} error${errors > 1 ? "s" : ""}`));
+        if (running > 0) {parts.push(theme.fg("warning", `${running} running`));}
+        if (done > 0) {parts.push(theme.fg("success", `${done} done`));}
+        if (errors > 0) {parts.push(theme.fg("error", `${errors} error${errors > 1 ? "s" : ""}`));}
         header += parts.join(theme.fg("dim", ", "));
         header += theme.fg("dim", ` (${details.maxLinesPerWindow}-line window)`);
         container.addChild(new Text(header, 0, 0));

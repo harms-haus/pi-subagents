@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runSubAgent } from "../spawner";
 import type { SubAgentWindow, SubagentSessionData } from "../types";
+import type * as ProfilesModule from "../profiles";
 
 // Mock pi-coding-agent (used by profiles.ts for parseFrontmatter)
 vi.mock("@earendil-works/pi-coding-agent", () => ({
@@ -14,7 +15,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 // Mock profiles module — keep real implementations but override loadCommandPreviewWidth
 // so tests are deterministic regardless of terminal width
 vi.mock("../profiles", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../profiles")>();
+    const actual = await importOriginal<typeof ProfilesModule>();
   return {
     ...actual,
     loadCommandPreviewWidth: vi.fn().mockResolvedValue(160),

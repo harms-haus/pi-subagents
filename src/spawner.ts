@@ -244,9 +244,6 @@ function handleStdoutLine(
           const preview = formatToolCall(toolName, toolArgs, cwd, widthBudget);
           appendLineToWindow(win, `→ ${preview}`, maxLines, "tool");
 
-          // Track tool count
-          win.toolCount += 1;
-
           // Track todo progress
           if (toolName === "write_todos") {
             const newCount = (toolArgs.todos as unknown[] | undefined)?.length ?? 0;

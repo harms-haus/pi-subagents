@@ -136,7 +136,9 @@ export function registerDelegateTool(
           timeout: t.timeout ?? DEFAULT_TIMEOUT,
           todoTotal: undefined,
           todoCompleted: undefined,
-          toolCount: 0,
+          toolCount: resolvedProfile?.noTools
+            ? 0
+            : resolvedProfile?.tools?.length ?? allToolNames?.length ?? 0,
         };
       });
 

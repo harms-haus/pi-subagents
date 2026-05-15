@@ -97,7 +97,7 @@ export interface SubAgentWindow extends SubagentState {
   todoTotal?: number;
   /** Number of completed todo items */
   todoCompleted?: number;
-  /** Number of tool calls made */
+  /** Number of unique tools available to this sub-agent */
   toolCount: number;
 }
 

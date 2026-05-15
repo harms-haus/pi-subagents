@@ -996,7 +996,8 @@ describe("spawner", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    it("should increment toolCount for each tool call", async () => {
+    it("should not modify toolCount during tool calls (set at window creation)", async () => {
+      mockWindow.toolCount = 25; // Set by delegate.ts at creation time
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
@@ -1007,16 +1008,13 @@ describe("spawner", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      expect(mockWindow.toolCount).toBe(0);
+      expect(mockWindow.toolCount).toBe(25);
 
       await emitToolCall("bash", { command: "echo hello" });
-      expect(mockWindow.toolCount).toBe(1);
+      expect(mockWindow.toolCount).toBe(25); // Unchanged
 
       await emitToolCall("read", { path: "/some/file.ts" });
-      expect(mockWindow.toolCount).toBe(2);
-
-      await emitToolCall("write", { path: "/some/out.ts", content: "hi" });
-      expect(mockWindow.toolCount).toBe(3);
+      expect(mockWindow.toolCount).toBe(25); // Unchanged
 
       mockProcess.emit("close", 0);
       await promise;

@@ -112,7 +112,10 @@ export function makeDetails(
 export type MockChildProcess = EventEmitter & {
 	stdout: EventEmitter;
 	stderr: EventEmitter;
-	stdin: EventEmitter;
+	stdin: EventEmitter & {
+		write: ReturnType<typeof vi.fn>;
+		end: ReturnType<typeof vi.fn>;
+	};
 	killed: boolean;
 	kill: ReturnType<typeof vi.fn>;
 };
@@ -125,7 +128,10 @@ export function createMockProcess(): MockChildProcess {
 	const proc = new EventEmitter() as MockChildProcess;
 	proc.stdout = new EventEmitter();
 	proc.stderr = new EventEmitter();
-	proc.stdin = new EventEmitter();
+	proc.stdin = Object.assign(new EventEmitter(), {
+		write: vi.fn(),
+		end: vi.fn(),
+	}) as MockChildProcess["stdin"];
 	proc.killed = false;
 	proc.kill = vi.fn((signal: string) => {
 		proc.killed = true;

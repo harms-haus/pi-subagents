@@ -112,7 +112,12 @@ describe("spawner", () => {
       expect(spawnArgs[1]).toContain("json");
       expect(spawnArgs[1]).toContain("-p");
       expect(spawnArgs[1]).toContain("--no-session");
-      expect(spawnArgs[1]).toContain("test prompt");
+      expect(spawnArgs[1]).toContain("-");
+      expect(spawnArgs[1]).not.toContain("test prompt");
+
+      // Prompt should be written to stdin via end(), not passed as CLI arg
+      expect(mockProcess.stdin.end).toHaveBeenCalledWith(expect.stringContaining("test prompt"));
+      expect(mockProcess.stdin.write).not.toHaveBeenCalled();
 
       // Clean up
       mockProcess.emit("close", 0);
@@ -415,6 +420,38 @@ describe("spawner", () => {
       expect(mockSession.exitCode).toBe(1);
     });
 
+    it("should handle a very long prompt passed via stdin", async () => {
+      const longPrompt = "x".repeat(600000); // 600KB prompt
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: longPrompt },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(spawn).toHaveBeenCalled();
+      const spawnArgs = vi.mocked(spawn).mock.calls[0][1];
+
+      // The prompt should NOT appear as a CLI argument
+      expect(spawnArgs).not.toContain(longPrompt);
+      expect(spawnArgs).toContain("-");
+
+      // stdin.end should have been called with the prompt (possibly chunked)
+      const endCalls = vi.mocked(mockProcess.stdin.end).mock.calls;
+      const writtenData = endCalls.map((call) => String(call[0])).join("");
+      expect(writtenData).toContain(longPrompt);
+
+      // stdin.write should NOT have been called
+      expect(mockProcess.stdin.write).not.toHaveBeenCalled();
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
     it("should include profile args when profile is provided", async () => {
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt" },
@@ -436,7 +473,10 @@ describe("spawner", () => {
       const spawnArgs = vi.mocked(spawn).mock.calls[0][1];
 
       // Profile should inject additional args and env vars
-      expect(spawnArgs).toContain("test prompt");
+      // Prompt is passed via stdin via end(), not as CLI arg
+      expect(spawnArgs).not.toContain("test prompt");
+      expect(spawnArgs).toContain("-");
+      expect(mockProcess.stdin.end).toHaveBeenCalledWith(expect.stringContaining("test prompt"));
 
       const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
       expect(spawnOptions.env).toBeDefined();
@@ -1572,6 +1612,61 @@ describe("spawner", () => {
       // The body section (after second ---) should contain the prompt
       const body = parts.slice(2).join("---").trim();
       expect(body).toBe("You are a senior code reviewer.");
+    });
+  });
+
+  describe("stdin error handling", () => {
+    it("should silently ignore EPIPE on stdin", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit an EPIPE error on stdin (should be silently ignored)
+      const epipeError = new Error("EPIPE: Broken pipe") as NodeJS.ErrnoException;
+      epipeError.code = "EPIPE";
+      mockProcess.stdin.emit("error", epipeError);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // No [stdin error] line should appear in the window lines
+      const stdinErrorLine = mockWindow.lines.find((l) => l.text.includes("[stdin error]"));
+      expect(stdinErrorLine).toBeUndefined();
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should log unexpected stdin errors to stderr", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit an unknown error on stdin (should be logged)
+      const unknownError = new Error("Unknown write error") as NodeJS.ErrnoException;
+      unknownError.code = "UNKNOWN_ERROR";
+      mockProcess.stdin.emit("error", unknownError);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // [stdin error] line should appear in the window lines
+      const stdinErrorLine = mockWindow.lines.find((l) => l.text.includes("[stdin error]"));
+      expect(stdinErrorLine).toBeTruthy();
+      expect(stdinErrorLine?.text).toContain("[stdin error]: Unknown write error");
+
+      mockProcess.emit("close", 0);
+      await promise;
     });
   });
 

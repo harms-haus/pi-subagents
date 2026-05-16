@@ -229,7 +229,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
     profileEnv = envVars;
   }
 
-  args.push(task.prompt);
+  args.push('-');
 
   let buffer = "";
   let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -247,7 +247,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
     const proc = spawn(invocation.command, args, {
       cwd: resolvedCwd,
       shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...profileEnv },
     });
 
@@ -282,6 +282,14 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
       handleProcessExit(code, win, session, buffer, bufferTimeout, processLine, onUpdate);
       resolve();
     });
+
+    // Write prompt via stdin to avoid OS ARG_MAX limits
+    proc.stdin.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code !== "EPIPE" && err.code !== "ERR_STREAM_DESTROYED") {
+        handleStderrData(Buffer.from(`[stdin error]: ${err.message}`), win, maxLines, debouncedUpdate);
+      }
+    });
+    proc.stdin.end(task.prompt);
 
     proc.on("error", handleError);
 

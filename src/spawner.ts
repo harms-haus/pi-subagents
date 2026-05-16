@@ -229,7 +229,6 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<void> {
     profileEnv = envVars;
   }
 
-  args.push('-');
 
   let buffer = "";
   let bufferTimeout: ReturnType<typeof setTimeout> | null = null;

@@ -112,7 +112,6 @@ describe("spawner", () => {
       expect(spawnArgs[1]).toContain("json");
       expect(spawnArgs[1]).toContain("-p");
       expect(spawnArgs[1]).toContain("--no-session");
-      expect(spawnArgs[1]).toContain("-");
       expect(spawnArgs[1]).not.toContain("test prompt");
 
       // Prompt should be written to stdin via end(), not passed as CLI arg
@@ -438,7 +437,6 @@ describe("spawner", () => {
 
       // The prompt should NOT appear as a CLI argument
       expect(spawnArgs).not.toContain(longPrompt);
-      expect(spawnArgs).toContain("-");
 
       // stdin.end should have been called with the prompt (possibly chunked)
       const endCalls = vi.mocked(mockProcess.stdin.end).mock.calls;
@@ -475,7 +473,6 @@ describe("spawner", () => {
       // Profile should inject additional args and env vars
       // Prompt is passed via stdin via end(), not as CLI arg
       expect(spawnArgs).not.toContain("test prompt");
-      expect(spawnArgs).toContain("-");
       expect(mockProcess.stdin.end).toHaveBeenCalledWith(expect.stringContaining("test prompt"));
 
       const spawnOptions = vi.mocked(spawn).mock.calls[0][2];

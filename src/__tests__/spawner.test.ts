@@ -459,7 +459,7 @@ describe("spawner", () => {
       });
 
       const toolLine = findToolLine("edit");
-      expect(toolLine.text).toBe("→ edit → src/utils.ts (1 edit)");
+      expect(toolLine.text).toBe("→ edit → src/utils.ts (1 edit) +1/-1");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -483,7 +483,7 @@ describe("spawner", () => {
       });
 
       const toolLine = findToolLine("read");
-      expect(toolLine.text).toBe("→ read → src/index.ts:10+20");
+      expect(toolLine.text).toBe("→ read → src/index.ts:10+20 (20 lines)");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -506,7 +506,7 @@ describe("spawner", () => {
       });
 
       const toolLine = findToolLine("write");
-      expect(toolLine.text).toBe("→ write → src/new-file.ts");
+      expect(toolLine.text).toBe("→ write → src/new-file.ts +1");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -551,6 +551,96 @@ describe("spawner", () => {
 
       const toolLine = findToolLine("lint");
       expect(toolLine.text).toBe("→ lint → src/a.ts, src/b.ts");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should format grep with pattern only", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("grep", { pattern: "TODO" });
+
+      const toolLine = findToolLine("grep");
+      expect(toolLine.text).toBe("→ grep → /TODO/");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should format grep with pattern and path", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("grep", {
+        pattern: "TODO",
+        path: "/home/user/projects/my-app/src",
+      });
+
+      const toolLine = findToolLine("grep");
+      expect(toolLine.text).toBe("→ grep → /TODO/ → src");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should format grep with pattern and glob", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("grep", {
+        pattern: "TODO",
+        glob: "*.ts",
+      });
+
+      const toolLine = findToolLine("grep");
+      expect(toolLine.text).toBe("→ grep → /TODO/ → *.ts");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should format grep with glob taking priority over path", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("grep", {
+        pattern: "TODO",
+        path: "/home/user/projects/my-app/src",
+        glob: "*.ts",
+      });
+
+      const toolLine = findToolLine("grep");
+      expect(toolLine.text).toBe("→ grep → /TODO/ → *.ts");
 
       mockProcess.emit("close", 0);
       await promise;

@@ -708,5 +708,207 @@ describe("delegate_to_subagents render functions", () => {
       expect(allFgText).not.toContain("-line window");
       expect(allFgText).not.toContain("15-line window");
     });
+
+    // ── colorizeToolLine tests ────────────────────────────────────
+
+    /** Create a theme that wraps text in [color]...[/color] markers for assertion */
+    function makeMarkerTheme(): Theme {
+      return {
+        fg: vi.fn((color: string, text: string) => `[${color}]${text}[/${color}]`),
+        bold: vi.fn((text: string) => text),
+      } as unknown as Theme;
+    }
+
+    it("colorizes edit tool line with +N/-M diff stats", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "edit → src/file.ts (3 edits) +15/-8";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // +15 should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "+15"]);
+      // The slash separator gets muted color
+      expect(fgCalls).toContainEqual(["muted", "/"]);
+      // The removed stat should be "-8" (without the "/" prefix)
+      expect(fgCalls).toContainEqual(["toolDiffRemoved", "-8"]);
+    });
+
+    it("colorizes write tool line with +N at end", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "write → src/file.ts +42";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // +42 should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "+42"]);
+      // The prefix should get muted color
+      expect(fgCalls).toContainEqual(["muted", "write → src/file.ts "]);
+    });
+
+    it("colorizes read tool line with (N lines) pattern", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "read → src/file.ts:10+50 (50 lines)";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // The number 50 (line count) should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "50"]);
+      // The prefix should get muted color
+      expect(fgCalls).toContainEqual(["muted", "read → src/file.ts:10+50 "]);
+      // Opening paren should get muted
+      expect(fgCalls).toContainEqual(["muted", "("]);
+      // The suffix " lines)" should get muted
+      expect(fgCalls).toContainEqual(["muted", " lines)"]);
+    });
+
+    it("colorizes default tool line entirely in muted", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "bash → npm test";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // The entire line should be in a single muted call
+      expect(fgCalls).toContainEqual(["muted", "bash → npm test"]);
+      // Should NOT use diff colors
+      const colorNames = fgCalls.map((c: [string, string]) => c[0]);
+      expect(colorNames).not.toContain("toolDiffAdded");
+      expect(colorNames).not.toContain("toolDiffRemoved");
+    });
+
+    it("colorizes grep tool line entirely in muted", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "grep → /TODO/ → *.ts";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // The entire line should be in a single muted call
+      expect(fgCalls).toContainEqual(["muted", "grep → /TODO/ → *.ts"]);
+      // Should NOT use diff colors
+      const colorNames = fgCalls.map((c: [string, string]) => c[0]);
+      expect(colorNames).not.toContain("toolDiffAdded");
+      expect(colorNames).not.toContain("toolDiffRemoved");
+    });
+
+    it("does not colorize fetch_content line ending with +N (false-positive bug fix)", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "fetch_content → https://site.com/api+1";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // The entire line should be in a single muted call
+      expect(fgCalls).toContainEqual(["muted", "fetch_content → https://site.com/api+1"]);
+      // Should NOT use diff colors (this is the bug fix - +N in URL should not be colorized)
+      const colorNames = fgCalls.map((c: [string, string]) => c[0]);
+      expect(colorNames).not.toContain("toolDiffAdded");
+      expect(colorNames).not.toContain("toolDiffRemoved");
+    });
   });
 });

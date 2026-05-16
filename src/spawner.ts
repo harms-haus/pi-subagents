@@ -37,6 +37,31 @@ export interface RunSubAgentOptions {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 /**
+ * Count non-empty lines in a text without allocating intermediate arrays.
+ */
+function countNonEmptyLines(text: string): number {
+  let count = 0;
+  let lineStart = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i === text.length || text.charCodeAt(i) === 10) { // newline
+      let empty = true;
+      for (let j = lineStart; j < i; j++) {
+        const c = text.charCodeAt(j);
+        if (c !== 32 && c !== 9 && c !== 13) { // not space/tab/CR
+          empty = false;
+          break;
+        }
+      }
+      if (!empty) {
+        count++;
+      }
+      lineStart = i + 1;
+    }
+  }
+  return count;
+}
+
+/**
  * Validate and resolve the cwd parameter for a sub-agent task.
  */
 function validateCwd(cwd: string | undefined, fallback: string): string {
@@ -59,12 +84,37 @@ function formatToolCall(toolName: string, args: Record<string, unknown>, cwd: st
   const a = args as Record<string, string>;
   switch (toolName) {
     // File mutations: just show the filename
-    case "edit":
+    case "edit": {
+      const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
+      const edits = (args.edits as Array<{oldText?: string, newText?: string}> | undefined) ?? [];
+      const count = edits.length;
+      const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
+      // Count lines added/removed from edits
+      let added = 0;
+      let removed = 0;
+      for (const edit of edits) {
+        removed += countNonEmptyLines(edit.oldText ?? "");
+        added += countNonEmptyLines(edit.newText ?? "");
+      }
+      const diffStats = count > 0 ? ` +${added}/-${removed}` : "";
+      return `edit → ${path}${suffix}${diffStats}`;
+    }
+
     case "write": {
       const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
-      const count = (args.edits as unknown[] | undefined)?.length;
-      const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
-      return `${toolName} → ${path}${suffix}`;
+      const content = a.content ?? "";
+      const lines = countNonEmptyLines(content);
+      return `write → ${path} +${lines}`;
+    }
+
+    case "grep": {
+      const pattern = a.pattern ?? "...";
+      if (a.glob) {
+        return `grep → /${pattern}/ → ${a.glob}`;
+      } else if (a.path) {
+        return `grep → /${pattern}/ → ${shortenPath(a.path, cwd)}`;
+      }
+      return `grep → /${pattern}/`;
     }
 
     case "bash": {
@@ -82,7 +132,8 @@ function formatToolCall(toolName: string, args: Record<string, unknown>, cwd: st
       const parts = [path];
       if (a.offset) {parts.push(`:${a.offset}`);}
       if (a.limit) {parts.push(`+${a.limit}`);}
-      return `read → ${parts.join("")}`;
+      const lineCount = a.limit ? ` (${a.limit} lines)` : "";
+      return `read → ${parts.join("")}${lineCount}`;
     }
 
     // Delegation

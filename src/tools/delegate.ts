@@ -19,7 +19,56 @@ import { runSubAgent } from "../spawner";
 import { DEFAULT_TIMEOUT, formatRunsForResume, MAX_CONCURRENCY } from "../types";
 import { countWindowStatuses, getSummaryText, mapWithConcurrencyLimit } from "../utils";
 import type { SessionRecord, SubAgentWindow, SubagentSessionData, WindowedSubagentDetails, WindowLine } from "../types";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+
+/**
+ * Apply theme colors to specific patterns in tool call lines.
+ * Colorizes diff stats (+N/-M) and line counts (N lines) while keeping
+ * the rest of the line in muted color.
+ */
+function colorizeToolLine(line: string, theme: Theme): string {
+  // Pattern 1: +N/-M diff stats (edit tool)
+  const diffMatch = line.match(/^(.*?)(\+\d+\/-\d+)(.*)$/);
+  if (diffMatch) {
+    const [, prefix, stats, suffix] = diffMatch;
+    const plusIdx = stats.indexOf('+');
+    const slashIdx = stats.indexOf('/');
+    const added = stats.substring(plusIdx, slashIdx);
+    const removed = stats.substring(slashIdx + 1);
+    return (
+      theme.fg("muted", prefix) +
+      theme.fg("toolDiffAdded", added) +
+      theme.fg("muted", "/") +
+      theme.fg("toolDiffRemoved", removed) +
+      theme.fg("muted", suffix)
+    );
+  }
+
+  // Pattern 2: +N at end (write tool, no removal count)
+  if (line.includes("write")) {
+    const writeMatch = line.match(/^(.*?)(\+\d+)(\s*)$/);
+    if (writeMatch) {
+      const [, prefix, added, trailing] = writeMatch;
+      return theme.fg("muted", prefix) + theme.fg("toolDiffAdded", added) + trailing;
+    }
+  }
+
+  // Pattern 3: (N lines) line count (read tool)
+  const readMatch = line.match(/^(.*?)(\()(\d+)( lines?\))(.*)$/);
+  if (readMatch) {
+    const [, prefix, openParen, count, closePart, suffix] = readMatch;
+    return (
+      theme.fg("muted", prefix) +
+      theme.fg("muted", openParen) +
+      theme.fg("toolDiffAdded", count) +
+      theme.fg("muted", closePart) +
+      theme.fg("muted", suffix)
+    );
+  }
+
+  // Default: muted
+  return theme.fg("muted", line);
+}
 
 /** Type for the renderCall args parameter (subset of DelegateParams) */
 interface DelegateToolArgs {
@@ -320,11 +369,11 @@ export function registerDelegateTool(
 
       // ── Per-agent windows ──
       const renderLine = (entry: WindowLine) => {
-        const textLines = entry.text.split("\n");
-        for (const line of textLines) {
-          if (entry.kind === "tool") {
-            container.addChild(new Text(`  ${theme.fg("muted", line)}`, 0, 0));
-          } else {
+        if (entry.kind === "tool") {
+          container.addChild(new Text(`  ${colorizeToolLine(entry.text, theme)}`, 0, 0));
+        } else {
+          const lines = entry.text.split("\n");
+          for (const line of lines) {
             container.addChild(new Text(`  ${line}`, 0, 0));
           }
         }

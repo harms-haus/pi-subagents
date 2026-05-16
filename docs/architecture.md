@@ -12,7 +12,7 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 |------|----------------|
 | `src/index.ts` | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_shutdown` lifecycle event |
 | `src/types.ts` | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants, `syncState()` and `formatRunsForResume()` helpers |
-| `src/spawner.ts` | `runSubAgent()` — spawns `pi` subprocess, buffers stdout/stderr, parses JSONL events, updates rolling window, handles abort/exit |
+| `src/spawner.ts` | `runSubAgent()` — spawns `pi` subprocess, buffers stdout/stderr, parses JSONL events, updates rolling window, handles abort/exit. Also contains private helpers `formatToolCall()` (one-line tool previews) and `countNonEmptyLines()` (helper for edit/write diff stats) |
 | `src/tools/delegate.ts` | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration, TUI rendering (`renderCall` / `renderResult`) |
 | `src/tools/retrieval.ts` | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers |
 | `src/profiles.ts` | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, settings file reading, profile CRUD |
@@ -272,7 +272,7 @@ export function appendLineToWindow(win, line, maxLines, kind = "text") {
 }
 ```
 
-Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering (tool lines use the `"muted"` theme color).
+Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering — tool lines are colorized by `colorizeToolLine()` in `delegate.ts`: diff additions in `toolDiffAdded` (green), removals in `toolDiffRemoved` (red), line counts in `toolDiffAdded`, and all other text in `muted`.
 
 ### 6.2 Debounced TUI Updates
 
@@ -302,13 +302,27 @@ Tool calls in the rolling window are rendered as concise one-liners by `formatTo
 
 | Tool | Format |
 |------|--------|
-| `edit`/`write` | `edit → path (N edits)` |
+| `edit` | `edit → path (N edits) +A/-R` |
+| `write` | `write → path +L` |
+| `grep` | `grep → /pattern/ → glob-or-path` |
 | `bash` | `bash → first line of command (smart && splitting)` |
-| `read` | `read → path:offset+limit` |
+| `read` | `read → path:offset+limit (L lines)` |
 | `delegate_to_subagents` | `delegate_to_subagents → N tasks [profile names]` |
 | LSP tools | `lsp_diagnostics → file` |
 | `fetch_content`/`web_search` | `fetch_content → url (truncated)` |
-| Generic | `toolName → first arg value (if ≤ 60 chars)` |
+| Generic | `toolName {"key":"value",...}` (full JSON args, truncated to width budget; empty `{}` omitted) |
+| `write_todos` | `write_todos → N todos written` |
+| `edit_todos` | `edit_todos → description or action [indices]` |
+| `list_todos` | `list_todos` |
+| LSP tools (5) | `lsp_name → file:line:column` (varies; `lsp_find_symbol` → `query`; `lsp_refactor_symbol` → `file:line:col → newName`) |
+| `lint_files` | `lint → files... +N more` or `lint → (all)` |
+| `fetch_repo` | `fetch_repo → url` |
+| Session retrieval (3) | `tool_name → sessionId` or just tool name |
+| `workflow_step` | `workflow_step → action` |
+
+Where A=lines added, R=lines removed, L=line count. The `(L lines)` suffix only appears when `limit` is specified. Diff stats are computed using `countNonEmptyLines()`, which counts non-blank lines without allocating intermediate arrays.
+
+Diff stats (`+A/-R`) and line counts (`(L lines)`) are colorized in the TUI using `colorizeToolLine()`: additions use `toolDiffAdded` (green), removals use `toolDiffRemoved` (red), and line counts use `toolDiffAdded` (green).
 
 Paths are shortened via `shortenPath()` (replaces home prefix with `~`, uses relative paths when shorter). Bash commands are collapsed (stripping redundant `cd <cwd>` prefixes) and formatted with `formatBashCommand()` (smart `&&` splitting with `│` continuation prefixes).
 

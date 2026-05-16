@@ -2,21 +2,20 @@
  * Tests for src/profiles.ts
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubagentProfile } from "../profiles";
 import {
   applyExcludeTools,
   formatProfileDetail,
   getProfilesDir,
   invalidateProfilesCache,
-  loadCommandPreviewWidth,
-  loadMaxLinesPerWindow,
   loadProfiles,
   profileSummary,
   profileToArgs,
   resolveProfile,
   validateProfileTools,
 } from "../profiles";
+
 
 // Mock filesystem functions
 vi.mock("node:fs", () => ({
@@ -38,7 +37,6 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 }));
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 
 describe("profileToArgs", () => {
@@ -433,201 +431,6 @@ describe("formatProfileDetail", () => {
   });
 });
 
-describe("loadMaxLinesPerWindow", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    invalidateProfilesCache();
-  });
-
-  it("should return default 15 when no config is present", async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
-    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
-
-    const result = await loadMaxLinesPerWindow();
-
-    expect(result).toBe(15);
-  });
-
-  it("should return configured value from settings", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue(
-      JSON.stringify({
-        subagents: {
-          maxLinesPerWindow: 25,
-        },
-      }),
-    );
-
-    const result = await loadMaxLinesPerWindow();
-
-    expect(result).toBe(25);
-  });
-
-  it("should return project config value when both global and project config exist", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile)
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            maxLinesPerWindow: 20,
-          },
-        }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            maxLinesPerWindow: 30,
-          },
-        }),
-      );
-
-    const result = await loadMaxLinesPerWindow("/project/path");
-
-    expect(result).toBe(30);
-  });
-
-  it("should return global config value when only global config exists", async () => {
-    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
-    vi.mocked(readFile)
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            maxLinesPerWindow: 20,
-          },
-        }),
-      )
-      .mockRejectedValueOnce(new Error("Project file not found"));
-
-    const result = await loadMaxLinesPerWindow("/project/path");
-
-    expect(result).toBe(20);
-  });
-});
-
-describe("loadCommandPreviewWidth", () => {
-  const originalColumns = process.stdout.columns;
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    invalidateProfilesCache();
-  });
-
-  afterEach(() => {
-    // Restore original process.stdout.columns to avoid test pollution
-    Object.defineProperty(process.stdout, "columns", {
-      value: originalColumns,
-      writable: true,
-      configurable: true,
-    });
-  });
-
-  it("returns terminal width - 4 when TTY", async () => {
-    Object.defineProperty(process.stdout, "columns", {
-      value: 120,
-      writable: true,
-      configurable: true,
-    });
-
-    const result = await loadCommandPreviewWidth();
-
-    expect(result).toBe(116);
-  });
-
-  it("returns default 160 when non-TTY and no settings", async () => {
-    Object.defineProperty(process.stdout, "columns", {
-      value: undefined,
-      writable: true,
-      configurable: true,
-    });
-    vi.mocked(existsSync).mockReturnValue(false);
-    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
-
-    const result = await loadCommandPreviewWidth();
-
-    expect(result).toBe(160);
-  });
-
-  it("returns configured value from global settings when non-TTY", async () => {
-    Object.defineProperty(process.stdout, "columns", {
-      value: undefined,
-      writable: true,
-      configurable: true,
-    });
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue(
-      JSON.stringify({
-        subagents: {
-          commandPreviewWidth: 200,
-        },
-      }),
-    );
-
-    const result = await loadCommandPreviewWidth();
-
-    expect(result).toBe(200);
-  });
-
-  it("project overrides global when non-TTY", async () => {
-    Object.defineProperty(process.stdout, "columns", {
-      value: undefined,
-      writable: true,
-      configurable: true,
-    });
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile)
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            commandPreviewWidth: 200,
-          },
-        }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            commandPreviewWidth: 120,
-          },
-        }),
-      );
-
-    const result = await loadCommandPreviewWidth("/project/path");
-
-    expect(result).toBe(120);
-  });
-
-  it("clamps to min 20 when terminal is very narrow", async () => {
-    Object.defineProperty(process.stdout, "columns", {
-      value: 15,
-      writable: true,
-      configurable: true,
-    });
-
-    const result = await loadCommandPreviewWidth();
-
-    expect(result).toBe(20);
-  });
-
-  it("clamps to min 20 when setting is very small", async () => {
-    Object.defineProperty(process.stdout, "columns", {
-      value: undefined,
-      writable: true,
-      configurable: true,
-    });
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue(
-      JSON.stringify({
-        subagents: {
-          commandPreviewWidth: 5,
-        },
-      }),
-    );
-
-    const result = await loadCommandPreviewWidth();
-
-    expect(result).toBe(20);
-  });
-});
-
 describe("getProfilesDir", () => {
   it("should return global agent-profiles dir when scope is 'global'", () => {
     const result = getProfilesDir("global");
@@ -850,5 +653,88 @@ describe("loadProfilesFromDir (excludeTools parsing)", () => {
     const profiles = await loadProfiles();
     expect(profiles["array-exclude"]).toBeDefined();
     expect(profiles["array-exclude"].excludeTools).toEqual(["bash", "write"]);
+  });
+});
+
+describe("loadProfiles cache", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should return cached profiles on second call within TTL (cache hit)", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([]);
+
+    // First call populates the cache
+    const result1 = await loadProfiles();
+    // loadProfiles calls loadProfilesFromDir twice: global dir + project dir (no cwd)
+    // With no cwd, only the global dir is loaded
+    const firstCallCount = vi.mocked(readdirSync).mock.calls.length;
+    expect(firstCallCount).toBeGreaterThanOrEqual(1);
+
+    // Second call within TTL should hit the cache — readdirSync should NOT be called again
+    const result2 = await loadProfiles();
+    expect(vi.mocked(readdirSync).mock.calls.length).toBe(firstCallCount); // same count as first call
+    expect(result2).toBe(result1); // same object reference
+  });
+});
+
+describe("loadProfiles - project-local profile overriding", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should load global and project-local profiles, with project-local overriding same name", async () => {
+    // We need existsSync to return true for both global and project dirs
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    // readdirSync is called once for global dir, once for project dir
+    const globalEntries = [
+      { name: "global-only.md", isFile: () => true },
+      { name: "shared.md", isFile: () => true },
+    ];
+    const projectEntries = [
+      { name: "shared.md", isFile: () => true },
+      { name: "project-only.md", isFile: () => true },
+    ];
+    vi.mocked(readdirSync)
+      .mockReturnValueOnce(globalEntries as unknown as ReturnType<typeof readdirSync>)
+      .mockReturnValueOnce(projectEntries as unknown as ReturnType<typeof readdirSync>);
+
+    // readFileSync is called for each .md file (global-only, shared [global], shared [project], project-only)
+    vi.mocked(readFileSync)
+      .mockReturnValueOnce('---\nname: global-only\nprovider: openai\nmodel: gpt-4\n---\n')
+      .mockReturnValueOnce('---\nname: shared\nprovider: anthropic\nmodel: claude-3\n---\n')
+      .mockReturnValueOnce('---\nname: shared\nprovider: openai\nmodel: gpt-4o\n---\n')
+      .mockReturnValueOnce('---\nname: project-only\nprovider: dashscope\nmodel: qwen-max\n---\n');
+
+    // parseFrontmatter is called for each file
+    vi.mocked(parseFrontmatter)
+      .mockReturnValueOnce({ frontmatter: { name: "global-only", provider: "openai", model: "gpt-4" }, body: "" })
+      .mockReturnValueOnce({ frontmatter: { name: "shared", provider: "anthropic", model: "claude-3" }, body: "" })
+      .mockReturnValueOnce({ frontmatter: { name: "shared", provider: "openai", model: "gpt-4o" }, body: "" })
+      .mockReturnValueOnce({ frontmatter: { name: "project-only", provider: "dashscope", model: "qwen-max" }, body: "" });
+
+    const profiles = await loadProfiles("/fake/project");
+
+    // Global-only profile should be present
+    expect(profiles["global-only"]).toBeDefined();
+    expect(profiles["global-only"].provider).toBe("openai");
+    expect(profiles["global-only"].model).toBe("gpt-4");
+
+    // Project-only profile should be present
+    expect(profiles["project-only"]).toBeDefined();
+    expect(profiles["project-only"].provider).toBe("dashscope");
+    expect(profiles["project-only"].model).toBe("qwen-max");
+
+    // "shared" should be overridden by project-local version
+    expect(profiles["shared"]).toBeDefined();
+    expect(profiles["shared"].provider).toBe("openai"); // project-local override, not "anthropic"
+    expect(profiles["shared"].model).toBe("gpt-4o"); // project-local override, not "claude-3"
+
+    // Should have exactly 3 profiles
+    expect(Object.keys(profiles)).toHaveLength(3);
   });
 });

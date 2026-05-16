@@ -1,4 +1,4 @@
-import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Message } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerProfileCommand } from "../commands/profile";
@@ -6,8 +6,8 @@ import { resolveProfile } from "../profiles";
 import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
 import { registerRetrievalTools } from "../tools/retrieval";
-import type { SessionRecord, SubAgentWindow, SubagentSessionData } from "../types";
-import { countWindowStatuses } from "../utils";
+import type { SessionRecord, SubagentSessionData, WindowedSubagentDetails } from "../types";
+import { createMockPi, createMockTheme } from "./helpers";
 
 // Mock the TUI components
 vi.mock("@earendil-works/pi-tui", () => ({
@@ -42,7 +42,6 @@ vi.mock("../spawner", () => ({
 // Mock the profiles module
 vi.mock("../profiles", () => ({
   loadProfiles: vi.fn().mockResolvedValue({}),
-  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   validateProfileTools: (profile: { tools?: string[]; excludeTools?: string[] }, profileName?: string) => {
@@ -61,6 +60,11 @@ vi.mock("../profiles", () => ({
   },
 }));
 
+// Mock the settings module
+vi.mock("../settings", () => ({
+  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
+}));
+
 describe("tools", () => {
   describe("tool registration", () => {
     let mockPi: ExtensionAPI;
@@ -71,16 +75,7 @@ describe("tools", () => {
       sessionStore = new Map();
       mockRegisterSession = vi.fn();
 
-      mockPi = {
-        registerTool: vi.fn(),
-        registerCommand: vi.fn(),
-        on: vi.fn(),
-        getAllTools: vi.fn().mockReturnValue([]),
-        ui: {
-          notify: vi.fn(),
-          confirm: vi.fn(),
-        },
-      } as unknown as ExtensionAPI;
+      mockPi = createMockPi();
     });
 
     describe("registerRetrievalTools", () => {
@@ -154,12 +149,7 @@ describe("tools", () => {
 
     beforeEach(() => {
       sessionStore = new Map();
-      mockPi = {
-        registerTool: vi.fn(),
-        registerCommand: vi.fn(),
-        on: vi.fn(),
-        getAllTools: vi.fn().mockReturnValue([]),
-      } as unknown as ExtensionAPI;
+      mockPi = createMockPi();
       vi.mocked(runSubAgent).mockClear();
     });
 
@@ -321,10 +311,7 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const mockTheme = {
-          fg: vi.fn((_color: string, text: string) => text),
-          bold: vi.fn((text: string) => text),
-        } as unknown as Theme;
+        const mockTheme = createMockTheme();
 
         renderCall({ sessionId: "test-123" }, mockTheme, null as any);
 
@@ -342,10 +329,7 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const mockTheme = {
-          fg: vi.fn((_color: string, text: string) => text),
-          bold: vi.fn((text: string) => text),
-        } as unknown as Theme;
+        const mockTheme = createMockTheme();
 
         renderCall({}, mockTheme, null as any);
 
@@ -363,10 +347,7 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const mockTheme = {
-          fg: vi.fn((_color: string, text: string) => text),
-          bold: vi.fn((text: string) => text),
-        } as unknown as Theme;
+        const mockTheme = createMockTheme();
 
         renderCall({ sessionId: "session-456" }, mockTheme, null as any);
 
@@ -386,9 +367,7 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const mockTheme = {
-          fg: vi.fn((_color: string, text: string) => text),
-        } as unknown as Theme;
+        const mockTheme = createMockTheme();
 
         const result = {
           content: [{ type: "text", text: "Test output content" }],
@@ -411,9 +390,7 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const mockTheme = {
-          fg: vi.fn((_color: string, text: string) => text),
-        } as unknown as Theme;
+        const mockTheme = createMockTheme();
 
         // When content is not text type, it should use default label
         const result = {
@@ -455,6 +432,11 @@ describe("tools", () => {
 
         expect(result).toBeDefined();
         expect(runSubAgent).toHaveBeenCalledTimes(1);
+
+        // Verify the timeout value (1 second) was passed through to the window
+        const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+        expect(callArgs.win.timeout).toBe(1);
+        expect(callArgs.signal).toBeInstanceOf(AbortSignal);
       });
 
       it("should use DEFAULT_TIMEOUT when no timeout specified", async () => {
@@ -485,9 +467,10 @@ describe("tools", () => {
         expect(result).toBeDefined();
         expect(runSubAgent).toHaveBeenCalledTimes(1);
 
-        // Verify a signal was passed
+        // Verify a signal was passed and the default timeout value (600s) was used
         const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
         expect(callArgs.signal).toBeInstanceOf(AbortSignal);
+        expect(callArgs.win.timeout).toBe(600);
       });
     });
 
@@ -567,6 +550,122 @@ describe("tools", () => {
             { cwd: process.cwd() } as any,
           ),
         ).rejects.toThrow(/mutually exclusive/i);
+      });
+    });
+
+    describe("delegate_to_subagents - unknown profile", () => {
+      it("should set error status when profile name does not exist", async () => {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+        // resolveProfile returns undefined for unknown profiles
+        vi.mocked(resolveProfile).mockReturnValue(undefined);
+        // loadProfiles returns a known set that does NOT include "nonexistent"
+        const { loadProfiles } = await import("../profiles");
+        vi.mocked(loadProfiles).mockResolvedValueOnce({
+          "code-reviewer": { model: "anthropic/claude-sonnet-4" },
+          "fast-worker": { provider: "openai" },
+        });
+
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const result = await executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", profile: "nonexistent" }],
+          },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
+
+        // runSubAgent should NOT have been called for this task
+        expect(runSubAgent).not.toHaveBeenCalled();
+
+        // Result should show the error in the window
+        const text = (result.content[0] as { text: string }).text;
+        expect(text).toContain("error");
+        expect(text).toContain("Unknown profile");
+
+        // Details should show the window in error status
+        const details = result.details as WindowedSubagentDetails;
+        expect(details.windows[0].status).toBe("error");
+        expect(details.windows[0].errorMessage).toContain("Unknown profile");
+        expect(details.windows[0].errorMessage).toContain("nonexistent");
+      });
+    });
+
+    describe("delegate_to_subagents - timeout detection", () => {
+      it("should set error with 'Timed out' message when task exceeds its timeout", async () => {
+        vi.useFakeTimers();
+
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+        // Mock runSubAgent to wait until the abort signal fires, then resolve
+        vi.mocked(runSubAgent).mockImplementationOnce(async (options) => {
+          return new Promise<void>((resolve) => {
+            if (options.signal?.aborted) {
+              resolve();
+              return;
+            }
+            const onAbort = () => {
+              options.signal?.removeEventListener("abort", onAbort);
+              resolve();
+            };
+            options.signal?.addEventListener("abort", onAbort, { once: true });
+          });
+        });
+
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const executePromise = executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
+          },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
+
+        // Advance past the 1-second timeout so the abort fires
+        await vi.advanceTimersByTimeAsync(1500);
+
+        const result = await executePromise;
+
+        // The result text should contain "Timed out"
+        const text = (result.content[0] as { text: string }).text;
+        expect(text).toContain("error");
+        expect(text).toContain("Timed out");
+
+        // Window details should show the timeout error
+        const details = result.details as WindowedSubagentDetails;
+        expect(details.windows[0].status).toBe("error");
+        expect(details.windows[0].errorMessage).toContain("Timed out");
+        expect(details.windows[0].errorMessage).toContain("1s");
+
+        vi.useRealTimers();
       });
     });
 
@@ -879,63 +978,142 @@ describe("tools", () => {
     });
   });
 
-  describe("utils", () => {
-    describe("countWindowStatuses", () => {
-      it("should count all running windows", () => {
-        const windows = [{ status: "running" }, { status: "running" }, { status: "running" }] as any as SubAgentWindow[];
+  describe("delegate_to_subagents - abort signal forwarding", () => {
+    let mockPi: ExtensionAPI;
+    let sessionStore: Map<string, SessionRecord>;
 
-        const result = countWindowStatuses(windows);
+    beforeEach(() => {
+      sessionStore = new Map();
+      mockPi = createMockPi();
+      vi.mocked(runSubAgent).mockClear();
+    });
 
-        expect(result.running).toBe(3);
-        expect(result.completed).toBe(0);
-        expect(result.error).toBe(0);
+    it("should forward parent AbortSignal to per-task AbortController", async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+      const executeFn = toolRegistration?.[0].execute;
+      if (!executeFn) {
+        throw new Error("Tool not registered");
+      }
+
+      // Parent abort controller
+      const parentAbortController = new AbortController();
+
+      // Capture signals passed to runSubAgent
+      const capturedSignals: AbortSignal[] = [];
+
+      // Make runSubAgent return a pending promise so the task stays alive
+      vi.mocked(runSubAgent).mockImplementation(async (opts) => {
+        capturedSignals.push(opts.signal!);
+        // Return a promise that stays pending until aborted
+        return new Promise<void>((resolve) => {
+          if (opts.signal?.aborted) {
+            resolve();
+            return;
+          }
+          opts.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
       });
 
-      it("should count all completed windows", () => {
-        const windows = [{ status: "completed" }, { status: "completed" }] as any as SubAgentWindow[];
+      // Start execute with 2 tasks and a parent signal
+      const executePromise = executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            { name: "task-1", prompt: "prompt 1" },
+            { name: "task-2", prompt: "prompt 2" },
+          ],
+        },
+        parentAbortController.signal,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
 
-        const result = countWindowStatuses(windows);
+      // Wait for runSubAgent to be called for both tasks
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(capturedSignals.length).toBe(2);
 
-        expect(result.running).toBe(0);
-        expect(result.completed).toBe(2);
-        expect(result.error).toBe(0);
+      // Neither per-task signal should be aborted yet
+      expect(capturedSignals[0].aborted).toBe(false);
+      expect(capturedSignals[1].aborted).toBe(false);
+
+      // Abort the parent signal
+      parentAbortController.abort();
+
+      // Wait for the abort to propagate
+      await executePromise;
+
+      // Both per-task signals should now be aborted
+      expect(capturedSignals[0].aborted).toBe(true);
+      expect(capturedSignals[1].aborted).toBe(true);
+    });
+  });
+
+  describe("delegate_to_subagents - error message in summary", () => {
+    let mockPi: ExtensionAPI;
+    let sessionStore: Map<string, SessionRecord>;
+
+    beforeEach(() => {
+      sessionStore = new Map();
+      mockPi = createMockPi();
+      vi.mocked(runSubAgent).mockClear();
+    });
+
+    it("should include error indicator and errorMessage in summary line", async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+      const executeFn = toolRegistration?.[0].execute;
+      if (!executeFn) {
+        throw new Error("Tool not registered");
+      }
+
+      // Mock runSubAgent to set win.status = "error" and win.errorMessage on the second task
+      vi.mocked(runSubAgent).mockImplementation(async (opts) => {
+        if (opts.task.name === "failing-task") {
+          opts.win.status = "error";
+          opts.win.errorMessage = "test error";
+          opts.win.exitCode = 1;
+          opts.session.status = "error";
+          opts.session.errorMessage = "test error";
+          opts.session.exitCode = 1;
+        } else {
+          opts.win.status = "completed";
+          opts.win.exitCode = 0;
+          opts.session.status = "completed";
+          opts.session.exitCode = 0;
+        }
       });
 
-      it("should count all error windows", () => {
-        const windows = [{ status: "error" }, { status: "error" }, { status: "error" }] as any as SubAgentWindow[];
+      const result = await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            { name: "good-task", prompt: "prompt 1" },
+            { name: "failing-task", prompt: "prompt 2" },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
 
-        const result = countWindowStatuses(windows);
+      const summaryText = (result.content[0] as { text: string }).text;
 
-        expect(result.running).toBe(0);
-        expect(result.completed).toBe(0);
-        expect(result.error).toBe(3);
-      });
-
-      it("should count mixed status windows", () => {
-        const windows = [
-          { status: "running" },
-          { status: "completed" },
-          { status: "error" },
-          { status: "running" },
-          { status: "completed" },
-        ] as any as SubAgentWindow[];
-
-        const result = countWindowStatuses(windows);
-
-        expect(result.running).toBe(2);
-        expect(result.completed).toBe(2);
-        expect(result.error).toBe(1);
-      });
-
-      it("should handle empty array", () => {
-        const windows: SubAgentWindow[] = [];
-
-        const result = countWindowStatuses(windows);
-
-        expect(result.running).toBe(0);
-        expect(result.completed).toBe(0);
-        expect(result.error).toBe(0);
-      });
+      // Good task should have ✓ indicator
+      expect(summaryText).toContain("✓ good-task: completed");
+      // Failing task should have ✗ indicator and error message
+      expect(summaryText).toContain("✗ failing-task: error");
+      expect(summaryText).toContain("test error");
     });
   });
 });

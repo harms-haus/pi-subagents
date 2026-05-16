@@ -47,21 +47,22 @@ There is **no build step** — Bun executes `.ts` files directly, so changes tak
 | File / Directory                                | Responsibility                                                                    |
 | ----------------------------------------------- | --------------------------------------------------------------------------------- |
 | `src/index.ts`                                  | Extension entry point; sets up session store, registers tools and commands        |
-| `src/types.ts`                                  | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SessionRecord`, etc.)   |
+| `src/types.ts`                                  | Core type definitions, config constants (`SubAgentTask`, `SubAgentWindow`, `SessionRecord`, `syncState`) |
 | `src/schemas.ts`                                | TypeBox validation schemas for `delegate_to_subagents` tool parameters            |
-| `src/profiles.ts`                               | Profile loading from markdown files, CLI arg conversion, settings resolution      |
+| `src/profiles.ts`                               | Profile loading from markdown files, CLI arg conversion, CRUD, re-exports from sub-modules |
+| `src/profile-types.ts`                          | Shared profile type definitions (`SubagentProfile`, `ThinkingLevel`, etc.)        |
+| `src/profile-formatting.ts`                     | Profile display formatting: summaries, detail views, markdown serialization       |
 | `src/profile-editor.ts`                         | Interactive wizard for creating/editing profiles via the extension UI             |
+| `src/settings.ts`                               | Settings loading: `maxLinesPerWindow`, `commandPreviewWidth` from global/project files |
 | `src/spawner.ts`                                | Spawns child `pi` processes for sub-agents; parses JSON events, updates TUI       |
-| `src/utils.ts`                                  | Shared helpers: ANSI stripping, path shortening, bash formatting, concurrency     |
+| `src/format-tool-call.ts`                       | Tool call preview formatting, path shortening, bash command formatting            |
+| `src/format-transcript.ts`                      | Transcript formatting for resume prompts (`formatRunsForResume`, `getTextContent`) |
+| `src/utils.ts`                                  | Shared helpers: ANSI stripping, window line management, concurrency, status counts |
+| `src/tools/delegate-render.ts`                  | Pure rendering functions for delegate tool TUI output (call & result)             |
 | `src/commands/profile.ts`                       | `/profile` slash command (list, show, create, edit, delete profiles)              |
 | `src/tools/delegate.ts`                         | `delegate_to_subagents` tool — spawns parallel sub-agents with live TUI windows   |
 | `src/tools/retrieval.ts`                        | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tools     |
-| `src/__tests__/smoke.test.ts`                   | Basic smoke test ensuring the test harness works                                  |
-| `src/__tests__/schemas.test.ts`                 | Validates `TaskSchema` and `DelegateParams` — required/optional fields, edge cases|
-| `src/__tests__/profiles.test.ts`                | Tests `profileToArgs` (CLI generation, extraArgs safety), profile summary/detail, settings loading (`loadMaxLinesPerWindow`, `loadCommandPreviewWidth`), directory resolution |
-| `src/__tests__/spawner.test.ts`                 | Tests `runSubAgent` — spawn args, stdout/stderr parsing, JSON events, abort signals, path shortening in tool call display, smart `&&` splitting in bash command formatting |
-| `src/__tests__/tools.test.ts`                   | Tests tool registration, session store operations, retrieval tool execution (`get_subagent_output`, `get_subagent_session`), resume logic, multi-run sessions, delegate timeout, `countWindowStatuses` |
-| `src/__tests__/utils.test.ts`                   | Tests `stripAnsi`, `appendLineToWindow`, `mapWithConcurrencyLimit`, `getLastAssistantText`, `getSummaryText`, `getTextParts`, `shortenPath`, `shortenPathsInText`, `formatBashCommand`, `collapseCdDot` |
+
 
 ## TypeScript Configuration
 
@@ -100,19 +101,21 @@ bun run test:watch
 
 | Test File                    | What It Covers                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------------ |
-| `smoke.test.ts`              | Basic smoke test ensuring the test harness works                                |
+| `helpers.ts`                 | Shared test helpers: factory functions for mock objects with sensible defaults  |
 | `index.test.ts`              | Tests session store: `registerSession` (creation, resume, eviction, capping), `getActiveSessionIds`, shutdown handler |
-| `types-helpers.test.ts`      | Tests `syncState`, `formatRunsForResume`, `getTextContent` |
+| `types-helpers.test.ts`      | Tests `syncState` helper function |
 | `schemas.test.ts`            | `TaskSchema` and `DelegateParams` validation — required fields, optional fields, type mismatches, array constraints |
-| `profiles.test.ts`           | `profileToArgs` CLI generation, `extraArgs` safety validation (null bytes, shell operators), `resolveProfile`, `profileSummary`, `formatProfileDetail` (API key masking), `loadMaxLinesPerWindow` settings resolution, `loadCommandPreviewWidth` (TTY vs settings), `getProfilesDir` |
+| `profiles.test.ts`           | `profileToArgs` CLI generation, `extraArgs` safety validation (null bytes, shell operators), `resolveProfile`, `profileSummary`, `formatProfileDetail` (API key masking), `getProfilesDir` |
 | `profile-command.test.ts`    | Tests `/profile` command handler: list, show, create, edit, delete, bare name, completions |
 | `profile-editor.test.ts`     | Tests `editProfileInteractive` wizard with mocked UI (all paths) |
-| `spawner.test.ts`            | `runSubAgent` lifecycle — spawn arguments, stdout line processing, JSON `message_end` event parsing, malformed JSON handling, process exit codes, `AbortSignal` with SIGTERM escalation, profile argument injection, path shortening in tool call display, smart `&&` splitting with width budgets |
+| `spawner.test.ts`            | `runSubAgent` lifecycle (spawn, stdout/stderr, JSON events, abort signals), profile CRUD (`saveProfile`/`deleteProfile`), `serializeProfileToMarkdown`, `handleStderrData` |
 | `tools.test.ts`              | Tool registration (`registerDelegateTool`, `registerRetrievalTools`, `registerProfileCommand`), session store operations, retrieval tool execution (valid/invalid sessions, multi-run), delegate timeout via `AbortSignal`, resume validation (non-existent, still-running), resume prompt formatting, session ID reuse, `countWindowStatuses` |
 | `delegate-render.test.ts`    | Tests `renderCall` and `renderResult` for delegate tool (TUI rendering) |
 | `retrieval-tools.test.ts`    | Tests retrieval tools: `list_subagent_profiles`, `createTruncatingRenderResult`, toolResult extraction |
-| `profiles-spawner.test.ts`   | Tests `saveProfile`/`deleteProfile`, `serializeProfileToMarkdown`, `formatToolCall` branches, `handleStderrData` |
-| `utils.test.ts`              | `stripAnsi`, `appendLineToWindow` (rolling buffer eviction, ANSI removal, whitespace handling, tool kind), `mapWithConcurrencyLimit` (concurrency enforcement, ordering, error propagation, sequential), `getLastAssistantText`, `getSummaryText`, `getTextParts`, `shortenPath`, `shortenPathsInText`, `formatBashCommand` (truncation, `&&` splitting, continuation lines), `collapseCdDot` |
+| `format-tool-call.test.ts`   | `formatToolCall` branches (edit, write, grep, bash, read, etc.), path shortening, bash command formatting |
+| `settings.test.ts`           | `loadMaxLinesPerWindow`, `loadCommandPreviewWidth` — global vs project overrides, TTY detection, error handling |
+| `format-transcript.test.ts`  | `formatRunsForResume` (run separators, tool calls, truncation), `getTextContent` |
+| `utils.test.ts`              | `stripAnsi`, `appendLineToWindow` (rolling buffer eviction, ANSI removal, whitespace handling, tool kind), `mapWithConcurrencyLimit` (concurrency enforcement, ordering, error propagation, sequential), `getLastAssistantText`, `getSummaryText`, `getTextParts` |
 
 ### Mocking Approach
 
@@ -124,7 +127,7 @@ bun run test:watch
 
 ## Code Style
 
-The project uses [ESLint](https://eslint.org/) v10 (flat config) with `@typescript-eslint`, `eslint-plugin-import`, and `eslint-plugin-unicorn`.
+The project uses [ESLint](https://eslint.org/) v10 (flat config) with `@typescript-eslint`, `eslint-plugin-import-x`, and `eslint-plugin-unicorn`.
 
 ### Configuration (`eslint.config.js`)
 
@@ -162,6 +165,8 @@ bun run typecheck && bun run lint && bun run test
 3. **Update documentation if changing tool parameters or profile format.** This includes:
    - `src/schemas.ts` (TypeBox schema changes)
    - `src/types.ts` (Type interface changes)
+   - `src/profile-types.ts` (Profile type changes)
+   - `src/settings.ts` (Settings changes)
    - `src/profiles.ts` (new profile frontmatter fields)
    - Any affected test files
 

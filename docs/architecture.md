@@ -11,31 +11,47 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 | File | Responsibility |
 |------|----------------|
 | `src/index.ts` | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_shutdown` lifecycle event |
-| `src/types.ts` | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants, `syncState()` and `formatRunsForResume()` helpers |
-| `src/spawner.ts` | `runSubAgent()` — spawns `pi` subprocess, buffers stdout/stderr, parses JSONL events, updates rolling window, handles abort/exit. Also contains private helpers `formatToolCall()` (one-line tool previews) and `countNonEmptyLines()` (helper for edit/write diff stats) |
-| `src/tools/delegate.ts` | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration, TUI rendering (`renderCall` / `renderResult`) |
-| `src/tools/retrieval.ts` | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers |
-| `src/profiles.ts` | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, settings file reading, profile CRUD |
+| `src/types.ts` | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper. Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts` |
+| `src/spawner.ts` | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Also contains `getPiInvocation()` (moved from `utils.ts`) |
+| `src/format-tool-call.ts` | `formatToolCall()` (one-line tool previews), `countNonEmptyLines()` (edit/write diff stats), `shortenPath()`, `formatBashCommand()`, `collapseCdDot()`, `shortenPathsInText()` |
+| `src/settings.ts` | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local) |
+| `src/format-transcript.ts` | `formatRunsForResume()` (resume transcript formatting), `getTextContent()` (message text extraction) |
+| `src/profile-types.ts` | `SubagentProfile`, `SubagentProfiles`, `ThinkingLevel`, `ProfileInvocation` type definitions |
+| `src/profile-formatting.ts` | `profileSummary()`, `formatProfileDetail()`, `serializeProfileToMarkdown()` |
+| `src/profiles.ts` | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, profile CRUD, tool validation (`validateProfileTools`, `applyExcludeTools`). Re-exports from `profile-formatting.ts` and `profile-types.ts` |
 | `src/profile-editor.ts` | Interactive profile creation/editing via `/profile` command |
 | `src/commands/profile.ts` | `/profile` slash command (list, show, create, edit, delete) |
 | `src/schemas.ts` | TypeBox schemas for `delegate_to_subagents` parameter validation |
-| `src/utils.ts` | Shared utilities: `mapWithConcurrencyLimit()`, `appendLineToWindow()`, path shortening, ANSI stripping, bash command formatting, `getPiInvocation()` |
+| `src/tools/delegate.ts` | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration. Delegates TUI rendering to `delegate-render.ts` |
+| `src/tools/delegate-render.ts` | `colorizeToolLine()`, `renderDelegateCall()`, `renderDelegateResult()` — pure rendering functions for the delegate tool TUI display |
+| `src/tools/retrieval.ts` | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers |
+| `src/utils.ts` | Shared helpers: ANSI stripping (`stripAnsi`), `appendLineToWindow()`, `getTextParts()`, `getLastAssistantText()`, `mapWithConcurrencyLimit()`, `countWindowStatuses()`, `getSummaryText()` |
 
 ### Dependency Graph
 
 ```
 index.ts
 ├── profiles.ts
-│   └── parseFrontmatter (pi-coding-agent)
+│   ├── profile-formatting.ts
+│   │   └── profile-types.ts
+│   └── profile-types.ts
 ├── commands/profile.ts
 │   ├── profiles.ts
 │   └── profile-editor.ts
+│       └── profiles.ts
 ├── tools/delegate.ts
 │   ├── profiles.ts
 │   ├── schemas.ts
 │   │   └── types.ts
+│   ├── settings.ts
 │   ├── spawner.ts
+│   │   ├── format-tool-call.ts
 │   │   ├── profiles.ts
+│   │   ├── settings.ts
+│   │   ├── types.ts
+│   │   └── utils.ts
+│   │       └── types.ts
+│   ├── tools/delegate-render.ts
 │   │   ├── types.ts
 │   │   └── utils.ts
 │   │       └── types.ts
@@ -44,10 +60,12 @@ index.ts
 │       └── types.ts
 ├── tools/retrieval.ts
 │   ├── profiles.ts
+│   ├── settings.ts
 │   ├── types.ts
 │   └── utils.ts
 │       └── types.ts
 └── types.ts
+    └── format-transcript.ts
 ```
 
 ## 3. Session Lifecycle
@@ -135,7 +153,7 @@ const proc = spawn(invocation.command, args, {
 });
 ```
 
-**Command resolution** (`getPiInvocation()` in `utils.ts`):
+**Command resolution** (`getPiInvocation()` in `spawner.ts`):
 - If running as a script (`process.argv[1]` exists and isn't in `$bunfs`), uses `process.execPath` + script path.
 - Otherwise falls back to `pi` with no args.
 
@@ -272,7 +290,7 @@ export function appendLineToWindow(win, line, maxLines, kind = "text") {
 }
 ```
 
-Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering — tool lines are colorized by `colorizeToolLine()` in `delegate.ts`: diff additions in `toolDiffAdded` (green), removals in `toolDiffRemoved` (red), line counts in `toolDiffAdded`, and all other text in `muted`.
+Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering — tool lines are colorized by `colorizeToolLine()` in `delegate-render.ts`: diff additions in `toolDiffAdded` (green), removals in `toolDiffRemoved` (red), line counts in `toolDiffAdded`, and all other text in `muted`.
 
 ### 6.2 Debounced TUI Updates
 
@@ -298,7 +316,7 @@ Each window header includes the agent name, profile info (if any), and a status 
 
 ### 6.4 `formatToolCall()` One-Line Previews
 
-Tool calls in the rolling window are rendered as concise one-liners by `formatToolCall()` in `spawner.ts`. Key patterns:
+Tool calls in the rolling window are rendered as concise one-liners by `formatToolCall()` in `format-tool-call.ts`. Key patterns:
 
 | Tool | Format |
 |------|--------|

@@ -1,9 +1,10 @@
 import type { Message } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadProfiles, profileSummary } from "../profiles";
 import { registerRetrievalTools } from "../tools/retrieval";
-import type { SessionRecord, SubagentSessionData } from "../types";
+import type { SessionRecord } from "../types";
+import { createMockPi, createMockTheme, makeSession } from "./helpers";
 
 // Mock the TUI components (same pattern as tools.test.ts)
 vi.mock("@earendil-works/pi-tui", () => ({
@@ -33,43 +34,18 @@ vi.mock("typebox", () => ({
 // Mock the profiles module
 vi.mock("../profiles", () => ({
   loadProfiles: vi.fn().mockResolvedValue({}),
-  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   validateProfileTools: vi.fn(),
   applyExcludeTools: vi.fn(),
 }));
 
+// Mock the settings module
+vi.mock("../settings", () => ({
+  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────
-
-/** Create a minimal mock ExtensionAPI */
-function createMockPi(): ExtensionAPI {
-  return {
-    registerTool: vi.fn(),
-    registerCommand: vi.fn(),
-    on: vi.fn(),
-    getAllTools: vi.fn().mockReturnValue([]),
-    ui: {
-      notify: vi.fn(),
-      confirm: vi.fn(),
-    },
-  } as unknown as ExtensionAPI;
-}
-
-/** Create a SubagentSessionData with sensible defaults */
-function makeSession(overrides: Partial<SubagentSessionData> = {}): SubagentSessionData {
-  return {
-    sessionId: "test-session",
-    taskName: "test-task",
-    prompt: "test prompt",
-    cwd: "/tmp",
-    status: "completed",
-    messages: [],
-    exitCode: 0,
-    startedAt: Date.now(),
-    ...overrides,
-  };
-}
 
 /** Extract a registered tool's execute function by name */
 function getToolExecute(mockPi: ExtensionAPI, toolName: string) {
@@ -99,14 +75,6 @@ function getToolRenderResult(mockPi: ExtensionAPI, toolName: string) {
     throw new Error(`Tool "${toolName}" has no renderResult`);
   }
   return renderResult;
-}
-
-/** Create a mock theme with spyable fg/bold */
-function createMockTheme() {
-  return {
-    fg: vi.fn((_color: string, text: string) => text),
-    bold: vi.fn((text: string) => text),
-  } as unknown as Theme;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -365,6 +333,34 @@ describe("retrieval-tools", () => {
 
       // No assistant text → placeholder message
       expect((result.content[0] as { text: string }).text).toBe("(no text output from sub-agent)");
+    });
+  });
+
+  // ── get_subagent_session - errorMessage branch ─────────────────────
+
+  describe("get_subagent_session - errorMessage branch", () => {
+    it("should include error message when run has status error and errorMessage", async () => {
+      registerRetrievalTools(mockPi, sessionStore);
+
+      const session = makeSession({
+        sessionId: "error-session",
+        status: "error",
+        errorMessage: "something broke",
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text" as const, text: "Partial response" }],
+          } as unknown as Message,
+        ],
+      });
+      sessionStore.set("error-session", { runs: [session] });
+
+      const execute = getToolExecute(mockPi, "get_subagent_session");
+      const result = await execute("tc-id", { sessionId: "error-session" }, undefined, vi.fn(), null as any);
+
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain("Partial response");
+      expect(text).toContain("[Error: something broke]");
     });
   });
 });

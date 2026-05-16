@@ -2,7 +2,8 @@ import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { Container } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerDelegateTool } from "../tools/delegate";
-import type { SessionRecord, SubAgentWindow, WindowedSubagentDetails } from "../types";
+import type { SessionRecord } from "../types";
+import { createMockTheme, makeDetails, makeWindow } from "./helpers";
 
 // Mock the TUI components — same pattern as tools.test.ts
 vi.mock("@earendil-works/pi-tui", () => ({
@@ -37,11 +38,15 @@ vi.mock("../spawner", () => ({
 // Mock the profiles module
 vi.mock("../profiles", () => ({
   loadProfiles: vi.fn().mockResolvedValue({}),
-  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   validateProfileTools: vi.fn(),
   applyExcludeTools: vi.fn(),
+}));
+
+// Mock the settings module
+vi.mock("../settings", () => ({
+  loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
 }));
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -73,39 +78,7 @@ function getRenderFunctions() {
 }
 
 /** Creates a theme mock that records calls and returns the text unchanged */
-function makeMockTheme() {
-  return {
-    fg: vi.fn((_color: string, text: string) => text),
-    bold: vi.fn((text: string) => text),
-  } as unknown as Theme;
-}
-
-/** Factory for SubAgentWindow objects */
-function makeWindow(overrides: Partial<SubAgentWindow> = {}): SubAgentWindow {
-  return {
-    name: "task-1",
-    sessionId: "session-abc123",
-    status: "running",
-    lines: [],
-    allMessages: [],
-    exitCode: null,
-    startedAt: Date.now(),
-    timeout: 600,
-    toolCount: 0,
-    ...overrides,
-  };
-}
-
-/** Factory for WindowedSubagentDetails */
-function makeDetails(overrides: Partial<WindowedSubagentDetails> = {}): WindowedSubagentDetails {
-  return {
-    windows: [],
-    maxLinesPerWindow: 15,
-    globalStatus: "running",
-    sessionIds: [],
-    ...overrides,
-  };
-}
+const makeMockTheme = createMockTheme;
 
 /** Get the container instance from the last Container mock call */
 function getLastContainerInstance() {

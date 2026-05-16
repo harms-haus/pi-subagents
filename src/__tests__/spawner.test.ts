@@ -1,9 +1,9 @@
-import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runSubAgent } from "../spawner";
 import type { SubAgentWindow, SubagentSessionData } from "../types";
 import type * as ProfilesModule from "../profiles";
+import { createMockProcess } from "./helpers";
 
 // Mock pi-coding-agent (used by profiles.ts for parseFrontmatter)
 vi.mock("@earendil-works/pi-coding-agent", () => ({
@@ -13,45 +13,45 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   }),
 }));
 
-// Mock profiles module — keep real implementations but override loadCommandPreviewWidth
-// so tests are deterministic regardless of terminal width
+// Mock profiles module — keep real implementations
 vi.mock("../profiles", async (importOriginal) => {
     const actual = await importOriginal<typeof ProfilesModule>();
   return {
     ...actual,
-    loadCommandPreviewWidth: vi.fn().mockResolvedValue(160),
   };
 });
+
+// Mock settings module — override loadCommandPreviewWidth
+// so tests are deterministic regardless of terminal width
+vi.mock("../settings", () => ({
+  loadCommandPreviewWidth: vi.fn().mockResolvedValue(160),
+}));
+
+// Mock node:fs (used by profiles.ts)
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  readdirSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
+
+// Mock node:fs/promises (used by profiles.ts)
+vi.mock("node:fs/promises", () => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  unlink: vi.fn(),
+}));
 
 // Mock child_process.spawn
 vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
+import { existsSync, mkdirSync } from "node:fs";
+import { unlink, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { loadCommandPreviewWidth } from "../profiles";
-
-// Create a mock ChildProcess
-type MockChildProcess = EventEmitter & {
-  stdout: EventEmitter;
-  stderr: EventEmitter;
-  stdin: EventEmitter;
-  killed: boolean;
-  kill: ReturnType<typeof vi.fn>;
-};
-
-function createMockProcess(): MockChildProcess {
-  const proc = new EventEmitter() as MockChildProcess;
-  proc.stdout = new EventEmitter();
-  proc.stderr = new EventEmitter();
-  proc.stdin = new EventEmitter();
-  proc.killed = false;
-  proc.kill = vi.fn((signal: string) => {
-    proc.killed = true;
-    proc.emit("exit", signal === "SIGTERM" ? 0 : 1);
-  });
-  return proc;
-}
+import { deleteProfile, invalidateProfilesCache, saveProfile } from "../profiles";
+import { loadCommandPreviewWidth } from "../settings";
 
 describe("spawner", () => {
   let mockProcess: ReturnType<typeof createMockProcess>;
@@ -106,7 +106,8 @@ describe("spawner", () => {
       expect(spawn).toHaveBeenCalled();
       const spawnArgs = vi.mocked(spawn).mock.calls[0];
       // getPiInvocation() returns the actual node path and script path
-      expect(spawnArgs[0]).toBeTruthy();
+      expect(spawnArgs[0]).toEqual(expect.any(String));
+      expect(spawnArgs[0].length).toBeGreaterThan(0);
       expect(spawnArgs[1]).toContain("--mode");
       expect(spawnArgs[1]).toContain("json");
       expect(spawnArgs[1]).toContain("-p");
@@ -130,10 +131,8 @@ describe("spawner", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(spawn).toHaveBeenCalled();
-      // validateCwd will resolve the path, but we test that it was called
-      expect(spawn).toHaveBeenCalled();
       const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
-      expect(spawnOptions.cwd).toBeTruthy();
+      expect(spawnOptions.cwd).toBe("/absolute/path");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -177,6 +176,8 @@ describe("spawner", () => {
       expect(spawn).toHaveBeenCalled();
       const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
       expect(spawnOptions.cwd).toBeTruthy();
+      expect(spawnOptions.cwd).toMatch(/^\//);
+      expect((spawnOptions.cwd as string).endsWith("/relative/path")).toBe(true);
 
       mockProcess.emit("close", 0);
       await promise;
@@ -323,6 +324,54 @@ describe("spawner", () => {
       await promise;
     });
 
+    it("should escalate from SIGTERM to SIGKILL after 5s if process does not die", async () => {
+      vi.useFakeTimers();
+
+      // Create a process where SIGTERM does NOT set killed=true
+      // (simulating an unresponsive process that ignores SIGTERM)
+      const escalationProc = createMockProcess();
+      escalationProc.kill = vi.fn((signal: string) => {
+        if (signal === "SIGKILL") {
+          escalationProc.killed = true;
+          escalationProc.emit("exit", 1);
+        }
+        // SIGTERM: do nothing — process stays alive
+      });
+      vi.mocked(spawn).mockReturnValue(escalationProc as unknown as ChildProcess);
+
+      const abortController = new AbortController();
+
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        signal: abortController.signal,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      // Let async setup complete (loadCommandPreviewWidth is awaited)
+      await vi.advanceTimersByTimeAsync(100);
+
+      // Abort triggers SIGTERM
+      abortController.abort();
+      expect(escalationProc.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(escalationProc.killed).toBe(false);
+
+      // Advance past the 5-second escalation timeout
+      await vi.advanceTimersByTimeAsync(6000);
+
+      // SIGKILL should now have been sent
+      expect(escalationProc.kill).toHaveBeenCalledWith("SIGKILL");
+      expect(escalationProc.killed).toBe(true);
+
+      // Resolve the main promise
+      escalationProc.emit("close", 1);
+      await promise;
+
+      vi.useRealTimers();
+    });
+
     it("should handle abort signal that is already aborted", async () => {
       const abortController = new AbortController();
       abortController.abort(); // Already aborted
@@ -342,6 +391,28 @@ describe("spawner", () => {
 
       mockProcess.emit("close", 0);
       await promise;
+    });
+
+    it("should handle proc 'error' event (spawn failure)", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit 'error' instead of 'close' to simulate spawn failure
+      mockProcess.emit("error", new Error("spawn ENOENT"));
+      await promise;
+
+      expect(mockWindow.exitCode).toBe(1);
+      expect(mockWindow.status).toBe("error");
+      expect(mockWindow.errorMessage).toContain("Failed to spawn");
+      expect(mockSession.status).toBe("error");
+      expect(mockSession.exitCode).toBe(1);
     });
 
     it("should include profile args when profile is provided", async () => {
@@ -1172,6 +1243,37 @@ describe("spawner", () => {
       await promise;
     });
 
+    it("should increment todoCompleted on edit_todos abandon", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // First write todos
+      await emitToolCall("write_todos", {
+        mode: "replace",
+        todos: [{ text: "A" }, { text: "B" }, { text: "C" }],
+      });
+      expect(mockWindow.todoTotal).toBe(3);
+      expect(mockWindow.todoCompleted).toBe(0);
+
+      // Abandon indices 0 and 1
+      await emitToolCall("edit_todos", {
+        action: "abandon",
+        indices: [0, 1],
+      });
+      // abandon increments todoCompleted by the number of indices
+      expect(mockWindow.todoCompleted).toBe(2);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
     it("should add to todoTotal on write_todos append mode", async () => {
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt", cwd: CWD },
@@ -1206,6 +1308,297 @@ describe("spawner", () => {
 
       // todoCompleted should remain unchanged from append
       expect(mockWindow.todoCompleted).toBe(0);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("MAX_MESSAGES_PER_SESSION eviction", () => {
+    const CWD = "/home/user/projects/my-app";
+    const MAX_MESSAGES = 500;
+
+    it("should cap session.messages at MAX_MESSAGES_PER_SESSION and evict oldest", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 10000,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit MAX_MESSAGES + 50 message_end events (550 total)
+      const totalMessages = MAX_MESSAGES + 50;
+      const chunks: string[] = [];
+      for (let i = 0; i < totalMessages; i++) {
+        chunks.push(JSON.stringify({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: `msg-${i}` }],
+            model: "test-model",
+          },
+        }));
+      }
+      // Send all at once as a single data event with newline separators
+      mockProcess.stdout.emit("data", Buffer.from(`${chunks.join("\n")}\n`));
+
+      // Wait for processing
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // session.messages should be capped at MAX_MESSAGES_PER_SESSION
+      // The eviction logic: push then if >= MAX, shift. Steady state is MAX-1.
+      expect(mockSession.messages.length).toBeLessThanOrEqual(MAX_MESSAGES);
+      expect(mockSession.messages.length).toBe(MAX_MESSAGES - 1);
+
+      // The oldest messages should have been evicted — the first message
+      // should be msg-51 (index 51), not msg-0
+      // 550 messages emitted, 499 retained, so first retained is index 51
+      const firstRetainedIndex = totalMessages - (MAX_MESSAGES - 1);
+      const firstMsgContent = (mockSession.messages[0].content as Array<{ type: string; text: string }>)?.[0]?.text;
+      expect(firstMsgContent).toBe(`msg-${firstRetainedIndex}`);
+
+      // The last message should be the most recent
+      const lastMsgContent = (mockSession.messages[mockSession.messages.length - 1].content as Array<{ type: string; text: string }>)?.[0]?.text;
+      expect(lastMsgContent).toBe(`msg-${totalMessages - 1}`);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("profiles: saveProfile", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      invalidateProfilesCache();
+    });
+
+    it("creates new profile file in correct directory", async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+
+      await saveProfile(
+        "my-profile",
+        { provider: "anthropic", model: "claude-sonnet-4-5" },
+        "global",
+      );
+
+      // Should write to global agent-profiles dir
+      const writeCall = vi.mocked(writeFile).mock.calls[0];
+      expect(writeCall[0]).toMatch(/agent-profiles\/my-profile\.md$/);
+      expect(writeCall[1]).toContain("name: my-profile");
+      expect(writeCall[2]).toBe("utf8");
+    });
+
+    it("updates existing profile", async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+
+      // First save
+      await saveProfile(
+        "updatable",
+        { provider: "anthropic" },
+        "global",
+      );
+
+      // Second save with updated data
+      await saveProfile(
+        "updatable",
+        { provider: "openai", model: "gpt-4" },
+        "global",
+      );
+
+      // writeFile should have been called twice to the same path
+      const calls = vi.mocked(writeFile).mock.calls;
+      const profileCalls = calls.filter((c) => String(c[0]).endsWith("updatable.md"));
+      expect(profileCalls).toHaveLength(2);
+
+      // Second call should have the updated content
+      const secondContent = String(profileCalls[1][1]);
+      expect(secondContent).toContain("provider: openai");
+      expect(secondContent).toContain("model: gpt-4");
+      // Should NOT contain old provider
+      expect(secondContent).not.toContain("provider: anthropic");
+    });
+
+    it("creates directory if missing", async () => {
+      // Directory does not exist
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      await saveProfile(
+        "new-profile",
+        { provider: "anthropic" },
+        "project",
+        "/tmp/my-project",
+      );
+
+      // mkdirSync should have been called with recursive: true
+      expect(mkdirSync).toHaveBeenCalledWith(
+        expect.stringContaining("agent-profiles"),
+        { recursive: true },
+      );
+
+      // writeFile should still be called
+      expect(writeFile).toHaveBeenCalled();
+      const writeCall = vi.mocked(writeFile).mock.calls[0];
+      expect(String(writeCall[0])).toMatch(/my-project\/\.pi\/agent-profiles\/new-profile\.md$/);
+    });
+  });
+
+  describe("profiles: deleteProfile", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      invalidateProfilesCache();
+    });
+
+    it("removes file and returns true", async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+
+      const result = await deleteProfile("removable", "global");
+
+      expect(result).toBe(true);
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringMatching(/agent-profiles\/removable\.md$/),
+      );
+    });
+
+    it("returns false for non-existent profile", async () => {
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const result = await deleteProfile("ghost", "global");
+
+      expect(result).toBe(false);
+      expect(unlink).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("profiles: serializeProfileToMarkdown (via saveProfile)", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      invalidateProfilesCache();
+      vi.mocked(existsSync).mockReturnValue(true);
+    });
+
+    /** Helper: call saveProfile and return the written markdown content */
+    async function getWrittenMarkdown(
+      name: string,
+      profile: ProfilesModule.SubagentProfile,
+    ): Promise<string> {
+      await saveProfile(name, profile, "global");
+      const writeCall = vi.mocked(writeFile).mock.calls[0];
+      return String(writeCall[1]);
+    }
+
+    it("produces correct format with all fields", async () => {
+      const md = await getWrittenMarkdown("full-profile", {
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        thinkingLevel: "high",
+        tools: ["read", "bash", "grep"],
+        excludeTools: ["write"],
+        extensions: ["/ext1.js", "/ext2.js"],
+        extraArgs: ["--verbose"],
+        appendSystemPrompt: "Be concise",
+        apiKey: "sk-test",
+        noTools: false,
+        noExtensions: true,
+        noSkills: true,
+        noContextFiles: true,
+        systemPrompt: "You are a helpful assistant.",
+      });
+
+      // Frontmatter delimiters
+      expect(md).toMatch(/^---\n/);
+      expect(md).toContain("\n---\n");
+
+      // All fields present
+      expect(md).toContain("name: full-profile");
+      expect(md).toContain("provider: anthropic");
+      expect(md).toContain("model: claude-sonnet-4-5");
+      expect(md).toContain("thinkingLevel: high");
+      expect(md).toContain("tools: read,bash,grep");
+      expect(md).toContain("excludeTools: write");
+      expect(md).toContain("extensions: /ext1.js,/ext2.js");
+      expect(md).toContain("extraArgs: --verbose");
+      expect(md).toContain("appendSystemPrompt: Be concise");
+      expect(md).toContain("apiKey: sk-test");
+      expect(md).toContain("noTools: false");
+      expect(md).toContain("noExtensions: true");
+      expect(md).toContain("noSkills: true");
+      expect(md).toContain("noContextFiles: true");
+
+      // System prompt in body (after second ---)
+      const bodyStart = md.indexOf("---", 4) + 3;
+      const body = md.slice(bodyStart).trim();
+      expect(body).toBe("You are a helpful assistant.");
+    });
+
+    it("omits undefined fields", async () => {
+      const md = await getWrittenMarkdown("minimal-profile", {
+        provider: "anthropic",
+      });
+
+      expect(md).toContain("name: minimal-profile");
+      expect(md).toContain("provider: anthropic");
+
+      // Should NOT contain fields that weren't set
+      expect(md).not.toContain("model:");
+      expect(md).not.toContain("thinkingLevel:");
+      expect(md).not.toContain("tools:");
+      expect(md).not.toContain("excludeTools:");
+      expect(md).not.toContain("extensions:");
+      expect(md).not.toContain("extraArgs:");
+      expect(md).not.toContain("appendSystemPrompt:");
+      expect(md).not.toContain("apiKey:");
+      expect(md).not.toContain("noTools:");
+      expect(md).not.toContain("noExtensions:");
+      expect(md).not.toContain("noSkills:");
+      expect(md).not.toContain("noContextFiles:");
+
+      // No body (systemPrompt is undefined)
+      const lines = md.trim().split("\n");
+      // Last line should be the closing ---
+      expect(lines[lines.length - 1]).toBe("---");
+    });
+
+    it("includes systemPrompt as body", async () => {
+      const md = await getWrittenMarkdown("prompted", {
+        systemPrompt: "You are a senior code reviewer.",
+      });
+
+      // System prompt should appear after the closing frontmatter ---
+      const parts = md.split("---");
+      // parts: ['', ' frontmatter ', ' body ', '']
+      // The body section (after second ---) should contain the prompt
+      const body = parts.slice(2).join("---").trim();
+      expect(body).toBe("You are a senior code reviewer.");
+    });
+  });
+
+  describe("handleStderrData", () => {
+    it("should process stderr buffer and display with [stderr] prefix", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit stderr data
+      mockProcess.stderr.emit("data", Buffer.from("Warning: deprecated API usage\n"));
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Should appear in window lines with [stderr] prefix
+      const stderrLine = mockWindow.lines.find((l) => l.text.includes("[stderr]"));
+      expect(stderrLine).toBeTruthy();
+      expect(stderrLine?.text).toContain("[stderr]: Warning: deprecated API usage");
+
+      // onUpdate should have been called
+      expect(onUpdateSpy).toHaveBeenCalled();
 
       mockProcess.emit("close", 0);
       await promise;

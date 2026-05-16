@@ -8,16 +8,18 @@ import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import type { SubAgentWindow } from "../types";
 import {
-  appendLineToWindow,
   collapseCdDot,
-  countWindowStatuses,
   formatBashCommand,
+  shortenPath,
+  shortenPathsInText,
+} from "../format-tool-call";
+import {
+  appendLineToWindow,
+  countWindowStatuses,
   getLastAssistantText,
   getSummaryText,
   getTextParts,
   mapWithConcurrencyLimit,
-  shortenPath,
-  shortenPathsInText,
   stripAnsi,
 } from "../utils";
 

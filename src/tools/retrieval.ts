@@ -6,7 +6,8 @@
 
 import { Container, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { loadMaxLinesPerWindow, loadProfiles, profileSummary } from "../profiles";
+import { loadProfiles, profileSummary } from "../profiles";
+import { loadMaxLinesPerWindow } from "../settings";
 import { getLastAssistantText, getTextParts } from "../utils";
 import type { SessionRecord, ToolCallPart } from "../types";
 import type { ExtensionAPI, Theme, AgentToolResult } from "@earendil-works/pi-coding-agent";

@@ -5,6 +5,7 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import { DelegateParams, TaskSchema } from "../schemas";
+import { MAX_PARALLEL_TASKS } from "../types";
 
 describe("TaskSchema", () => {
   it("should validate correct task structure with required fields", () => {
@@ -109,25 +110,18 @@ describe("TaskSchema", () => {
     expect(result).toBe(false);
   });
 
-  it("should accept task with extra fields", () => {
+  it("should accept task with timeout of 0", () => {
     const task = {
       name: "test task",
       prompt: "do something",
-      extraField: "not allowed",
+      timeout: 0,
     };
 
     const result = Value.Check(TaskSchema, task);
     expect(result).toBe(true);
   });
 
-  it("should have correct property definitions", () => {
-    expect(TaskSchema.properties.name).toBeDefined();
-    expect(TaskSchema.properties.prompt).toBeDefined();
-    expect(TaskSchema.properties.cwd).toBeDefined();
-    expect(TaskSchema.properties.profile).toBeDefined();
-    expect(TaskSchema.properties.timeout).toBeDefined();
-    expect(TaskSchema.properties.resume).toBeDefined();
-  });
+
 });
 
 describe("TaskSchema - timeout and resume fields", () => {
@@ -254,21 +248,21 @@ describe("DelegateParams", () => {
     expect(result).toBe(false);
   });
 
-  it("should reject params with empty tasks array", () => {
-    const invalidParams = {
-      tasks: [],
-    };
-
-    const result = Value.Check(DelegateParams, invalidParams);
-    expect(result).toBe(false);
-  });
-
   it("should reject params with invalid task in array", () => {
     const invalidParams = {
       tasks: [
         { name: "valid", prompt: "do something" },
         { prompt: "missing name" }, // invalid task
       ],
+    };
+
+    const result = Value.Check(DelegateParams, invalidParams);
+    expect(result).toBe(false);
+  });
+
+  it("should reject params with empty tasks array", () => {
+    const invalidParams = {
+      tasks: [],
     };
 
     const result = Value.Check(DelegateParams, invalidParams);
@@ -294,22 +288,27 @@ describe("DelegateParams", () => {
     expect(result).toBe(false);
   });
 
-  it("should accept params with extra fields", () => {
-    const params = {
-      tasks: [{ name: "test", prompt: "do something" }],
-      extraField: "not allowed",
-    };
+  it(`should accept tasks array with exactly ${MAX_PARALLEL_TASKS} items (boundary)`, () => {
+    const tasks = Array.from({ length: MAX_PARALLEL_TASKS }, (_, i) => ({
+      name: `task-${i}`,
+      prompt: `do something ${i}`,
+    }));
+    const params = { tasks };
 
     const result = Value.Check(DelegateParams, params);
     expect(result).toBe(true);
   });
 
-  it("should have correct property definitions", () => {
-    expect(DelegateParams.properties.tasks).toBeDefined();
-    expect(DelegateParams.properties.profile).toBeDefined();
+  it(`should reject tasks array with ${MAX_PARALLEL_TASKS + 1} items (exceeds MAX_PARALLEL_TASKS)`, () => {
+    const tasks = Array.from({ length: MAX_PARALLEL_TASKS + 1 }, (_, i) => ({
+      name: `task-${i}`,
+      prompt: `do something ${i}`,
+    }));
+    const params = { tasks };
+
+    const result = Value.Check(DelegateParams, params);
+    expect(result).toBe(false);
   });
 
-  it("should have tasks property as Array type", () => {
-    expect(DelegateParams.properties.tasks.type).toBe("array");
-  });
+
 });

@@ -7,16 +7,13 @@
 
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { loadCommandPreviewWidth, profileToArgs } from "./profiles";
+import { formatToolCall } from "./format-tool-call";
+import { profileToArgs } from "./profiles";
+import { loadCommandPreviewWidth } from "./settings";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
 import {
   appendLineToWindow,
-  collapseCdDot,
-  formatBashCommand,
-  getPiInvocation,
   getTextParts,
-  shortenPath,
-  shortenPathsInText,
 } from "./utils";
 import type { SubagentProfile } from "./profiles";
 import type { SubAgentTask, SubAgentWindow, SubagentSessionData, ToolCallPart } from "./types";
@@ -37,28 +34,15 @@ export interface RunSubAgentOptions {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 /**
- * Count non-empty lines in a text without allocating intermediate arrays.
+ * Determine how to invoke the pi binary.
+ * Returns the command and arguments needed to spawn a sub-agent process.
  */
-function countNonEmptyLines(text: string): number {
-  let count = 0;
-  let lineStart = 0;
-  for (let i = 0; i <= text.length; i++) {
-    if (i === text.length || text.charCodeAt(i) === 10) { // newline
-      let empty = true;
-      for (let j = lineStart; j < i; j++) {
-        const c = text.charCodeAt(j);
-        if (c !== 32 && c !== 9 && c !== 13) { // not space/tab/CR
-          empty = false;
-          break;
-        }
-      }
-      if (!empty) {
-        count++;
-      }
-      lineStart = i + 1;
-    }
+function getPiInvocation(): { command: string; args: string[] } {
+  const currentScript = process.argv[1];
+  if (currentScript && !currentScript.startsWith("/$bunfs/root/")) {
+    return { command: process.execPath, args: [currentScript] };
   }
-  return count;
+  return { command: "pi", args: [] };
 }
 
 /**
@@ -73,173 +57,6 @@ function validateCwd(cwd: string | undefined, fallback: string): string {
     throw new Error("cwd must not contain '..' path segments");
   }
   return target;
-}
-
-/**
- * Format a tool call as a concise one-liner for the sub-agent rolling window.
- * Avoids dumping full JSON arguments for common tools.
- */
-function formatToolCall(toolName: string, args: Record<string, unknown>, cwd: string, widthBudget: number): string {
-  // Typed view of args for display formatting
-  const a = args as Record<string, string>;
-  switch (toolName) {
-    // File mutations: just show the filename
-    case "edit": {
-      const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
-      const edits = (args.edits as Array<{oldText?: string, newText?: string}> | undefined) ?? [];
-      const count = edits.length;
-      const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
-      // Count lines added/removed from edits
-      let added = 0;
-      let removed = 0;
-      for (const edit of edits) {
-        removed += countNonEmptyLines(edit.oldText ?? "");
-        added += countNonEmptyLines(edit.newText ?? "");
-      }
-      const diffStats = count > 0 ? ` +${added}/-${removed}` : "";
-      return `edit → ${path}${suffix}${diffStats}`;
-    }
-
-    case "write": {
-      const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
-      const content = a.content ?? "";
-      const lines = countNonEmptyLines(content);
-      return `write → ${path} +${lines}`;
-    }
-
-    case "grep": {
-      const pattern = a.pattern ?? "...";
-      if (a.glob) {
-        return `grep → /${pattern}/ → ${a.glob}`;
-      } else if (a.path) {
-        return `grep → /${pattern}/ → ${shortenPath(a.path, cwd)}`;
-      }
-      return `grep → /${pattern}/`;
-    }
-
-    case "bash": {
-      let cmd = (a.command ?? "...").split("\n")[0];
-      cmd = collapseCdDot(cmd, cwd);
-      if (cmd === "." || cmd === "") {
-        return `bash → cd .`;
-      }
-      cmd = shortenPathsInText(cmd, cwd);
-      return `bash → ${formatBashCommand(cmd, widthBudget - 12, widthBudget - 5)}`;
-    }
-
-    case "read": {
-      const path = shortenPath(a.path ?? "...", cwd);
-      const parts = [path];
-      if (a.offset) {parts.push(`:${a.offset}`);}
-      if (a.limit) {parts.push(`+${a.limit}`);}
-      const lineCount = a.limit ? ` (${a.limit} lines)` : "";
-      return `read → ${parts.join("")}${lineCount}`;
-    }
-
-    // Delegation
-    case "delegate_to_subagents": {
-      const tasks = (args.tasks ?? []) as { profile?: string }[];
-      const profiles = tasks.map((t) => t.profile).filter(Boolean);
-      const profileStr = profiles.length > 0 ? ` [${profiles.join(", ")}]` : a.profile ? ` [${a.profile}]` : "";
-      return `delegate_to_subagents → ${tasks.length} task${tasks.length !== 1 ? "s" : ""}${profileStr}`;
-    }
-
-    // Todo tools
-    case "write_todos": {
-      const n = (args.todos as unknown[] | undefined)?.length ?? 0;
-      return `write_todos → ${n} todos written`;
-    }
-    case "edit_todos": {
-      const action = String(args.action ?? "?");
-      const indices = (args.indices as number[] | undefined) ?? [];
-      const todos = args.todos as Array<{text?: string}> | undefined;
-      let desc: string;
-      if (todos && todos.length > 0) {
-        desc = todos.map(t => t.text ?? "").join(", ");
-        if (desc.length > 48) {desc = `${desc.slice(0, 45)}...`;}
-      } else {
-        desc = `${action} [${indices.join(",")}]`;
-      }
-      return `edit_todos → ${desc}`;
-    }
-    case "list_todos":
-      return "list_todos";
-
-    // LSP tools
-    case "lsp_diagnostics": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_diagnostics → ${file}`;
-    }
-    case "lsp_find_references": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_find_references → ${file}:${a.line}:${a.column}`;
-    }
-    case "lsp_goto_definition": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_goto_definition → ${file}:${a.line}:${a.column}`;
-    }
-    case "lsp_find_symbol":
-      return `lsp_find_symbol → ${a.query ?? "..."}`;
-    case "lsp_call_hierarchy": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_call_hierarchy → ${file}:${a.line}:${a.column}`;
-    }
-    case "lsp_refactor_symbol": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_refactor_symbol → ${file}:${a.line}:${a.column} → ${a.newName ?? "..."}`;
-    }
-
-    // Lint
-    case "lint_files": {
-      const files = args.files as string[] | undefined;
-      if (files && files.length > 0) {
-        const shortened = files.map((f) => shortenPath(f, cwd));
-        const preview =
-          shortened.length <= 3
-            ? shortened.join(", ")
-            : `${shortened.slice(0, 2).join(", ")}, ... +${shortened.length - 2} more`;
-        return `lint → ${preview}`;
-      }
-      return "lint → (all)";
-    }
-
-    // Fetch tools
-    case "fetch_content":
-    case "web_search": {
-      const url = a.url ?? a.query ?? "...";
-      const urlBudget = widthBudget - toolName.length - 4;
-      const truncated = url.length > urlBudget ? `${url.slice(0, urlBudget - 3)}...` : url;
-      return `${toolName} → ${truncated}`;
-    }
-    case "fetch_repo": {
-      const url = a.url ?? "...";
-      return `fetch_repo → ${url}`;
-    }
-
-    // Session retrieval
-    case "get_subagent_output":
-      return `get_subagent_output → ${args.sessionId ?? "..."}`;
-    case "get_subagent_session":
-      return `get_subagent_session → ${args.sessionId ?? "..."}`;
-    case "list_subagent_profiles":
-      return "list_subagent_profiles";
-
-    // Workflow
-    case "workflow_step": {
-      const action = args.action ?? "?";
-      return `workflow_step → ${action}`;
-    }
-
-    default: {
-      const argsStr = JSON.stringify(args);
-      const budget = widthBudget - toolName.length - 1;
-      if (argsStr === '{}') {return toolName;}
-      if (argsStr.length > budget) {
-        return `${toolName} ${argsStr.slice(0, Math.max(0, budget - 3))}...`;
-      }
-      return `${toolName} ${argsStr}`;
-    }
-  }
 }
 
 // ── Main Function ────────────────────────────────────────────────────

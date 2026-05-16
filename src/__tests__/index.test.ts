@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionRecord, SubagentSessionData } from "../types";
+import { createMockPi, makeSession } from "./helpers";
 
 // ── Mocks ──────────────────────────────────────────────────────────
 // We intercept the sub-module registrations so we can capture the
@@ -35,36 +36,6 @@ vi.mock("../tools/retrieval", () => ({
 vi.mock("../commands/profile", () => ({
   registerProfileCommand: vi.fn(),
 }));
-
-// ── Helpers ────────────────────────────────────────────────────────
-
-function createMockPi(): ExtensionAPI {
-  const pi = {
-    registerTool: vi.fn(),
-    registerCommand: vi.fn(),
-    on: vi.fn(),
-    getAllTools: vi.fn().mockReturnValue([]),
-    ui: {
-      notify: vi.fn(),
-      confirm: vi.fn(),
-    },
-  } as unknown as ExtensionAPI;
-  return pi;
-}
-
-function makeSession(overrides: Partial<SubagentSessionData> = {}): SubagentSessionData {
-  return {
-    sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
-    taskName: "test-task",
-    prompt: "test prompt",
-    cwd: "/tmp",
-    status: "completed",
-    messages: [],
-    exitCode: 0,
-    startedAt: Date.now(),
-    ...overrides,
-  };
-}
 
 // ── Tests ──────────────────────────────────────────────────────────
 

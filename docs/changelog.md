@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- `suggestedSkills` profile field — suggests skill names to the sub-agent via `--skill` CLI flags; the model chooses whether to load them.
+- `loadSkills` profile field — pre-loads skill content (SKILL.md body) into the sub-agent's system prompt via `<loaded_skill>` XML injection.
+- `validateProfileSkills()` — mutual exclusivity validation for `suggestedSkills`/`loadSkills` vs `noSkills`.
+- `resolveProfileSkills()` — resolves skill names to file paths (suggestedSkills) or injected content (loadSkills) at delegation time.
+- Skill configuration step in the interactive profile editor (`/profile create`, `/profile edit`).
+
 ## [0.1.0] — 2026-05-14
 
 ### Added

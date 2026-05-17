@@ -79,6 +79,12 @@ Profiles are resolved **per-task** before execution begins. The resolution order
 
 Resolution happens synchronously at the start of `execute()`, before any sub-agents are spawned.
 
+After profile resolution, a skill validation and resolution pipeline runs:
+
+1. **`validateProfileSkills()`** — Checks each resolved profile for mutually exclusive field combinations (`suggestedSkills` + `noSkills`, or `loadSkills` + `noSkills`). If a conflict is found, the entire tool call throws — no sub-agents are spawned.
+2. **`discoverSkills()`** — Called **once** (result cached) if any profile references `suggestedSkills` or `loadSkills`. Scans global and project-local skill directories.
+3. **`resolveProfileSkills()`** — Called once per **unique** profile (deduplicated to avoid repeated file reads). Resolves skill names to file paths (`suggestedSkills`) or reads skill content into `appendSystemPrompt` (`loadSkills`). Unknown skill names cause the task to fail with an error, but other tasks continue normally.
+
 #### Resume Mechanics
 
 When a task specifies `resume`:
@@ -384,6 +390,10 @@ All error conditions and their messages:
 | **Timeout** | `delegate_to_subagents` (internal) | `Timed out after {N}s. Consider resuming with a longer timeout.` | A task exceeds its `timeout` value (default 600s). The sub-agent is aborted via `SIGTERM` → `SIGKILL`. |
 | **Invalid cwd — relative path** | `delegate_to_subagents` (internal) | `cwd must be an absolute path` | The `cwd` parameter is not an absolute path. Thrown before the sub-agent is spawned. |
 | **Invalid cwd — path traversal** | `delegate_to_subagents` (internal) | `cwd must not contain '..' path segments` | The resolved `cwd` contains `..` segments. Thrown before the sub-agent is spawned. |
+| **Unknown skill (suggestedSkills)** | `delegate_to_subagents` | `Unknown skills: "bad-name". Available skills: skill-a, skill-b` | Profile specifies a skill name not found by skill discovery. The task is marked as error; other tasks continue normally. |
+| **Skills + noSkills conflict (suggestedSkills)** | `delegate_to_subagents` | `Profile "name" has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned. |
+| **Skills + noSkills conflict (loadSkills)** | `delegate_to_subagents` | `Profile "name" has both "loadSkills" and "noSkills" set. These are mutually exclusive — --no-skills disables skill discovery.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned. |
+| **Tool restriction override guard** | `delegate_to_subagents` | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.` | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
 
 ---
 

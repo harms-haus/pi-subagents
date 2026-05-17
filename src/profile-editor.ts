@@ -175,6 +175,49 @@ export async function editProfileInteractive(
     }
   }
 
+  // Skills configuration
+  if (profile.suggestedSkills || profile.loadSkills) {
+    const remove = await ctx.ui.confirm(
+      "Remove skills?",
+      "Skill config is set. Remove existing skill configuration?",
+    );
+    if (remove) {
+      delete profile.suggestedSkills;
+      delete profile.loadSkills;
+    }
+    // If not remove, keep as-is
+  } else {
+    const add = await ctx.ui.confirm(
+      "Configure skills?",
+      "Configure skill loading for the subagent?",
+    );
+    if (add) {
+      const suggestedStr = await ctx.ui.input(
+        "Suggested skills (comma-separated skill names, model chooses to load):",
+        "",
+      );
+      if (suggestedStr === undefined) {return;}
+      if (suggestedStr.trim()) {
+        profile.suggestedSkills = suggestedStr
+          .split(",")
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+      }
+
+      const loadStr = await ctx.ui.input(
+        "Pre-loaded skills (comma-separated skill names, content injected into system prompt):",
+        "",
+      );
+      if (loadStr === undefined) {return;}
+      if (loadStr.trim()) {
+        profile.loadSkills = loadStr
+          .split(",")
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+      }
+    }
+  }
+
   // Review and save
   const summary = formatProfileDetail(name, profile);
   const confirmed = await ctx.ui.confirm(`Save profile "${name}"?`, `${summary}\n\nSave this profile?`);

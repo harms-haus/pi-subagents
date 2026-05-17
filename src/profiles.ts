@@ -26,7 +26,7 @@ import { type Dirent, existsSync, mkdirSync, readdirSync, readFileSync } from "n
 import { unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { parseFrontmatter, stripFrontmatter, loadSkills as discoverSkills } from "@earendil-works/pi-coding-agent";
 export { profileSummary, formatProfileDetail } from "./profile-formatting";
 import { serializeProfileToMarkdown } from "./profile-formatting";
 import type { SubagentProfile, SubagentProfiles, ThinkingLevel, ProfileInvocation } from "./profile-types";
@@ -91,6 +91,96 @@ export function applyExcludeTools(profile: SubagentProfile, allToolNames: string
   return { ...profile, tools: computedTools, excludeTools: undefined };
 }
 
+/** Validate that skill-related profile fields are not mutually conflicting. Throws if suggestedSkills or loadSkills is combined with noSkills. */
+export function validateProfileSkills(profile: SubagentProfile, profileName?: string): void {
+  if (profile.suggestedSkills && profile.suggestedSkills.length > 0 && profile.noSkills) {
+    throw new Error(
+      `Profile${profileName ? ` "${profileName}"` : ""} has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.`,
+    );
+  }
+  if (profile.loadSkills && profile.loadSkills.length > 0 && profile.noSkills) {
+    throw new Error(
+      `Profile${profileName ? ` "${profileName}"` : ""} has both "loadSkills" and "noSkills" set. These are mutually exclusive — --no-skills disables skill discovery.`,
+    );
+  }
+}
+
+/**
+ * Resolve skill names in a profile to file paths and content.
+ * suggestedSkills: names → file paths (for --skill CLI flags)
+ * loadSkills: names → SKILL.md body → injected into appendSystemPrompt
+ */
+export function resolveProfileSkills(
+  profile: SubagentProfile,
+  cwd: string,
+  skillMap?: Map<string, { filePath: string; name: string; description: string }>,
+): SubagentProfile {
+  if (!profile.suggestedSkills?.length && !profile.loadSkills?.length) {
+    return profile;
+  }
+
+  let result: { skills: { filePath: string; name: string; description: string }[] };
+  if (skillMap) {
+    result = { skills: [...skillMap.values()] };
+  } else {
+    const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+    result = discoverSkills({ cwd, agentDir, skillPaths: [], includeDefaults: true });
+  }
+  const localSkillMap = skillMap ?? new Map(result.skills.map((s) => [s.name, s]));
+  const available = result.skills.map((s) => s.name);
+  const resolved: SubagentProfile = { ...profile };
+
+  // Resolve suggestedSkills: names → file paths
+  if (profile.suggestedSkills?.length) {
+    const paths: string[] = [];
+    const notFound: string[] = [];
+    for (const name of profile.suggestedSkills) {
+      const skill = localSkillMap.get(name);
+      if (!skill) {
+        notFound.push(name);
+      } else {
+        paths.push(skill.filePath);
+      }
+    }
+    if (notFound.length > 0) {
+      throw new Error(
+        `Unknown skills: ${notFound.map((n) => `"${n}"`).join(", ")}. Available skills: ${available.join(", ") || "(none)"}`,
+      );
+    }
+    resolved.suggestedSkills = paths;
+  }
+
+  // Resolve loadSkills: names → content injected into appendSystemPrompt
+  if (profile.loadSkills?.length) {
+    const skillParts: string[] = [];
+    const loadNotFound: string[] = [];
+    for (const name of profile.loadSkills) {
+      const skill = localSkillMap.get(name);
+      if (!skill) {
+        loadNotFound.push(name);
+      } else {
+        const raw = readFileSync(skill.filePath, "utf-8");
+        const body = stripFrontmatter(raw).trim();
+        if (body) {
+          skillParts.push(`<loaded_skill name="${skill.name}">\n${body}\n</loaded_skill>`);
+        }
+      }
+    }
+    if (loadNotFound.length > 0) {
+      throw new Error(
+        `Unknown skills: ${loadNotFound.map((n) => `"${n}"`).join(", ")}. Available skills: ${available.join(", ") || "(none)"}`,
+      );
+    }
+    if (skillParts.length > 0) {
+      const loadSkillsContent = `\n\n${skillParts.join("\n\n")}`;
+      resolved.appendSystemPrompt = (resolved.appendSystemPrompt ?? "") + loadSkillsContent;
+    }
+    resolved.loadSkills = undefined;
+  }
+
+  return resolved;
+}
+
 // ── Profile Loading from Markdown Files ──────────────────────────────
 
 function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
@@ -144,6 +234,12 @@ function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
 
       const extraArgs = parseStringOrArray(frontmatter.extraArgs);
       if (extraArgs) {profile.extraArgs = extraArgs;}
+
+      const suggestedSkills = parseStringOrArray(frontmatter.suggestedSkills);
+      if (suggestedSkills) {profile.suggestedSkills = suggestedSkills;}
+
+      const loadSkillsField = parseStringOrArray(frontmatter.loadSkills);
+      if (loadSkillsField) {profile.loadSkills = loadSkillsField;}
 
       profiles[name] = profile;
     } catch (error) {
@@ -258,6 +354,14 @@ export function profileToArgs(profile: SubagentProfile): ProfileInvocation {
 
   if (profile.noSkills) {
     args.push("--no-skills");
+  }
+
+  if (profile.suggestedSkills) {
+    for (const skillPath of profile.suggestedSkills) {
+      if (skillPath) {
+        args.push("--skill", skillPath);
+      }
+    }
   }
 
   if (profile.noContextFiles) {

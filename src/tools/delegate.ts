@@ -5,12 +5,17 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { loadSkills as discoverSkills } from "@earendil-works/pi-coding-agent";
 import {
   applyExcludeTools,
   loadProfiles,
   profileSummary,
   resolveProfile,
+  resolveProfileSkills,
   validateProfileTools,
+  validateProfileSkills,
 } from "../profiles";
 import { DelegateParams } from "../schemas";
 import { loadMaxLinesPerWindow } from "../settings";
@@ -18,6 +23,7 @@ import { runSubAgent } from "../spawner";
 import { DEFAULT_TIMEOUT, formatRunsForResume, MAX_CONCURRENCY } from "../types";
 import { getSummaryText, mapWithConcurrencyLimit } from "../utils";
 import { renderDelegateCall, renderDelegateResult } from "./delegate-render";
+import type { SubagentProfile } from "../profile-types";
 import type { SessionRecord, SubAgentWindow, SubagentSessionData, WindowedSubagentDetails } from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -87,6 +93,36 @@ export function registerDelegateTool(
           }
           validateProfileTools(profile, name);
           resolvedProfiles[i] = { name, profile: applyExcludeTools(profile, allToolNames) };
+        }
+      }
+
+      // Validate skills in profiles
+      for (const { name, profile } of resolvedProfiles) {
+        if (profile) {
+          validateProfileSkills(profile, name);
+        }
+      }
+
+      // Cache skill discovery: call discoverSkills once if any profile needs skill resolution
+      let skillMap: Map<string, { filePath: string; name: string; description: string }> | undefined;
+      const needsSkillResolution = resolvedProfiles.some(
+        ({ profile }) => profile && (profile.suggestedSkills?.length || profile.loadSkills?.length),
+      );
+      if (needsSkillResolution) {
+        const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+        const discResult = discoverSkills({ cwd: ctx.cwd, agentDir, skillPaths: [], includeDefaults: true });
+        skillMap = new Map(discResult.skills.map((s) => [s.name, s]));
+      }
+
+      // Pre-resolve skills for each unique profile to avoid repeated file reads (E1+E2)
+      const skillResolvedProfiles = new Map<SubagentProfile, { ok: true; profile: SubagentProfile } | { ok: false; error: string }>();
+      for (const { profile } of resolvedProfiles) {
+        if (profile && !skillResolvedProfiles.has(profile) && (profile.suggestedSkills?.length || profile.loadSkills?.length)) {
+          try {
+            skillResolvedProfiles.set(profile, { ok: true, profile: resolveProfileSkills(profile, ctx.cwd, skillMap) });
+          } catch (skillError) {
+            skillResolvedProfiles.set(profile, { ok: false, error: skillError instanceof Error ? skillError.message : String(skillError) });
+          }
         }
       }
 
@@ -194,6 +230,23 @@ export function registerDelegateTool(
           return;
         }
 
+        // Look up pre-resolved skills for this profile (resolved once per unique profile above)
+        let skillResolvedProfile = resolvedProfile;
+        if (resolvedProfile?.suggestedSkills?.length || resolvedProfile?.loadSkills?.length) {
+          const result = skillResolvedProfiles.get(resolvedProfile);
+          if (!result || !result.ok) {
+            win.status = "error";
+            session.status = "error";
+            win.errorMessage = result?.error ?? "Skill resolution failed";
+            session.errorMessage = win.errorMessage;
+            win.exitCode = 1;
+            session.exitCode = 1;
+            emitUpdate();
+            return;
+          }
+          skillResolvedProfile = result.profile;
+        }
+
         // Format prompt for resume if applicable
         let effectivePrompt = task.prompt;
         if (task.resume) {
@@ -229,7 +282,7 @@ export function registerDelegateTool(
             signal: taskAbortController.signal,
             onUpdate: emitUpdate,
             session,
-            profile: resolvedProfile,
+            profile: skillResolvedProfile,
           });
         } finally {
           clearTimeout(taskAbortTimeout);

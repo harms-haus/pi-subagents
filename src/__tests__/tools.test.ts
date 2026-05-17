@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Message } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerProfileCommand } from "../commands/profile";
-import { resolveProfile } from "../profiles";
+import { resolveProfile, resolveProfileSkills, validateProfileSkills } from "../profiles";
 import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
 import { registerRetrievalTools } from "../tools/retrieval";
@@ -44,6 +44,7 @@ vi.mock("../profiles", () => ({
   loadProfiles: vi.fn().mockResolvedValue({}),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
+  resolveProfileSkills: vi.fn((profile: unknown) => profile),
   validateProfileTools: (profile: { tools?: string[]; excludeTools?: string[] }, profileName?: string) => {
     if (profile.tools && profile.tools.length > 0 && profile.excludeTools && profile.excludeTools.length > 0) {
       throw new Error(
@@ -51,6 +52,7 @@ vi.mock("../profiles", () => ({
       );
     }
   },
+  validateProfileSkills: vi.fn(),
   applyExcludeTools: (profile: Record<string, unknown>, allToolNames: string[]) => {
     const excludeTools = profile.excludeTools as string[] | undefined;
     if (!excludeTools || excludeTools.length === 0) {return profile;}
@@ -1114,6 +1116,278 @@ describe("tools", () => {
       // Failing task should have ✗ indicator and error message
       expect(summaryText).toContain("✗ failing-task: error");
       expect(summaryText).toContain("test error");
+    });
+  });
+
+  describe("delegate_to_subagents - skill resolution", () => {
+    let mockPi: ExtensionAPI;
+    let sessionStore: Map<string, SessionRecord>;
+
+    beforeEach(() => {
+      sessionStore = new Map();
+      mockPi = createMockPi();
+      vi.mocked(runSubAgent).mockClear();
+      vi.mocked(runSubAgent).mockResolvedValue(undefined);
+      // Reset skill mocks to defaults and clear call history
+      vi.mocked(resolveProfileSkills).mockClear();
+      vi.mocked(resolveProfileSkills).mockImplementation((profile: unknown) => profile as Record<string, unknown>);
+      vi.mocked(validateProfileSkills).mockClear();
+      vi.mocked(validateProfileSkills).mockImplementation(() => {});
+    });
+
+    const getDelegateExecute = async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+      expect(toolRegistration).toBeDefined();
+
+      const executeFn = toolRegistration?.[0].execute;
+      if (!executeFn) {
+        throw new Error("Tool not registered");
+      }
+      return executeFn;
+    };
+
+    it("should pass resolved skill paths to runSubAgent via profile", async () => {
+      vi.mocked(resolveProfile).mockReturnValue({
+        suggestedSkills: ["my-skill"],
+      });
+
+      vi.mocked(resolveProfileSkills).mockImplementation((profile: unknown) => {
+        const p = profile as Record<string, unknown>;
+        return {
+          ...p,
+          suggestedSkills: ["/skills/my-skill/SKILL.md"],
+        } as Record<string, unknown>;
+      });
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "skill-task", prompt: "do work", profile: "skilled" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      // resolveProfileSkills should have been called
+      expect(resolveProfileSkills).toHaveBeenCalledTimes(1);
+      expect(resolveProfileSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ suggestedSkills: ["my-skill"] }),
+        process.cwd(),
+        expect.any(Map),
+      );
+
+      // runSubAgent should have been called with the resolved profile containing skill paths
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      expect(callArgs.profile).toBeDefined();
+      expect(callArgs.profile!.suggestedSkills).toEqual(["/skills/my-skill/SKILL.md"]);
+    });
+
+    it("should set error status when skill name is not found", async () => {
+      vi.mocked(resolveProfile).mockReturnValue({
+        suggestedSkills: ["missing-skill"],
+      });
+
+      vi.mocked(resolveProfileSkills).mockImplementation(() => {
+        throw new Error('Skill "missing-skill" not found');
+      });
+
+      const executeFn = await getDelegateExecute();
+
+      const result = await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "bad-skill-task", prompt: "do work", profile: "skilled" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      // runSubAgent should NOT have been called
+      expect(runSubAgent).not.toHaveBeenCalled();
+
+      // Window should show error with the skill error message
+      const details = result.details as WindowedSubagentDetails;
+      expect(details.windows[0].status).toBe("error");
+      expect(details.windows[0].errorMessage).toContain('Skill "missing-skill" not found');
+
+      // Summary text should reflect the error
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain("error");
+      expect(text).toContain('Skill "missing-skill" not found');
+    });
+
+    it("should not call resolveProfileSkills when profile has no skills", async () => {
+      vi.mocked(resolveProfile).mockReturnValue({
+        model: "anthropic/claude-sonnet-4",
+      });
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "plain-task", prompt: "do work", profile: "plain" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      // resolveProfileSkills should NOT have been called since profile has no skills
+      expect(resolveProfileSkills).not.toHaveBeenCalled();
+
+      // runSubAgent should still have been called with the plain profile
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      expect(callArgs.profile).toEqual({ model: "anthropic/claude-sonnet-4" });
+    });
+
+    it("should validate skill conflicts before delegation", async () => {
+      vi.mocked(resolveProfile).mockReturnValue({
+        suggestedSkills: ["my-skill"],
+        noSkills: true,
+      });
+
+      vi.mocked(validateProfileSkills).mockImplementation((profile: unknown, profileName?: string) => {
+        const p = profile as Record<string, unknown>;
+        if (p.suggestedSkills && p.noSkills) {
+          throw new Error(
+            `Profile${profileName ? ` "${profileName}"` : ""} has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.`,
+          );
+        }
+      });
+
+      const executeFn = await getDelegateExecute();
+
+      await expect(
+        executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "conflicted-task", prompt: "do work", profile: "conflicted" }],
+          },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        ),
+      ).rejects.toThrow(/mutually exclusive/i);
+
+      // runSubAgent should not have been called
+      expect(runSubAgent).not.toHaveBeenCalled();
+    });
+
+    it("should resolve skills independently per task", async () => {
+      vi.mocked(resolveProfile)
+        .mockReturnValueOnce({ suggestedSkills: ["skill-a"] })
+        .mockReturnValueOnce({ suggestedSkills: ["skill-b"] });
+
+      vi.mocked(resolveProfileSkills)
+        .mockImplementationOnce((profile: unknown) => ({
+          ...(profile as Record<string, unknown>),
+          suggestedSkills: ["/a/SKILL.md"],
+        }))
+        .mockImplementationOnce((profile: unknown) => ({
+          ...(profile as Record<string, unknown>),
+          suggestedSkills: ["/b/SKILL.md"],
+        }));
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            { name: "task-a", prompt: "work a", profile: "profile-a" },
+            { name: "task-b", prompt: "work b", profile: "profile-b" },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      // resolveProfileSkills should have been called twice, once per task
+      expect(resolveProfileSkills).toHaveBeenCalledTimes(2);
+
+      // Each call should receive the correct profile
+      expect(resolveProfileSkills).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ suggestedSkills: ["skill-a"] }),
+        process.cwd(),
+        expect.any(Map),
+      );
+      expect(resolveProfileSkills).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ suggestedSkills: ["skill-b"] }),
+        process.cwd(),
+        expect.any(Map),
+      );
+
+      // runSubAgent should have been called twice
+      expect(runSubAgent).toHaveBeenCalledTimes(2);
+
+      // Each call should get its own resolved profile
+      const call0 = vi.mocked(runSubAgent).mock.calls[0][0];
+      expect(call0.profile!.suggestedSkills).toEqual(["/a/SKILL.md"]);
+
+      const call1 = vi.mocked(runSubAgent).mock.calls[1][0];
+      expect(call1.profile!.suggestedSkills).toEqual(["/b/SKILL.md"]);
+    });
+
+    it("should allow other tasks to continue when one task's skill resolution fails", async () => {
+      vi.mocked(resolveProfile)
+        .mockReturnValueOnce({ suggestedSkills: ["bad-skill"] })
+        .mockReturnValueOnce({ suggestedSkills: ["good-skill"] });
+
+      vi.mocked(resolveProfileSkills)
+        .mockImplementationOnce(() => {
+          throw new Error('Skill "bad-skill" not found');
+        })
+        .mockImplementationOnce((profile: unknown) => ({
+          ...(profile as Record<string, unknown>),
+          suggestedSkills: ["/good/SKILL.md"],
+        }));
+
+      const executeFn = await getDelegateExecute();
+
+      const result = await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            { name: "failing-task", prompt: "fails", profile: "bad-profile" },
+            { name: "succeeding-task", prompt: "succeeds", profile: "good-profile" },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      // runSubAgent should have been called only for the succeeding task
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      expect(callArgs.task.name).toBe("succeeding-task");
+      expect(callArgs.profile!.suggestedSkills).toEqual(["/good/SKILL.md"]);
+
+      // Result should show one error and one (pending/completed) window
+      const details = result.details as WindowedSubagentDetails;
+      const failWindow = details.windows.find((w) => w.name === "failing-task");
+      const successWindow = details.windows.find((w) => w.name === "succeeding-task");
+
+      expect(failWindow?.status).toBe("error");
+      expect(failWindow?.errorMessage).toContain('Skill "bad-skill" not found');
+      // The succeeding task's window should not be in error
+      expect(successWindow?.status).not.toBe("error");
     });
   });
 });

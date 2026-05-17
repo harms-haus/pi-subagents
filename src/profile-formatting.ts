@@ -14,6 +14,12 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
   else if (profile.tools && profile.tools.length > 0) {parts.push(`tools=[${profile.tools.join(",")}]`);}
   else if (profile.excludeTools && profile.excludeTools.length > 0)
     {parts.push(`excludeTools=[${profile.excludeTools.join(",")}]`);}
+  if (profile.suggestedSkills && profile.suggestedSkills.length > 0) {
+    parts.push(`suggestedSkills=[${profile.suggestedSkills.join(",")}]`);
+  }
+  if (profile.loadSkills && profile.loadSkills.length > 0) {
+    parts.push(`loadSkills=[${profile.loadSkills.join(",")}]`);
+  }
   return parts.join(", ");
 }
 
@@ -39,6 +45,8 @@ export function serializeProfileToMarkdown(name: string, profile: SubagentProfil
     {fmLines.push(`excludeTools: ${profile.excludeTools.join(",")}`);}
   if (profile.extensions && profile.extensions.length > 0) {fmLines.push(`extensions: ${profile.extensions.join(",")}`);}
   if (profile.extraArgs && profile.extraArgs.length > 0) {fmLines.push(`extraArgs: ${profile.extraArgs.join(",")}`);}
+  if (profile.suggestedSkills && profile.suggestedSkills.length > 0) {fmLines.push(`suggestedSkills: ${profile.suggestedSkills.join(",")}`);}
+  if (profile.loadSkills && profile.loadSkills.length > 0) {fmLines.push(`loadSkills: ${profile.loadSkills.join(",")}`);}
 
   fmLines.push("---");
 
@@ -70,6 +78,12 @@ export function formatProfileDetail(name: string, profile: SubagentProfile): str
   if (profile.extensions) {lines.push(`  extensions:        [${profile.extensions.join(", ")}]`);}
   if (profile.noSkills) {lines.push(`  noSkills:          true`);}
   if (profile.noContextFiles) {lines.push(`  noContextFiles:    true`);}
+  if (profile.suggestedSkills) {
+    lines.push(`  suggestedSkills:   [${profile.suggestedSkills.join(", ")}]`);
+  }
+  if (profile.loadSkills) {
+    lines.push(`  loadSkills:        [${profile.loadSkills.join(", ")}]`);
+  }
   if (profile.apiKey) {
     const masked = profile.apiKey.length > 8 ? `${profile.apiKey.slice(0, 4)}****${profile.apiKey.slice(-4)}` : "****";
     lines.push(`  apiKey:            ${masked}`);

@@ -56,7 +56,9 @@ Every field in the frontmatter is **optional**. Only `name` is required for the 
 | `excludeTools` | `string` or `string[]` | Comma-separated string **or** YAML array of tool names to **exclude** from the parent session's full tool set. The allowed tools are computed at spawn time: all available tools minus the blacklisted ones, passed as `--tools` to the child process. Mutually exclusive with `tools` — if both are set, an error is thrown. If `noTools` is also set, `noTools` takes precedence and `excludeTools` is silently ignored. |
 | `noExtensions` | `boolean` | If `true`, disables all extensions. Maps to `--no-extensions`. |
 | `extensions` | `string` or `string[]` | Comma-separated string **or** YAML array of extension file paths to load. Each entry maps to a separate `--extension` flag. |
-| `noSkills` | `boolean` | If `true`, disables skills. Maps to `--no-skills`. |
+| `noSkills` | `boolean` | If `true`, disables skills. Maps to `--no-skills`. Mutually exclusive with `suggestedSkills` and `loadSkills` — if combined, an error is thrown. |
+| `suggestedSkills` | `string` or `string[]` | Comma-separated string **or** YAML array of skill names to *suggest* to the sub-agent via `--skill` CLI flags. The sub-agent's model decides whether to load them. E.g., `web-search,code-review` or `[web-search, code-review]`. Mutually exclusive with `noSkills`. |
+| `loadSkills` | `string` or `string[]` | Comma-separated string **or** YAML array of skill names to *pre-load* into the sub-agent's system prompt. Skill content is read at spawn time, stripped of frontmatter, and injected into `appendSystemPrompt` wrapped in `<loaded_skill>` XML tags. Mutually exclusive with `noSkills`. |
 | `noContextFiles` | `boolean` | If `true`, disables context files (`AGENTS.md`, `CLAUDE.md`). Maps to `--no-context-files`. |
 | `appendSystemPrompt` | `string` | Text appended to pi's default system prompt. Use when you want to add instructions without replacing the default entirely. Maps to `--append-system-prompt`. |
 | `apiKey` | `string` | Custom API key for this profile. Stored as the `PI_API_KEY` environment variable — **never passed as a CLI argument**. |
@@ -183,6 +185,48 @@ excludeTools: write,edit,bash
 ---
 
 You are a read-only analyst. You can read files and search but cannot modify anything.
+```
+
+### Profile with Suggested Skills
+
+A profile that suggests skills to the sub-agent. The model receives `--skill` flags and decides whether to load them based on the task.
+
+```markdown
+---
+name: skillful-reviewer
+provider: anthropic
+model: claude-sonnet-4-5
+thinkingLevel: high
+suggestedSkills: workflow-generation,code-review
+---
+
+You are a code reviewer with access to specialized skills.
+```
+
+### Profile with Pre-Loaded Skills
+
+A profile that pre-loads skill content directly into the system prompt. The skill instructions are always available — the model doesn't need to discover or choose them.
+
+```markdown
+---
+name: workflow-builder
+provider: anthropic
+model: claude-sonnet-4-5
+loadSkills: workflow-generation
+appendSystemPrompt: Always validate workflows before saving.
+---
+
+You are a workflow construction specialist.
+```
+
+The `workflow-generation` skill's `SKILL.md` body is read, stripped of its YAML frontmatter, and injected into `appendSystemPrompt` wrapped in `<loaded_skill>` XML. The resulting system prompt append looks like:
+
+```
+Always validate workflows before saving.
+
+<loaded_skill name="workflow-generation">
+... skill content ...
+</loaded_skill>
 ```
 
 ### Profile with API Key
@@ -319,7 +363,10 @@ Both `/profile create` and `/profile edit` launch a step-by-step wizard:
    - **Allowlist** — enter a comma-separated list of tools to *allow* (all others excluded)
    - **Blacklist** — enter a comma-separated list of tools to *exclude* (all others allowed)
 8. **Extensions** — confirm whether to configure; if yes, choose to disable all extensions (`noExtensions`) or enter comma-separated paths
-9. **Review** — displays the full profile summary; confirm to save or cancel
+9. **Skills** — if skill configuration already exists (`suggestedSkills` or `loadSkills`), offers to remove it. Otherwise, asks whether to configure skills. If yes, prompts for two fields:
+   - **Suggested skills** — comma-separated skill names (the model chooses whether to load them)
+   - **Pre-loaded skills** — comma-separated skill names (content injected into the system prompt)
+10. **Review** — displays the full profile summary; confirm to save or cancel
 
 At any step, answering "No" or canceling skips that field. Skipped fields are omitted from the saved profile (pi defaults apply).
 
@@ -342,6 +389,8 @@ Profiles are converted to CLI arguments and environment variables via `profileTo
 | `noExtensions` | `--no-extensions` | Boolean flag; no value |
 | `extensions` | `--extension <value>` (×N) | One `--extension` flag per entry |
 | `noSkills` | `--no-skills` | Boolean flag; no value |
+| `suggestedSkills` | `--skill <path>` (×N) | After [resolution](#skill-resolution-pipeline), each skill name becomes a file path; one `--skill` flag per entry |
+| `loadSkills` | Merged into `--append-system-prompt` | Skill content is wrapped in `<loaded_skill name="...">` XML tags and appended to any existing `appendSystemPrompt` text |
 | `noContextFiles` | `--no-context-files` | Boolean flag; no value |
 | `apiKey` | *(env var)* | Set as `PI_API_KEY` in process environment — **not a CLI flag** |
 | `extraArgs` | *(appended verbatim)* | Each array element appended directly to the args array |
@@ -369,6 +418,22 @@ if (profile.noTools) {
 > **Note:** `applyExcludeTools()` resolves `excludeTools` to a computed `tools` array **before** `profileToArgs()` runs. By the time the extraArgs validation guard executes, the profile already has `tools` set (not `excludeTools`), so the guard checks against `profile.tools` regardless of whether the original profile used `tools` or `excludeTools`.
 
 If both `tools` and `excludeTools` are set without `noTools`, an error is thrown — they are mutually exclusive.
+
+### Skill Resolution Pipeline
+
+When a profile contains `suggestedSkills` or `loadSkills`, the delegation pipeline resolves skill names to concrete data before spawning the sub-agent. The full pipeline:
+
+1. **Validation** — `validateProfileSkills()` checks that neither `suggestedSkills` nor `loadSkills` is combined with `noSkills`. If they are, an error is thrown before any file I/O occurs.
+
+2. **Discovery** — If any profile needs skill resolution, `discoverSkills()` is called **once** (cached across all tasks in the same delegation call). It scans the agent directory (`~/.pi/agent` or `$PI_AGENT_DIR`) for skill definitions and returns a map of `{ name, filePath, description }`.
+
+3. **Resolution** — `resolveProfileSkills()` processes each field:
+   - **`suggestedSkills`** — each name is looked up in the skill map. If found, the name is replaced with the skill's file path. If not found, an error lists the unknown skills and available ones. After resolution, `profile.suggestedSkills` contains file paths (not names).
+   - **`loadSkills`** — each name is looked up in the skill map. If found, the skill's `SKILL.md` file is read, frontmatter is stripped via `stripFrontmatter()`, and the body is wrapped in `<loaded_skill name="...">\n...\n</loaded_skill>` XML. All parts are appended to the profile's existing `appendSystemPrompt`. After resolution, `profile.loadSkills` is set to `undefined` (consumed).
+
+4. **CLI emission** — `profileToArgs()` converts resolved `suggestedSkills` paths into individual `--skill <path>` flags. Merged `loadSkills` content is emitted as part of `--append-system-prompt`.
+
+This means skill resolution happens **at delegation time**, not at profile-load time. A profile file only stores skill names; the actual file paths and content are resolved when the sub-agent is spawned.
 
 ### API Key Handling
 
@@ -444,14 +509,20 @@ The validation regex:
 
 When `excludeTools`, `tools`, or `noTools` is set in a profile, passing tool-restriction flags via `extraArgs` is **blocked**. The following `extraArgs` patterns are rejected:
 
-| Blocked Flag | Example `extraArgs` | Error |
-|---|---|---|
-| `--tools` | `"--tools=read,write"` | `Cannot pass --tools in extraArgs when tools are configured in profile` |
-| `-t` | `"-t read"` | `Cannot pass -t in extraArgs when tools are configured in profile` |
-| `--no-tools` | `"--no-tools"` | `Cannot pass --no-tools in extraArgs when tools are configured in profile` |
-| `-nt` | `"-nt"` | `Cannot pass -nt in extraArgs when tools are configured in profile` |
+| Condition | Tool | Error Message | Description |
+|---|---|---|---|
+| Tool restriction override guard | `delegate_to_subagents` | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.` | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
 
 Both space-separated (`--tools read`) and equals-sign (`--tools=read`) forms are caught. This prevents `extraArgs` from silently overriding the profile's tool restrictions.
+
+### Skill Content Injection
+
+The `loadSkills` field causes skill file content to be read and injected into the sub-agent's system prompt at spawn time:
+
+- Skill content is read directly from disk via `readFileSync` — ensure skill files are from trusted sources.
+- The injected content is wrapped in `<loaded_skill name="...">` XML tags and appended to `appendSystemPrompt`, meaning it is visible to the model as part of the system prompt.
+- Because `loadSkills` content merges into `appendSystemPrompt`, any existing `appendSystemPrompt` text is preserved and the skill content follows it.
+- `loadSkills` and `suggestedSkills` are both mutually exclusive with `noSkills`. If `noSkills` is also set, validation fails with an error — this prevents silent contradictions where skill content would be prepared but `--no-skills` would disable skill discovery.
 
 ### Profile File Permissions
 

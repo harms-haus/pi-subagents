@@ -43,6 +43,12 @@ export interface SubagentProfile {
   /** Disable skills */
   noSkills?: boolean;
 
+  /** Skill names to suggest to the subagent via --skill (model chooses to load) */
+  suggestedSkills?: string[];
+
+  /** Skill names to pre-load (content injected into system prompt) */
+  loadSkills?: string[];
+
   /** Disable context files (AGENTS.md, CLAUDE.md) */
   noContextFiles?: boolean;
 

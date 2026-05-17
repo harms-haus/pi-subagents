@@ -13,6 +13,8 @@ import {
   profileSummary,
   profileToArgs,
   resolveProfile,
+  resolveProfileSkills,
+  validateProfileSkills,
   validateProfileTools,
 } from "../profiles";
 
@@ -34,10 +36,14 @@ vi.mock("node:fs/promises", () => ({
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   parseFrontmatter: vi.fn(),
+  stripFrontmatter: vi.fn((content: string) =>
+    content.replace(/^---[\s\S]*?---\n*/, ""),
+  ),
+  loadSkills: vi.fn(() => ({ skills: [], diagnostics: [] })),
 }));
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { loadSkills as discoverSkills, parseFrontmatter, stripFrontmatter } from "@earendil-works/pi-coding-agent";
 
 describe("profileToArgs", () => {
   beforeEach(() => {
@@ -736,5 +742,318 @@ describe("loadProfiles - project-local profile overriding", () => {
 
     // Should have exactly 3 profiles
     expect(Object.keys(profiles)).toHaveLength(3);
+  });
+});
+
+// ── suggestedSkills / loadSkills Tests ──────────────────────────────
+
+describe("profileToArgs with suggestedSkills", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should include --skill flag for each resolved suggestedSkill path", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["/path/to/a/SKILL.md", "/path/to/b/SKILL.md"],
+    };
+    const result = profileToArgs(profile);
+
+    expect(result.args).toContain("--skill");
+    expect(result.args).toContain("/path/to/a/SKILL.md");
+    expect(result.args).toContain("--skill");
+    expect(result.args).toContain("/path/to/b/SKILL.md");
+  });
+
+  it("should not include --skill when no suggestedSkills", () => {
+    const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
+    const result = profileToArgs(profile);
+
+    expect(result.args).not.toContain("--skill");
+  });
+
+  it("should not include --skill when suggestedSkills is empty array", () => {
+    const profile: SubagentProfile = { suggestedSkills: [] };
+    const result = profileToArgs(profile);
+
+    expect(result.args).not.toContain("--skill");
+  });
+});
+
+describe("validateProfileSkills", () => {
+  it("should throw when suggestedSkills and noSkills are both set", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["my-skill"],
+      noSkills: true,
+    };
+    expect(() => validateProfileSkills(profile)).toThrow(/mutually exclusive/);
+  });
+
+  it("should include profile name in error message", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["my-skill"],
+      noSkills: true,
+    };
+    expect(() => validateProfileSkills(profile, "conflicted-profile")).toThrow(
+      /"conflicted-profile"/,
+    );
+  });
+
+  it("should not throw when only suggestedSkills is set", () => {
+    const profile: SubagentProfile = { suggestedSkills: ["my-skill"] };
+    expect(() => validateProfileSkills(profile)).not.toThrow();
+  });
+
+  it("should not throw when only loadSkills is set", () => {
+    const profile: SubagentProfile = { loadSkills: ["my-skill"] };
+    expect(() => validateProfileSkills(profile)).not.toThrow();
+  });
+
+  it("should not throw when neither is set", () => {
+    const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
+    expect(() => validateProfileSkills(profile)).not.toThrow();
+  });
+
+  it("should throw when loadSkills and noSkills are both set", () => {
+    const profile: SubagentProfile = {
+      loadSkills: ["my-skill"],
+      noSkills: true,
+    };
+    expect(() => validateProfileSkills(profile)).toThrow(/mutually exclusive/);
+  });
+});
+
+describe("resolveProfileSkills", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should return profile unchanged when no skills configured", () => {
+    const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
+    const result = resolveProfileSkills(profile, "/fake/cwd");
+    expect(result).toEqual(profile);
+  });
+
+  it("should resolve suggestedSkills names to file paths", () => {
+    vi.mocked(discoverSkills).mockReturnValue({
+      skills: [
+        { name: "skill-a", filePath: "/skills/a/SKILL.md", description: "Skill A", baseDir: "/skills/a", sourceInfo: { path: "/skills/a/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+        { name: "skill-b", filePath: "/skills/b/SKILL.md", description: "Skill B", baseDir: "/skills/b", sourceInfo: { path: "/skills/b/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+      ],
+      diagnostics: [],
+    });
+
+    const profile: SubagentProfile = { suggestedSkills: ["skill-a", "skill-b"] };
+    const result = resolveProfileSkills(profile, "/fake/cwd");
+
+    expect(result.suggestedSkills).toEqual([
+      "/skills/a/SKILL.md",
+      "/skills/b/SKILL.md",
+    ]);
+  });
+
+  it("should inject loadSkills content into appendSystemPrompt", () => {
+    vi.mocked(discoverSkills).mockReturnValue({
+      skills: [
+        { name: "coding", filePath: "/skills/coding/SKILL.md", description: "Coding skill", baseDir: "/skills/coding", sourceInfo: { path: "/skills/coding/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+      ],
+      diagnostics: [],
+    });
+    vi.mocked(readFileSync).mockReturnValue(
+      "---\nname: coding\n---\nYou are a coding expert.",
+    );
+    vi.mocked(stripFrontmatter).mockReturnValue("You are a coding expert.");
+
+    const profile: SubagentProfile = { loadSkills: ["coding"] };
+    const result = resolveProfileSkills(profile, "/fake/cwd");
+
+    expect(result.appendSystemPrompt).toContain("<loaded_skill name=\"coding\">");
+    expect(result.appendSystemPrompt).toContain("You are a coding expert.");
+    expect(result.appendSystemPrompt).toContain("</loaded_skill>");
+  });
+
+  it("should throw when suggestedSkill name not found", () => {
+    vi.mocked(discoverSkills).mockReturnValue({
+      skills: [],
+      diagnostics: [],
+    });
+
+    const profile: SubagentProfile = { suggestedSkills: ["unknown-skill"] };
+    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(
+      /Unknown skills/,
+    );
+  });
+
+  it("should throw when loadSkill name not found", () => {
+    vi.mocked(discoverSkills).mockReturnValue({
+      skills: [],
+      diagnostics: [],
+    });
+
+    const profile: SubagentProfile = { loadSkills: ["unknown-skill"] };
+    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(
+      /Unknown skills/,
+    );
+  });
+
+  it("should concatenate loadSkills content with existing appendSystemPrompt", () => {
+    vi.mocked(discoverSkills).mockReturnValue({
+      skills: [
+        { name: "testing", filePath: "/skills/testing/SKILL.md", description: "Testing skill", baseDir: "/skills/testing", sourceInfo: { path: "/skills/testing/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+      ],
+      diagnostics: [],
+    });
+    vi.mocked(readFileSync).mockReturnValue(
+      "---\nname: testing\n---\nRun all tests.",
+    );
+    vi.mocked(stripFrontmatter).mockReturnValue("Run all tests.");
+
+    const profile: SubagentProfile = {
+      appendSystemPrompt: "Original prompt.",
+      loadSkills: ["testing"],
+    };
+    const result = resolveProfileSkills(profile, "/fake/cwd");
+
+    expect(result.appendSystemPrompt).toContain("Original prompt.");
+    expect(result.appendSystemPrompt).toContain("<loaded_skill name=\"testing\">");
+    expect(result.appendSystemPrompt).toContain("Run all tests.");
+  });
+
+  it("should skip loadSkills with empty body after stripping frontmatter", () => {
+    vi.mocked(discoverSkills).mockReturnValue({
+      skills: [
+        { name: "empty-skill", filePath: "/skills/empty/SKILL.md", description: "Empty skill", baseDir: "/skills/empty", sourceInfo: { path: "/skills/empty/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+      ],
+      diagnostics: [],
+    });
+    vi.mocked(readFileSync).mockReturnValue(
+      "---\nname: empty-skill\n---\n",
+    );
+    vi.mocked(stripFrontmatter).mockReturnValue("");
+
+    const profile: SubagentProfile = { loadSkills: ["empty-skill"] };
+    const result = resolveProfileSkills(profile, "/fake/cwd");
+
+    expect(result.appendSystemPrompt).toBeUndefined();
+    expect(result.loadSkills).toBeUndefined();
+  });
+
+  it("should set loadSkills to undefined after resolution", () => {
+    vi.mocked(discoverSkills).mockReturnValue({
+      skills: [
+        { name: "my-skill", filePath: "/skills/my/SKILL.md", description: "My skill", baseDir: "/skills/my", sourceInfo: { path: "/skills/my/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+      ],
+      diagnostics: [],
+    });
+    vi.mocked(readFileSync).mockReturnValue(
+      "---\nname: my-skill\n---\nDo stuff.",
+    );
+    vi.mocked(stripFrontmatter).mockReturnValue("Do stuff.");
+
+    const profile: SubagentProfile = { loadSkills: ["my-skill"] };
+    const result = resolveProfileSkills(profile, "/fake/cwd");
+
+    expect(result.loadSkills).toBeUndefined();
+  });
+});
+
+describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should parse suggestedSkills from comma-separated string", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "skills-profile.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(
+      ["---", "name: skills-profile", "suggestedSkills: coding,testing", "---", ""].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "skills-profile", suggestedSkills: "coding,testing" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["skills-profile"]).toBeDefined();
+    expect(profiles["skills-profile"].suggestedSkills).toEqual(["coding", "testing"]);
+  });
+
+  it("should parse loadSkills from YAML array", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "load-profile.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(
+      ["---", "name: load-profile", "loadSkills:", "  - coding", "  - testing", "---", ""].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "load-profile", loadSkills: ["coding", "testing"] },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["load-profile"]).toBeDefined();
+    expect(profiles["load-profile"].loadSkills).toEqual(["coding", "testing"]);
+  });
+
+  it("should handle profile with both suggestedSkills and loadSkills", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "both-skills.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(
+      ["---", "name: both-skills", "suggestedSkills: coding", "loadSkills:", "  - testing", "---", ""].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "both-skills", suggestedSkills: "coding", loadSkills: ["testing"] },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["both-skills"]).toBeDefined();
+    expect(profiles["both-skills"].suggestedSkills).toEqual(["coding"]);
+    expect(profiles["both-skills"].loadSkills).toEqual(["testing"]);
+  });
+});
+
+describe("profileSummary with skills", () => {
+  it("should show suggestedSkills in profileSummary", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["coding", "testing"],
+    };
+    const result = profileSummary("test-profile", profile);
+    expect(result).toContain("suggestedSkills=[coding,testing]");
+  });
+
+  it("should show loadSkills in profileSummary", () => {
+    const profile: SubagentProfile = {
+      loadSkills: ["workflow-gen"],
+    };
+    const result = profileSummary("test-profile", profile);
+    expect(result).toContain("loadSkills=[workflow-gen]");
+  });
+});
+
+describe("formatProfileDetail with skills", () => {
+  it("should show suggestedSkills in formatProfileDetail", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["/path/to/coding/SKILL.md", "/path/to/testing/SKILL.md"],
+    };
+    const result = formatProfileDetail("test-profile", profile);
+    expect(result).toContain("suggestedSkills");
+    expect(result).toContain("/path/to/coding/SKILL.md");
+    expect(result).toContain("/path/to/testing/SKILL.md");
+  });
+
+  it("should show loadSkills in formatProfileDetail", () => {
+    const profile: SubagentProfile = {
+      loadSkills: ["coding", "testing"],
+    };
+    const result = formatProfileDetail("test-profile", profile);
+    expect(result).toContain("loadSkills");
+    expect(result).toContain("coding");
+    expect(result).toContain("testing");
   });
 });

@@ -18,7 +18,7 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 | `src/format-transcript.ts` | `formatRunsForResume()` (resume transcript formatting), `getTextContent()` (message text extraction) |
 | `src/profile-types.ts` | `SubagentProfile`, `SubagentProfiles`, `ThinkingLevel`, `ProfileInvocation` type definitions |
 | `src/profile-formatting.ts` | `profileSummary()`, `formatProfileDetail()`, `serializeProfileToMarkdown()` |
-| `src/profiles.ts` | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, profile CRUD, tool validation (`validateProfileTools`, `applyExcludeTools`). Re-exports from `profile-formatting.ts` and `profile-types.ts` |
+| `src/profiles.ts` | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, profile CRUD, tool validation (`validateProfileTools`, `applyExcludeTools`), skill validation (`validateProfileSkills`) and resolution (`resolveProfileSkills`). Re-exports from `profile-formatting.ts` and `profile-types.ts` |
 | `src/profile-editor.ts` | Interactive profile creation/editing via `/profile` command |
 | `src/commands/profile.ts` | `/profile` slash command (list, show, create, edit, delete) |
 | `src/schemas.ts` | TypeBox schemas for `delegate_to_subagents` parameter validation |
@@ -107,6 +107,8 @@ pi.on("session_shutdown", async () => {
 1. LLM calls delegate_to_subagents({ tasks: [...] })
 2. delegate.ts validates resume parameters (if any)
 3. Profile resolution: loadProfiles(cwd) → resolveProfile() per task
+3a. `excludeTools` resolution: validateProfileTools() + applyExcludeTools() per profile with excludeTools
+3b. Skill resolution: validateProfileSkills() → discoverSkills() (once, cached) → resolveProfileSkills() per unique profile
 4. Windows created: one SubAgentWindow per task (TUI state)
 5. Session data created: one SubagentSessionData per task (persistent store)
 6. registerSession() → store in sessionStore (with LRU eviction)
@@ -400,7 +402,8 @@ Project-local profiles **override** global profiles with the same name. Loading 
 // Frontmatter keys → SubagentProfile fields
 name, provider, model, thinkingLevel, appendSystemPrompt, apiKey,
 noTools, noExtensions, noSkills, noContextFiles,
-tools (string or comma-separated), excludeTools (comma-separated), extensions, extraArgs
+tools (string or comma-separated), excludeTools (comma-separated), extensions, extraArgs,
+suggestedSkills (comma-separated), loadSkills (comma-separated)
 
 // Body (after frontmatter) → systemPrompt
 ```
@@ -431,7 +434,23 @@ Before `profileToArgs()` is called, profiles with `excludeTools` are resolved to
 
 If no profile has `excludeTools` set, `pi.getAllTools()` is never called.
 
-### 8.4 `profileToArgs()` Conversion
+### 8.4 Skill Resolution (in delegate.ts)
+
+Before `profileToArgs()` is called, profiles with `suggestedSkills` or `loadSkills` are resolved in a multi-step pipeline inside the delegate tool's execute handler:
+
+1. **Mutual-exclusivity validation** — `validateProfileSkills(profile, name)` throws if `suggestedSkills` or `loadSkills` is combined with `noSkills`. These are mutually exclusive because `--no-skills` would either override `--skill` flags or disable skill content that was injected into the system prompt.
+
+2. **Discovery (once per delegation)** — If any profile references skills, `discoverSkills()` is called exactly once with `{ cwd, agentDir, skillPaths: [], includeDefaults: true }`. The result is cached in a `Map<string, SkillMeta>` keyed by skill name. If no profile uses skills, discovery is skipped entirely.
+
+3. **Per-profile resolution** — `resolveProfileSkills(profile, cwd, skillMap)` is called once per **unique** profile object (deduplicated via `skillResolvedProfiles` Map). Two resolution paths:
+   - **`suggestedSkills`** — skill names are mapped to their file paths. The resolved `suggestedSkills` array contains file paths (not names), which `profileToArgs()` converts to `--skill <path>` CLI flags. Unknown skill names throw an error listing available skills.
+   - **`loadSkills`** — skill names are mapped to their SKILL.md body content (frontmatter stripped via `stripFrontmatter()`). Each skill is wrapped in `<loaded_skill name="...">...</loaded_skill>` tags and appended to `appendSystemPrompt`. After resolution, `loadSkills` is set to `undefined` on the profile (it has been fully consumed).
+
+4. **Deduplication via `skillResolvedProfiles` Map** — A `Map<SubagentProfile, { ok, profile } | { ok, error }>` ensures each unique profile object is resolved at most once. Multiple tasks sharing the same profile reuse the cached result.
+
+5. **Error handling** — If `resolveProfileSkills()` throws (e.g., unknown skill name), the error is stored in `skillResolvedProfiles` as `{ ok: false, error }`. When the offending task is processed inside `mapWithConcurrencyLimit`, it is marked as `"error"` with the skill resolution error message — but **other tasks are unaffected** and continue normally.
+
+### 8.5 `profileToArgs()` Conversion
 
 Converts a `SubagentProfile` to CLI arguments and environment variables:
 
@@ -449,6 +468,8 @@ interface ProfileInvocation {
 - Characters at the start of an arg: whitespace, `|`, `&`, `;`, `$`, `\`, `` ` ``, `!`
 - Command separators anywhere in the arg: `&&`, `||`, `;`, `>`, `>>`, `<`, `<<`
 
+**`suggestedSkills` → `--skill` flags:** After `resolveProfileSkills()` runs, `suggestedSkills` contains resolved file paths (not skill names). `profileToArgs()` emits one `--skill <path>` per entry. `loadSkills` is never encountered here — it was already consumed by `resolveProfileSkills()` and merged into `appendSystemPrompt` during the skill resolution pipeline (§8.4).
+
 **Tool-override blocking:** When any tool restriction is active on the profile (`noTools`, `tools`, or `excludeTools`), `extraArgs` containing tool-override flags are rejected. The blocked flags are:
 
 | Flag | Variants |
@@ -460,7 +481,7 @@ interface ProfileInvocation {
 
 This prevents `extraArgs` from bypassing the profile's intended tool restrictions via equals-sign forms or short flags.
 
-### 8.5 Settings Files
+### 8.6 Settings Files
 
 Two settings locations are checked (project overrides global):
 

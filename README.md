@@ -164,7 +164,7 @@ You are a research assistant.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | `string` | **Required.** Profile identifier (filename without `.md`) |
+| `name` | `string` | **Required.** Profile identifier (from YAML frontmatter name field) |
 | `provider` | `string` | Provider name (e.g., `"anthropic"`, `"openai"`, `"dashscope"`) |
 | `model` | `string` | Model pattern or ID. Supports `"provider/id"` format and `":thinking"` shorthand (e.g., `"sonnet:high"`) |
 | `systemPrompt` | N/A | Set via the **body** of the markdown file (text after `---`). Replaces the default system prompt entirely. |
@@ -175,12 +175,14 @@ You are a research assistant.
 | `excludeTools` | `string` or `string[]` | Comma-separated string or YAML array of tool names to exclude (blacklist; mutually exclusive with `tools`) |
 | `noExtensions` | `boolean` | Disable all extensions |
 | `extensions` | `string` or `string[]` | Comma-separated string or YAML array of extension paths to load |
-| `noSkills` | `boolean` | Disable skills |
+| `noSkills` | `boolean` | Disable skills. Mutually exclusive with `suggestedSkills` and `loadSkills` |
+| `suggestedSkills` | `string` or `string[]` | Skill names to *suggest* to the sub-agent via `--skill` CLI flags; the model chooses whether to load them |
+| `loadSkills` | `string` or `string[]` | Skill names to *pre-load* into the sub-agent's system prompt (content wrapped in `<loaded_skill>` XML tags) |
 | `noContextFiles` | `boolean` | Disable AGENTS.md/CLAUDE.md context files |
 | `apiKey` | `string` | Custom API key (stored as `PI_API_KEY` env var, not in CLI args) |
 | `extraArgs` | `string` or `string[]` | Comma-separated string or YAML array of additional CLI arguments |
 
-Array fields (`tools`, `extensions`, `extraArgs`) support both YAML arrays and comma-separated strings:
+Array fields (`tools`, `extensions`, `extraArgs`, `suggestedSkills`, `loadSkills`) support both YAML arrays and comma-separated strings:
 
 ```yaml
 tools:
@@ -273,7 +275,8 @@ Use `/profile` interactively to manage subagent profiles without editing files b
 6. **Thinking level** — off, minimal, low, medium, high, xhigh
 7. **Tools** — choose to disable all (`noTools`), enable a specific set (`tools`), or exclude specific tools (`excludeTools`)
 8. **Extensions** — restrict or disable
-9. **Review & save** — shows full profile as markdown before confirming
+9. **Skills** — if skills are already set, offers to remove them; otherwise asks whether to configure skills, then prompts for comma-separated suggested and/or pre-loaded skill names
+10. **Review & save** — shows full profile as markdown before confirming
 
 You can skip any field by answering "No" — it will be omitted from the profile (using pi defaults).
 
@@ -298,6 +301,10 @@ Main Agent TUI
         ├── Resolve profiles from .md files
         │   ├── Global: ~/.pi/agent/agent-profiles/*.md
         │   └── Project: .pi/agent-profiles/*.md
+        │
+        ├── Validate profile skills (suggestedSkills/loadSkills vs noSkills)
+        │
+        ├── Resolve skill names → file paths (suggestedSkills) or injected content (loadSkills)
         │
         ├── Validate resume targets (must be completed/errored)
         │

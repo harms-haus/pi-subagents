@@ -20,6 +20,9 @@ export const MAX_MESSAGES_PER_SESSION = 500;
 /** Default timeout for sub-agent tasks (in seconds) */
 export const DEFAULT_TIMEOUT = 600;
 
+/** Error message for loop detection kills */
+export const LOOP_DETECTED_MESSAGE = "Loop detected: sub-agent is repeating the same tool calls";
+
 // ── Types ────────────────────────────────────────────────────────────
 
 /** Tool call part in a message (used internally for type narrowing) */
@@ -99,6 +102,8 @@ export interface SubAgentWindow extends SubagentState {
   todoCompleted?: number;
   /** Number of unique tools available to this sub-agent */
   toolCount: number;
+  /** Recent tool call signatures for loop detection (serialized name+args) */
+  recentToolCalls?: string[];
 }
 
 /** Persistent session data stored for retrieval */

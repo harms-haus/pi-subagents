@@ -5,6 +5,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadCommandPreviewWidth,
+  loadExtendTimeoutDebounce,
+  loadLoopingToolCount,
+  loadLoopingToolSimilarity,
   loadMaxLinesPerWindow,
 } from "../settings";
 
@@ -242,5 +245,393 @@ describe("readSettingsFile error handling", () => {
 
     expect(result).toBe(160);
     expect(console.warn).toHaveBeenCalled();
+  });
+
+  it("should return default extendTimeoutDebounce when settings file has malformed JSON", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
+
+    const result = await loadExtendTimeoutDebounce();
+
+    expect(result).toBe(30);
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  it("should return default loopingToolSimilarity when settings file has malformed JSON", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
+
+    const result = await loadLoopingToolSimilarity();
+
+    expect(result).toBe(0.95);
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  it("should return default loopingToolCount when settings file has malformed JSON", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
+
+    const result = await loadLoopingToolCount();
+
+    expect(result).toBe(5);
+    expect(console.warn).toHaveBeenCalled();
+  });
+});
+
+describe("loadExtendTimeoutDebounce", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("should return default 30 when no config is present", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
+
+    const result = await loadExtendTimeoutDebounce();
+
+    expect(result).toBe(30);
+  });
+
+  it("should return configured value from global settings", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          extend_timeout_debounce: 60,
+        },
+      }),
+    );
+
+    const result = await loadExtendTimeoutDebounce();
+
+    expect(result).toBe(60);
+  });
+
+  it("should prefer project config over global", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            extend_timeout_debounce: 45,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            extend_timeout_debounce: 90,
+          },
+        }),
+      );
+
+    const result = await loadExtendTimeoutDebounce("/project/path");
+
+    expect(result).toBe(90);
+  });
+
+  it("should return global config value when project has no config", async () => {
+    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            extend_timeout_debounce: 45,
+          },
+        }),
+      )
+      .mockRejectedValueOnce(new Error("Project file not found"));
+
+    const result = await loadExtendTimeoutDebounce("/project/path");
+
+    expect(result).toBe(45);
+  });
+
+  it("should clamp value to max 300", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          extend_timeout_debounce: 999,
+        },
+      }),
+    );
+
+    const result = await loadExtendTimeoutDebounce();
+
+    expect(result).toBe(300);
+  });
+
+  it("should clamp value to min 0", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          extend_timeout_debounce: -10,
+        },
+      }),
+    );
+
+    const result = await loadExtendTimeoutDebounce();
+
+    expect(result).toBe(0);
+  });
+
+  it("should return default for non-number value", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          extend_timeout_debounce: "abc",
+        },
+      }),
+    );
+
+    const result = await loadExtendTimeoutDebounce();
+
+    expect(result).toBe(30);
+  });
+
+  it("should return default for NaN value", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    // JSON.parse of 1e999 evaluates to Infinity in V8, which is not finite
+    // This tests the !Number.isFinite(value) code path (same as NaN)
+    vi.mocked(readFile).mockResolvedValue(
+      '{"subagents":{"extend_timeout_debounce":1e999}}',
+    );
+
+    const result = await loadExtendTimeoutDebounce();
+
+    expect(result).toBe(30);
+  });
+});
+
+describe("loadLoopingToolSimilarity", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("should return default 0.95 when no config is present", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
+
+    const result = await loadLoopingToolSimilarity();
+
+    expect(result).toBe(0.95);
+  });
+
+  it("should return configured value from global settings", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_similarity: 0.8,
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolSimilarity();
+
+    expect(result).toBe(0.8);
+  });
+
+  it("should prefer project config over global", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            looping_tool_similarity: 0.8,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            looping_tool_similarity: 0.99,
+          },
+        }),
+      );
+
+    const result = await loadLoopingToolSimilarity("/project/path");
+
+    expect(result).toBe(0.99);
+  });
+
+  it("should return global config value when project has no config", async () => {
+    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            looping_tool_similarity: 0.8,
+          },
+        }),
+      )
+      .mockRejectedValueOnce(new Error("Project file not found"));
+
+    const result = await loadLoopingToolSimilarity("/project/path");
+
+    expect(result).toBe(0.8);
+  });
+
+  it("should clamp value to max 1", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_similarity: 2.0,
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolSimilarity();
+
+    expect(result).toBe(1);
+  });
+
+  it("should clamp value to min 0", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_similarity: -0.5,
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolSimilarity();
+
+    expect(result).toBe(0);
+  });
+
+  it("should return default for non-number value", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_similarity: "not a number",
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolSimilarity();
+
+    expect(result).toBe(0.95);
+  });
+});
+
+describe("loadLoopingToolCount", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("should return default 5 when no config is present", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
+
+    const result = await loadLoopingToolCount();
+
+    expect(result).toBe(5);
+  });
+
+  it("should return configured value from global settings", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_count: 10,
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolCount();
+
+    expect(result).toBe(10);
+  });
+
+  it("should prefer project config over global", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            looping_tool_count: 10,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            looping_tool_count: 3,
+          },
+        }),
+      );
+
+    const result = await loadLoopingToolCount("/project/path");
+
+    expect(result).toBe(3);
+  });
+
+  it("should return global config value when project has no config", async () => {
+    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          subagents: {
+            looping_tool_count: 10,
+          },
+        }),
+      )
+      .mockRejectedValueOnce(new Error("Project file not found"));
+
+    const result = await loadLoopingToolCount("/project/path");
+
+    expect(result).toBe(10);
+  });
+
+  it("should clamp value to max 50", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_count: 100,
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolCount();
+
+    expect(result).toBe(50);
+  });
+
+  it("should clamp value to min 0", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_count: -5,
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolCount();
+
+    expect(result).toBe(0);
+  });
+
+  it("should return default for non-number value", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          looping_tool_count: "not a number",
+        },
+      }),
+    );
+
+    const result = await loadLoopingToolCount();
+
+    expect(result).toBe(5);
   });
 });

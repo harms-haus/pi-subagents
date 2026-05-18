@@ -25,6 +25,9 @@ vi.mock("../profiles", async (importOriginal) => {
 // so tests are deterministic regardless of terminal width
 vi.mock("../settings", () => ({
   loadCommandPreviewWidth: vi.fn().mockResolvedValue(160),
+  loadExtendTimeoutDebounce: vi.fn().mockResolvedValue(30),
+  loadLoopingToolCount: vi.fn().mockResolvedValue(5),
+  loadLoopingToolSimilarity: vi.fn().mockResolvedValue(0.95),
 }));
 
 // Mock node:fs (used by profiles.ts)
@@ -1403,6 +1406,324 @@ describe("spawner", () => {
 
       mockProcess.emit("close", 0);
       await promise;
+    });
+  });
+
+  describe("loop detection", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    async function emitToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", name: toolName, arguments: args }],
+        },
+      });
+
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    it("should not detect loop when tool calls are different", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("bash", { command: "cmd1" });
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("bash", { command: "cmd2" });
+      await emitToolCall("write", { path: "/b", content: "x" });
+      await emitToolCall("grep", { pattern: "test" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(false);
+    });
+
+    it("should detect loop with identical consecutive tool calls", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("read", { path: "/same/file.ts" });
+      await emitToolCall("read", { path: "/same/file.ts" });
+      await emitToolCall("read", { path: "/same/file.ts" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(true);
+      expect(mockWindow.recentToolCalls?.length).toBe(3);
+    });
+
+    it("should detect loop with highly similar tool calls", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.90,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // These differ by only 1 char in the command string, producing similarity > 0.90
+      await emitToolCall("bash", { command: "cat /src/index.ts" });
+      await emitToolCall("bash", { command: "cat /src/index.tx" });
+      await emitToolCall("bash", { command: "cat /src/index.tt" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(true);
+    });
+
+    it("should not detect loop when similarity is below threshold", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // These share a prefix but differ significantly in the command body
+      await emitToolCall("bash", { command: "npm run build" });
+      await emitToolCall("bash", { command: "npm run test" });
+      await emitToolCall("bash", { command: "npm run lint" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(false);
+    });
+
+    it("should use default loopingToolCount of 5 when not specified — 4 calls no loop", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        // No loopingToolCount — uses default of 5
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("read", { path: "/a" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(false);
+    });
+
+    it("should use default loopingToolCount of 5 when not specified — 5 calls triggers loop", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        // No loopingToolCount — uses default of 5
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("read", { path: "/a" });
+      await emitToolCall("read", { path: "/a" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(true);
+    });
+
+    it("should not detect loop when count threshold is 0", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 0,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(false);
+    });
+
+    it("should only check the last N tool calls", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // First emit 2 different calls (not similar to each other or to the identical ones)
+      await emitToolCall("bash", { command: "a" });
+      await emitToolCall("bash", { command: "b" });
+      // Then emit 3 identical calls — these should be detected as a loop
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(true);
+    });
+
+    it("should detect loop mid-stream and still resolve correctly", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit 3 identical calls — loop detected flag set
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+      await emitToolCall("read", { path: "/same" });
+      // Emit a different call — flag should stay true
+      await emitToolCall("bash", { command: "echo done" });
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(true);
+    });
+
+    it("should not detect loop when no tool calls are emitted", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit a text-only message (no toolCall parts)
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: { role: "assistant", content: [{ type: "text", text: "Just text output" }] },
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(false);
+    });
+
+    it("should detect loop with multiple tool calls in one message", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit a single message with 3 identical toolCall parts
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "toolCall", name: "read", arguments: { path: "/same" } },
+            { type: "toolCall", name: "read", arguments: { path: "/same" } },
+            { type: "toolCall", name: "read", arguments: { path: "/same" } },
+          ],
+        },
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(true);
+    });
+
+    it("should kill the process when loop is detected", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+        loopingToolSimilarity: 0.95,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit 3 identical tool calls to trigger loop detection
+      await emitToolCall("read", { path: "/same/file.ts" });
+      await emitToolCall("read", { path: "/same/file.ts" });
+      await emitToolCall("read", { path: "/same/file.ts" });
+
+      // Process should have been killed with SIGTERM
+      expect(mockProcess.kill).toHaveBeenCalledWith("SIGTERM");
+
+      // Resolve the promise by emitting close
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(true);
     });
   });
 

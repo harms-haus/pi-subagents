@@ -8,11 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Timeout extension**: Sub-agents that are actively working (making tool calls) when their timeout expires now get an automatic extension. Each tool call restarts an idle timer. The sub-agent is killed only after `extend_timeout_debounce` seconds (default 30) of no activity. The TUI always shows the original timeout value. Configurable via `subagents.extend_timeout_debounce` setting.
+- **Loop detection**: Sub-agents that repeat the same or very similar tool calls consecutively are now automatically killed. When `looping_tool_count` (default 5) consecutive tool calls all exceed `looping_tool_similarity` (default 0.95) similarity threshold, the sub-agent is immediately stopped with an error. Uses Dice coefficient (bigram similarity) for fuzzy matching. Configurable via `subagents.looping_tool_similarity` and `subagents.looping_tool_count` settings.
 - `suggestedSkills` profile field — suggests skill names to the sub-agent via `--skill` CLI flags; the model chooses whether to load them.
 - `loadSkills` profile field — pre-loads skill content (SKILL.md body) into the sub-agent's system prompt via `<loaded_skill>` XML injection.
 - `validateProfileSkills()` — mutual exclusivity validation for `suggestedSkills`/`loadSkills` vs `noSkills`.
 - `resolveProfileSkills()` — resolves skill names to file paths (suggestedSkills) or injected content (loadSkills) at delegation time.
 - Skill configuration step in the interactive profile editor (`/profile create`, `/profile edit`).
+
+### Changed
+
+- Settings loading is now parallelized for better performance.
 
 ## [0.1.0] — 2026-05-14
 

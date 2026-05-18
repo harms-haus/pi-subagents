@@ -23,6 +23,9 @@ All pi-subagents settings live under the `"subagents"` key in the settings JSON.
 |---|---|---|---|
 | `subagents.maxLinesPerWindow` | `number` | `15` | Number of lines displayed in each sub-agent's rolling TUI window. Also controls how much output is shown by `get_subagent_output` and `get_subagent_session`. |
 | `subagents.commandPreviewWidth` | `number` | Terminal width − 4 (TTY) or `160` (non-TTY) | Maximum character width for tool call preview rendering. Clamped to a minimum of `20`. |
+| `subagents.extend_timeout_debounce` | `number` | `30` | When a sub-agent is actively working (making tool calls) when its timeout expires, the timeout is extended by this many seconds. Each new tool call resets the extension timer. The original timeout value is still displayed in the TUI. Clamped to 0–300. Set to `0` to disable timeout extension. |
+| `subagents.looping_tool_similarity` | `number` | `0.95` | Similarity threshold (0–1) for detecting looping tool calls. Uses Dice coefficient (bigram similarity) on serialized tool name + arguments. Clamped to 0–1. |
+| `subagents.looping_tool_count` | `number` | `5` | Number of consecutive similar tool calls required to trigger loop detection. When this many consecutive tool calls all exceed the `looping_tool_similarity` threshold, the sub-agent is immediately killed with an error. Set to `0` to disable loop detection. Clamped to 0–50. |
 
 ### `commandPreviewWidth` Resolution Logic
 
@@ -37,7 +40,10 @@ This setting has a two-tier resolution:
 {
   "subagents": {
     "maxLinesPerWindow": 25,
-    "commandPreviewWidth": 120
+    "commandPreviewWidth": 120,
+    "extend_timeout_debounce": 30,
+    "looping_tool_similarity": 0.95,
+    "looping_tool_count": 5
   }
 }
 ```

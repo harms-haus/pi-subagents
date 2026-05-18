@@ -18,9 +18,9 @@ import {
   validateProfileSkills,
 } from "../profiles";
 import { DelegateParams } from "../schemas";
-import { loadMaxLinesPerWindow } from "../settings";
+import { loadExtendTimeoutDebounce, loadLoopingToolCount, loadLoopingToolSimilarity, loadMaxLinesPerWindow } from "../settings";
 import { runSubAgent } from "../spawner";
-import { DEFAULT_TIMEOUT, formatRunsForResume, MAX_CONCURRENCY } from "../types";
+import { DEFAULT_TIMEOUT, formatRunsForResume, LOOP_DETECTED_MESSAGE, MAX_CONCURRENCY } from "../types";
 import { getSummaryText, mapWithConcurrencyLimit } from "../utils";
 import { renderDelegateCall, renderDelegateResult } from "./delegate-render";
 import type { SubagentProfile } from "../profile-types";
@@ -49,8 +49,9 @@ export function registerDelegateTool(
       "each task can override with its own profile.",
       "Returns session IDs for each task that can be used with get_subagent_output",
       "and get_subagent_session to retrieve results. Each task supports an optional `timeout`",
-      "parameter (in seconds, default 600) that aborts the sub-agent if it exceeds the time",
-      "limit. Each task supports an optional `resume` parameter referencing a previous session",
+      "parameter (in seconds, default 600). Timeouts auto-extend while the sub-agent is active — the",
+      "sub-agent is only killed after it goes idle past the timeout (configurable via settings).",
+      "Each task supports an optional `resume` parameter referencing a previous session",
       "ID. The resumed agent receives the prior session's transcript as context.",
     ].join(" "),
     parameters: DelegateParams,
@@ -66,12 +67,18 @@ export function registerDelegateTool(
       "After delegate_to_subagents completes, use get_subagent_output to retrieve each sub-agent's",
       "final text output. Use get_subagent_session for the full session transcript if needed.\n",
       "Use the `timeout` per-task parameter to set a time limit in seconds. Default is 600s (10 min).\n",
+      "Timeouts auto-extend while the sub-agent is actively producing output.\n",
       "Use the `resume` parameter to continue work from a previous sub-agent session.\n",
       "You can only resume sessions that are completed or errored (not running).\n",
     ],
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const maxLines = await loadMaxLinesPerWindow(ctx.cwd);
+      const [maxLines, extendDebounce, loopingToolCount, loopingToolSimilarity] = await Promise.all([
+        loadMaxLinesPerWindow(ctx.cwd),
+        loadExtendTimeoutDebounce(ctx.cwd),
+        loadLoopingToolCount(ctx.cwd),
+        loadLoopingToolSimilarity(ctx.cwd),
+      ]);
 
       // Load profiles from settings (global + project-local)
       const profiles = await loadProfiles(ctx.cwd);
@@ -169,6 +176,7 @@ export function registerDelegateTool(
           toolCount: resolvedProfile?.noTools
             ? 0
             : resolvedProfile?.tools?.length ?? allToolNames?.length ?? 0,
+          recentToolCalls: [],
         };
       });
 
@@ -262,9 +270,28 @@ export function registerDelegateTool(
         // Create per-task timeout
         const taskTimeout = Math.max(1, task.timeout ?? DEFAULT_TIMEOUT);
         const taskAbortController = new AbortController();
+
+        // Two-timer approach for timeout extension:
+        // Timer 1 (originalTimeout): Fires at taskTimeout. Does NOT abort — just starts the idle timer.
+        // Timer 2 (idleTimer): Fires after extendDebounce seconds of no activity. This IS the abort.
+        let originalTimeoutElapsed = false;
+        let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
         const taskAbortTimeout = setTimeout(() => {
-          taskAbortController.abort();
+          originalTimeoutElapsed = true;
+          idleTimer = setTimeout(() => {
+            taskAbortController.abort();
+          }, extendDebounce * 1000);
         }, taskTimeout * 1000);
+
+        // Reset idle timer on activity (called by wrappedEmitUpdate)
+        const resetIdleTimer = () => {
+          if (!originalTimeoutElapsed) { return; }
+          if (idleTimer) { clearTimeout(idleTimer); }
+          idleTimer = setTimeout(() => {
+            taskAbortController.abort();
+          }, extendDebounce * 1000);
+        };
 
         // Forward parent signal to task controller
         const onParentAbort = () => taskAbortController.abort();
@@ -274,23 +301,49 @@ export function registerDelegateTool(
           signal.addEventListener("abort", onParentAbort, { once: true });
         }
 
+        // Wrap emitUpdate to reset idle timer on any output activity
+        const wrappedEmitUpdate = () => {
+          emitUpdate();
+          resetIdleTimer();
+        };
+
+        // eslint-disable-next-line no-useless-assignment
+        let loopDetected = false;
+
         try {
-          await runSubAgent({
+          const result = await runSubAgent({
             task: effectiveTask,
             win,
             maxLines,
             signal: taskAbortController.signal,
-            onUpdate: emitUpdate,
+            onUpdate: wrappedEmitUpdate,
             session,
             profile: skillResolvedProfile,
+            loopingToolCount,
+            loopingToolSimilarity,
           });
+          loopDetected = result.loopDetected;
         } finally {
           clearTimeout(taskAbortTimeout);
-          if (signal) {signal.removeEventListener("abort", onParentAbort);}
+          if (idleTimer) { clearTimeout(idleTimer); }
+          if (signal) { signal.removeEventListener("abort", onParentAbort); }
         }
 
-        // Check if timeout caused the abort
-        if (taskAbortController.signal.aborted && !signal?.aborted) {
+        // Handle loop detection kill
+        if (loopDetected) {
+          win.status = "error";
+          session.status = "error";
+          win.errorMessage = LOOP_DETECTED_MESSAGE;
+          session.errorMessage = LOOP_DETECTED_MESSAGE;
+          win.exitCode = 1;
+          session.exitCode = 1;
+          win.completedAt = Date.now();
+          taskAbortController.abort();
+          emitUpdate();
+        }
+
+        // Check if timeout caused the abort (not loop detection, not parent abort)
+        if (!loopDetected && taskAbortController.signal.aborted && !signal?.aborted) {
           win.status = "error";
           session.status = "error";
           win.errorMessage = `Timed out after ${taskTimeout}s. Consider resuming with a longer timeout.`;

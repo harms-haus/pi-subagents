@@ -62,7 +62,7 @@ Each task:
 | `prompt` | `string` | Yes | Prompt sent to the sub-agent (same as typing into pi directly) |
 | `cwd` | `string` | No | Working directory for the sub-agent (default: current directory) |
 | `profile` | `string` | No | Named profile to use for this sub-agent (see below) |
-| `timeout` | `number` | No | Timeout in seconds for this sub-agent. Default: 600. If exceeded, the sub-agent is aborted and marked as error. |
+| `timeout` | `number` | No | Timeout in seconds for this sub-agent. Default: 600. Timeouts auto-extend when the sub-agent is actively producing output — after the initial timeout expires, the sub-agent is only killed after a configurable idle period (see `extend_timeout_debounce` setting). |
 | `resume` | `string` | No | Previous session ID to resume from. The resumed sub-agent receives the prior session's transcript as context. Only completed or errored sessions can be resumed. |
 
 The `maxLinesPerWindow` setting is configured in `settings.json` under `subagents.maxLinesPerWindow` (default: 15).
@@ -247,6 +247,9 @@ Additional settings are configured in `settings.json` under the `subagents` key:
 |---------|------|---------|-------------|
 | `maxLinesPerWindow` | `number` | `15` | Number of lines shown in each sub-agent's rolling TUI window |
 | `commandPreviewWidth` | `number` | Terminal width − 4 (TTY) or `160` (non-TTY) | Controls tool call preview truncation width in the rolling window. **In TTY mode, terminal width − 4 is used as a hard override — settings files are never consulted.** In non-TTY mode, falls back through settings files (global → project → default 160). Minimum: 20 |
+| `extend_timeout_debounce` | `number` | `30` | Seconds of idle time (no output activity) before a timed-out sub-agent is killed. The initial timeout starts this idle window; any output resets it. Range: 0–300. |
+| `looping_tool_count` | `number` | `5` | Number of consecutive tool calls checked for loop detection. Set to `0` to disable. Range: 0–50. |
+| `looping_tool_similarity` | `number` | `0.95` | Bigram similarity threshold for loop detection. When the last `looping_tool_count` tool calls are all pairwise similar above this threshold, the sub-agent is killed. Range: 0–1. |
 
 Settings are loaded from `~/.pi/agent/settings.json` (global) and `.pi/settings.json` (project-local, overrides global). **Note:** `commandPreviewWidth` settings are only consulted in non-TTY mode.
 
@@ -289,7 +292,8 @@ You can skip any field by answering "No" — it will be omitted from the profile
 - **Error handling**: Non-zero exit codes and errors are highlighted
 - **Abort support**: Hitting Escape cancels all running sub-agents
 - **Session resume**: Continue work from completed/errored sessions with full transcript context
-- **Per-task timeouts**: Configurable timeout per sub-agent (default 600s)
+- **Per-task timeouts**: Configurable timeout per sub-agent (default 600s), with auto-extension while the agent remains active
+- **Loop detection**: Automatically kills sub-agents that repeat the same tool calls in a tight loop
 
 ## Architecture
 

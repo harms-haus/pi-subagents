@@ -122,6 +122,16 @@ Continue by refactoring the main loop.
   ```
 - If the parent tool call's signal is aborted, all task controllers are also aborted (but this does not produce the "timed out" message).
 
+**Timeout Extension:** When a sub-agent's timeout expires but the agent is still actively working (making tool calls), the timeout is automatically extended rather than immediately killing the process. A two-timer mechanism is used: when the original `timeout` elapses, an idle timer is started instead of aborting. Each tool call resets this idle timer. The sub-agent is only killed when no tool calls have been made for `extend_timeout_debounce` seconds. This setting defaults to **30** and is loaded from the settings file (project-local overrides global). The value is clamped to the range 0–300 seconds. The TUI always displays the original timeout value.
+
+**Loop Detection:** To prevent runaway sub-agents, pi-subagents monitors tool call patterns. Each tool call's name and arguments are serialized into a signature string. If `looping_tool_count` (default **5**, range 0–50) consecutive tool calls all exceed the `looping_tool_similarity` (default **0.95**, range 0–1) threshold — measured via Dice coefficient (bigram similarity) on the serialized signatures — the sub-agent is immediately killed with `SIGTERM` and marked as errored:
+
+```
+Loop detected: sub-agent is repeating the same tool calls
+```
+
+Both `looping_tool_count` and `looping_tool_similarity` are configurable via the settings file under `subagents` (project-local overrides global). Set `looping_tool_count` to `0` to disable loop detection entirely.
+
 #### Unknown Profile Handling
 
 Profile resolution happens before any sub-agents are spawned. If a task references a profile that cannot be found:
@@ -393,6 +403,7 @@ All error conditions and their messages:
 | **Unknown skill (suggestedSkills)** | `delegate_to_subagents` | `Unknown skills: "bad-name". Available skills: skill-a, skill-b` | Profile specifies a skill name not found by skill discovery. The task is marked as error; other tasks continue normally. |
 | **Skills + noSkills conflict (suggestedSkills)** | `delegate_to_subagents` | `Profile "name" has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned. |
 | **Skills + noSkills conflict (loadSkills)** | `delegate_to_subagents` | `Profile "name" has both "loadSkills" and "noSkills" set. These are mutually exclusive — --no-skills disables skill discovery.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned. |
+| **Loop detected** | `delegate_to_subagents` (internal) | `Loop detected: sub-agent is repeating the same tool calls` | `looping_tool_count` consecutive tool calls exceeded the `looping_tool_similarity` threshold. The sub-agent is killed via `SIGTERM`. |
 | **Tool restriction override guard** | `delegate_to_subagents` | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.` | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
 
 ---

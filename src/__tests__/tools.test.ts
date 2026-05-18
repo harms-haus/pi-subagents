@@ -3,6 +3,7 @@ import type { Message } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerProfileCommand } from "../commands/profile";
 import { resolveProfile, resolveProfileSkills, validateProfileSkills } from "../profiles";
+import { loadExtendTimeoutDebounce } from "../settings";
 import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
 import { registerRetrievalTools } from "../tools/retrieval";
@@ -36,7 +37,7 @@ vi.mock("typebox", () => ({
 
 // Mock the spawner
 vi.mock("../spawner", () => ({
-  runSubAgent: vi.fn().mockResolvedValue(undefined),
+  runSubAgent: vi.fn().mockResolvedValue({ loopDetected: false }),
 }));
 
 // Mock the profiles module
@@ -65,6 +66,9 @@ vi.mock("../profiles", () => ({
 // Mock the settings module
 vi.mock("../settings", () => ({
   loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
+  loadExtendTimeoutDebounce: vi.fn().mockResolvedValue(30),
+  loadLoopingToolCount: vi.fn().mockResolvedValue(5),
+  loadLoopingToolSimilarity: vi.fn().mockResolvedValue(0.95),
 }));
 
 describe("tools", () => {
@@ -611,19 +615,22 @@ describe("tools", () => {
       it("should set error with 'Timed out' message when task exceeds its timeout", async () => {
         vi.useFakeTimers();
 
+        // Override debounce to a small value so the two-timer approach completes quickly
+        vi.mocked(loadExtendTimeoutDebounce).mockResolvedValueOnce(1);
+
         const mockRegisterSession = vi.fn();
         const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
 
         // Mock runSubAgent to wait until the abort signal fires, then resolve
         vi.mocked(runSubAgent).mockImplementationOnce(async (options) => {
-          return new Promise<void>((resolve) => {
+          return new Promise<{ loopDetected: boolean }>((resolve) => {
             if (options.signal?.aborted) {
-              resolve();
+              resolve({ loopDetected: false });
               return;
             }
             const onAbort = () => {
               options.signal?.removeEventListener("abort", onAbort);
-              resolve();
+              resolve({ loopDetected: false });
             };
             options.signal?.addEventListener("abort", onAbort, { once: true });
           });
@@ -651,7 +658,9 @@ describe("tools", () => {
           { cwd: process.cwd() } as any,
         );
 
-        // Advance past the 1-second timeout so the abort fires
+        // Advance past the 1-second timeout (Timer 1 fires, starts idle timer)
+        await vi.advanceTimersByTimeAsync(1500);
+        // Advance past the 1-second idle timer (Timer 2 fires, aborts)
         await vi.advanceTimersByTimeAsync(1500);
 
         const result = await executePromise;
@@ -1013,12 +1022,12 @@ describe("tools", () => {
       vi.mocked(runSubAgent).mockImplementation(async (opts) => {
         capturedSignals.push(opts.signal!);
         // Return a promise that stays pending until aborted
-        return new Promise<void>((resolve) => {
+        return new Promise<{ loopDetected: boolean }>((resolve) => {
           if (opts.signal?.aborted) {
-            resolve();
+            resolve({ loopDetected: false });
             return;
           }
-          opts.signal?.addEventListener("abort", () => resolve(), { once: true });
+          opts.signal?.addEventListener("abort", () => resolve({ loopDetected: false }), { once: true });
         });
       });
 
@@ -1094,6 +1103,7 @@ describe("tools", () => {
           opts.session.status = "completed";
           opts.session.exitCode = 0;
         }
+        return { loopDetected: false };
       });
 
       const result = await executeFn(
@@ -1127,7 +1137,7 @@ describe("tools", () => {
       sessionStore = new Map();
       mockPi = createMockPi();
       vi.mocked(runSubAgent).mockClear();
-      vi.mocked(runSubAgent).mockResolvedValue(undefined);
+      vi.mocked(runSubAgent).mockResolvedValue({ loopDetected: false });
       // Reset skill mocks to defaults and clear call history
       vi.mocked(resolveProfileSkills).mockClear();
       vi.mocked(resolveProfileSkills).mockImplementation((profile: unknown) => profile as Record<string, unknown>);
@@ -1388,6 +1398,355 @@ describe("tools", () => {
       expect(failWindow?.errorMessage).toContain('Skill "bad-skill" not found');
       // The succeeding task's window should not be in error
       expect(successWindow?.status).not.toBe("error");
+    });
+  });
+
+  describe("delegate_to_subagents - timeout extension", () => {
+    let mockPi: ExtensionAPI;
+    let sessionStore: Map<string, SessionRecord>;
+
+    beforeEach(() => {
+      sessionStore = new Map();
+      mockPi = createMockPi();
+      vi.mocked(runSubAgent).mockClear();
+    });
+
+    it("should not extend timeout when subagent completes before timeout", async () => {
+      vi.useFakeTimers();
+
+      try {
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        // runSubAgent resolves immediately (subagent finishes well before timeout)
+        vi.mocked(runSubAgent).mockResolvedValueOnce({ loopDetected: false });
+
+        const executePromise = executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
+          },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
+
+        // Advance a small amount (500ms) — subagent already resolved
+        await vi.advanceTimersByTimeAsync(500);
+
+        const result = await executePromise;
+
+        const details = result.details as WindowedSubagentDetails;
+        expect(details.windows[0].status).not.toBe("error");
+        expect(details.windows[0].errorMessage).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should extend timeout when subagent is active after original timeout", async () => {
+      vi.useFakeTimers();
+
+      try {
+        // Override debounce to 2 seconds
+        vi.mocked(loadExtendTimeoutDebounce).mockResolvedValueOnce(2);
+
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+        // Mock runSubAgent to wait until the abort signal fires, then resolve
+        vi.mocked(runSubAgent).mockImplementationOnce(async (options) => {
+          return new Promise<{ loopDetected: boolean }>((resolve) => {
+            if (options.signal?.aborted) {
+              resolve({ loopDetected: false });
+              return;
+            }
+            const onAbort = () => {
+              options.signal?.removeEventListener("abort", onAbort);
+              resolve({ loopDetected: false });
+            };
+            options.signal?.addEventListener("abort", onAbort, { once: true });
+          });
+        });
+
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const executePromise = executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
+          },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
+
+        // Advance to 1s: original timeout fires, starts idle timer (2s)
+        await vi.advanceTimersByTimeAsync(1500);
+        // Advance past the 2-second idle timer: idle timer fires, aborts
+        await vi.advanceTimersByTimeAsync(2500);
+
+        const result = await executePromise;
+
+        const details = result.details as WindowedSubagentDetails;
+        expect(details.windows[0].status).toBe("error");
+        expect(details.windows[0].errorMessage).toContain("Timed out");
+        expect(details.windows[0].errorMessage).toContain("1s");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should keep original timeout value in win.timeout for display", async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+      const executeFn = toolRegistration?.[0].execute;
+      if (!executeFn) {
+        throw new Error("Tool not registered");
+      }
+
+      const result = await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      const details = result.details as WindowedSubagentDetails;
+      expect(details.windows[0].timeout).toBe(1);
+    });
+
+    it("should abort when no activity after original timeout", async () => {
+      vi.useFakeTimers();
+
+      try {
+        // Override debounce to 2 seconds
+        vi.mocked(loadExtendTimeoutDebounce).mockResolvedValueOnce(2);
+
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+        // Mock runSubAgent to wait until the abort signal fires (no activity)
+        vi.mocked(runSubAgent).mockImplementationOnce(async (options) => {
+          return new Promise<{ loopDetected: boolean }>((resolve) => {
+            if (options.signal?.aborted) {
+              resolve({ loopDetected: false });
+              return;
+            }
+            const onAbort = () => {
+              options.signal?.removeEventListener("abort", onAbort);
+              resolve({ loopDetected: false });
+            };
+            options.signal?.addEventListener("abort", onAbort, { once: true });
+          });
+        });
+
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const executePromise = executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
+          },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
+
+        // Advance to 1s: original timeout fires, starts idle timer (2s)
+        await vi.advanceTimersByTimeAsync(1000);
+        // Advance to 3s total (1s + 2s): idle timer fires, aborts
+        await vi.advanceTimersByTimeAsync(2000);
+
+        const result = await executePromise;
+
+        const details = result.details as WindowedSubagentDetails;
+        expect(details.windows[0].status).toBe("error");
+        expect(details.windows[0].errorMessage).toContain("Timed out");
+        expect(details.windows[0].errorMessage).toContain("1s");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should abort immediately when extendDebounce is 0", async () => {
+      vi.useFakeTimers();
+
+      try {
+        vi.mocked(loadExtendTimeoutDebounce).mockResolvedValueOnce(0);
+
+        const mockRegisterSession = vi.fn();
+        const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+        vi.mocked(runSubAgent).mockImplementationOnce(async (options) => {
+          return new Promise<{ loopDetected: boolean }>((resolve) => {
+            if (options.signal?.aborted) {
+              resolve({ loopDetected: false });
+              return;
+            }
+            const onAbort = () => {
+              options.signal?.removeEventListener("abort", onAbort);
+              resolve({ loopDetected: false });
+            };
+            options.signal?.addEventListener("abort", onAbort, { once: true });
+          });
+        });
+
+        registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+        const toolRegistration = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+        expect(toolRegistration).toBeDefined();
+
+        const executeFn = toolRegistration?.[0].execute;
+        if (!executeFn) {
+          throw new Error("Tool not registered");
+        }
+
+        const executePromise = executeFn(
+          "tool-call-id",
+          {
+            tasks: [{ name: "test-task", prompt: "test prompt", timeout: 1 }],
+          },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
+
+        // Advance past the 1-second timeout
+        await vi.advanceTimersByTimeAsync(1100);
+
+        const result = await executePromise;
+        const details = result.details as WindowedSubagentDetails;
+        expect(details.windows[0].status).toBe("error");
+        expect(details.windows[0].errorMessage).toContain("Timed out");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("delegate_to_subagents - loop detection", () => {
+    let mockPi: ExtensionAPI;
+    let sessionStore: Map<string, SessionRecord>;
+
+    beforeEach(() => {
+      sessionStore = new Map();
+      mockPi = createMockPi();
+      vi.mocked(runSubAgent).mockClear();
+    });
+
+    it("should kill subagent immediately on loop detection", async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+      expect(toolRegistration).toBeDefined();
+
+      const executeFn = toolRegistration?.[0].execute;
+      if (!executeFn) {
+        throw new Error("Tool not registered");
+      }
+
+      // Mock runSubAgent to resolve with loop detected
+      vi.mocked(runSubAgent).mockResolvedValueOnce({ loopDetected: true });
+
+      const result = await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "test prompt" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      const details = result.details as WindowedSubagentDetails;
+      expect(details.windows[0].status).toBe("error");
+      expect(details.windows[0].errorMessage).toContain("Loop detected");
+      expect(details.windows[0].exitCode).toBe(1);
+    });
+
+    it("should pass loop detection settings to runSubAgent", async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+
+      // Override settings mocks
+      const { loadLoopingToolCount, loadLoopingToolSimilarity } = await import("../settings");
+      vi.mocked(loadLoopingToolCount).mockResolvedValueOnce(3);
+      vi.mocked(loadLoopingToolSimilarity).mockResolvedValueOnce(0.8);
+
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+      expect(toolRegistration).toBeDefined();
+
+      const executeFn = toolRegistration?.[0].execute;
+      if (!executeFn) {
+        throw new Error("Tool not registered");
+      }
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "test prompt" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      expect(callArgs.loopingToolCount).toBe(3);
+      expect(callArgs.loopingToolSimilarity).toBe(0.8);
     });
   });
 });

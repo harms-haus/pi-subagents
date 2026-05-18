@@ -127,7 +127,14 @@ function handleStdoutLine(
 
   // Handle turn_end events for ls/find result summaries
   if (event.type === "turn_end") {
-    const turnEvent = event as { toolResults?: Array<{ toolName: string; content: Array<{ type: string; text?: string }>; details?: Record<string, unknown>; isError: boolean }> };
+    const turnEvent = event as {
+      toolResults?: Array<{
+        toolName: string;
+        content: Array<{ type: string; text?: string }>;
+        details?: Record<string, unknown>;
+        isError: boolean;
+      }>;
+    };
     const toolResults = turnEvent.toolResults;
     if (Array.isArray(toolResults)) {
       for (const result of toolResults) {

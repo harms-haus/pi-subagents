@@ -580,7 +580,9 @@ describe("formatToolResult", () => {
       expect(formatToolResult("ls", "")).toBe("  (empty)");
     });
     it("filters out truncation notice lines", () => {
-      expect(formatToolResult("ls", "file1\nfile2\n\n[500 entries limit reached]")).toBe("  2 files");
+      expect(formatToolResult("ls", "file1\nfile2\n\n[500 entries limit reached]")).toBe(
+        "  2 files",
+      );
     });
     it("shows truncation indicator when entryLimitReached", () => {
       expect(formatToolResult("ls", "file1\nfile2", { entryLimitReached: 500 })).toBe("  2 files+");
@@ -600,10 +602,14 @@ describe("formatToolResult", () => {
       expect(formatToolResult("find", "")).toBe("  0 matches");
     });
     it("filters out truncation notice lines", () => {
-      expect(formatToolResult("find", "a.ts\nb.ts\n\n[1000 results limit reached]")).toBe("  2 matches");
+      expect(formatToolResult("find", "a.ts\nb.ts\n\n[1000 results limit reached]")).toBe(
+        "  2 matches",
+      );
     });
     it("shows truncation indicator when resultLimitReached", () => {
-      expect(formatToolResult("find", "a.ts\nb.ts", { resultLimitReached: 1000 })).toBe("  2 matches+");
+      expect(formatToolResult("find", "a.ts\nb.ts", { resultLimitReached: 1000 })).toBe(
+        "  2 matches+",
+      );
     });
   });
   describe("other tools", () => {

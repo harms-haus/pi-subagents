@@ -8,24 +8,24 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 
 ## 2. Module Map
 
-| File | Responsibility |
-|------|----------------|
-| `src/index.ts` | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_shutdown` lifecycle event |
-| `src/types.ts` | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper. Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts` |
-| `src/spawner.ts` | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Also processes `turn_end` events to capture ls/find tool result summaries. Also contains `getPiInvocation()` (moved from `utils.ts`) |
-| `src/format-tool-call.ts` | `formatToolCall()` (one-line tool previews), `countNonEmptyLines()` (edit/write diff stats), `shortenPath()`, `formatBashCommand()`, `collapseCdDot()`, `shortenPathsInText()`, `formatToolResult()` (ls/find result summaries) |
-| `src/settings.ts` | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local) |
-| `src/format-transcript.ts` | `formatRunsForResume()` (resume transcript formatting), `getTextContent()` (message text extraction) |
-| `src/profile-types.ts` | `SubagentProfile`, `SubagentProfiles`, `ThinkingLevel`, `ProfileInvocation` type definitions |
-| `src/profile-formatting.ts` | `profileSummary()`, `formatProfileDetail()`, `serializeProfileToMarkdown()` |
-| `src/profiles.ts` | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, profile CRUD, tool validation (`validateProfileTools`, `applyExcludeTools`), skill validation (`validateProfileSkills`) and resolution (`resolveProfileSkills`). Re-exports from `profile-formatting.ts` and `profile-types.ts` |
-| `src/profile-editor.ts` | Interactive profile creation/editing via `/profile` command |
-| `src/commands/profile.ts` | `/profile` slash command (list, show, create, edit, delete) |
-| `src/schemas.ts` | TypeBox schemas for `delegate_to_subagents` parameter validation |
-| `src/tools/delegate.ts` | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration. Delegates TUI rendering to `delegate-render.ts` |
-| `src/tools/delegate-render.ts` | `colorizeToolLine()`, `renderDelegateCall()`, `renderDelegateResult()` — pure rendering functions for the delegate tool TUI display |
-| `src/tools/retrieval.ts` | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers |
-| `src/utils.ts` | Shared helpers: ANSI stripping (`stripAnsi`), `appendLineToWindow()`, `getTextParts()`, `getLastAssistantText()`, `mapWithConcurrencyLimit()`, `countWindowStatuses()`, `getSummaryText()` |
+| File                           | Responsibility                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`                 | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_shutdown` lifecycle event                                                                                                                                                                                                                   |
+| `src/types.ts`                 | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper. Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts`                                                      |
+| `src/spawner.ts`               | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Also processes `turn_end` events to capture ls/find tool result summaries. Also contains `getPiInvocation()` (moved from `utils.ts`)                                            |
+| `src/format-tool-call.ts`      | `formatToolCall()` (one-line tool previews), `countNonEmptyLines()` (edit/write diff stats), `shortenPath()`, `formatBashCommand()`, `collapseCdDot()`, `shortenPathsInText()`, `formatToolResult()` (ls/find result summaries)                                                                                                             |
+| `src/settings.ts`              | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local)                                                                                                                                                                                                                                      |
+| `src/format-transcript.ts`     | `formatRunsForResume()` (resume transcript formatting), `getTextContent()` (message text extraction)                                                                                                                                                                                                                                        |
+| `src/profile-types.ts`         | `SubagentProfile`, `SubagentProfiles`, `ThinkingLevel`, `ProfileInvocation` type definitions                                                                                                                                                                                                                                                |
+| `src/profile-formatting.ts`    | `profileSummary()`, `formatProfileDetail()`, `serializeProfileToMarkdown()`                                                                                                                                                                                                                                                                 |
+| `src/profiles.ts`              | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, profile CRUD, tool validation (`validateProfileTools`, `applyExcludeTools`), skill validation (`validateProfileSkills`) and resolution (`resolveProfileSkills`). Re-exports from `profile-formatting.ts` and `profile-types.ts` |
+| `src/profile-editor.ts`        | Interactive profile creation/editing via `/profile` command                                                                                                                                                                                                                                                                                 |
+| `src/commands/profile.ts`      | `/profile` slash command (list, show, create, edit, delete)                                                                                                                                                                                                                                                                                 |
+| `src/schemas.ts`               | TypeBox schemas for `delegate_to_subagents` parameter validation                                                                                                                                                                                                                                                                            |
+| `src/tools/delegate.ts`        | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration. Delegates TUI rendering to `delegate-render.ts`                                                                                                                                                                                |
+| `src/tools/delegate-render.ts` | `colorizeToolLine()`, `renderDelegateCall()`, `renderDelegateResult()` — pure rendering functions for the delegate tool TUI display                                                                                                                                                                                                         |
+| `src/tools/retrieval.ts`       | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers                                                                                                                                                                                                                        |
+| `src/utils.ts`                 | Shared helpers: ANSI stripping (`stripAnsi`), `appendLineToWindow()`, `getTextParts()`, `getLastAssistantText()`, `mapWithConcurrencyLimit()`, `countWindowStatuses()`, `getSummaryText()`                                                                                                                                                  |
 
 ### Dependency Graph
 
@@ -84,7 +84,7 @@ Each `SessionRecord` maps a session ID to an array of `SubagentSessionData` runs
 
 ```ts
 interface SessionRecord {
-  runs: SubagentSessionData[];  // chronological, max 10
+  runs: SubagentSessionData[]; // chronological, max 10
 }
 ```
 
@@ -156,10 +156,12 @@ const proc = spawn(invocation.command, args, {
 ```
 
 **Command resolution** (`getPiInvocation()` in `spawner.ts`):
+
 - If running as a script (`process.argv[1]` exists and isn't in `$bunfs`), uses `process.execPath` + script path.
 - Otherwise falls back to `pi` with no args.
 
 **Args structure:**
+
 ```
 [base args...] --mode json -p --no-session [profile args...] [task prompt]
 ```
@@ -177,7 +179,7 @@ stdout data arrives in arbitrary Buffer chunks. The spawner implements line-buff
 proc.stdout.on("data", (data: Buffer) => {
   buffer += data.toString();
   const lines = buffer.split("\n");
-  buffer = lines.pop() ?? "";  // incomplete line held for next chunk
+  buffer = lines.pop() ?? ""; // incomplete line held for next chunk
   for (const line of lines) {
     processLine(line);
   }
@@ -220,7 +222,7 @@ Each task gets its own `AbortController`:
 const taskAbortController = new AbortController();
 const taskAbortTimeout = setTimeout(() => {
   taskAbortController.abort();
-}, taskTimeout * 1000);  // taskTimeout defaults to 600s
+}, taskTimeout * 1000); // taskTimeout defaults to 600s
 ```
 
 ### 5.2 Parent Signal Forwarding
@@ -247,7 +249,7 @@ const killProc = () => {
   proc.kill("SIGTERM");
   setTimeout(() => {
     if (!proc.killed) proc.kill("SIGKILL");
-  }, 5000);  // 5-second grace period
+  }, 5000); // 5-second grace period
 };
 ```
 
@@ -272,9 +274,9 @@ This allows a clean timeout error message rather than treating it as a generic a
 
 Each `SubAgentWindow` maintains two buffers:
 
-| Buffer | Purpose | Limit |
-|--------|---------|-------|
-| `win.lines` | Rolling window shown in **collapsed** TUI view | `maxLines` (default 15) |
+| Buffer            | Purpose                                                  | Limit                            |
+| ----------------- | -------------------------------------------------------- | -------------------------------- |
+| `win.lines`       | Rolling window shown in **collapsed** TUI view           | `maxLines` (default 15)          |
 | `win.allMessages` | Full message history shown in **expanded** view (Ctrl+O) | `MAX_MESSAGES_PER_SESSION` (500) |
 
 ```ts
@@ -321,27 +323,27 @@ Each window header includes the agent name, profile info (if any), and a status 
 
 Tool calls in the rolling window are rendered as concise one-liners by `formatToolCall()` in `format-tool-call.ts`. Key patterns:
 
-| Tool | Format |
-|------|--------|
-| `edit` | `edit → path (N edits) +A/-R` |
-| `write` | `write → path +L` |
-| `grep` | `grep → /pattern/ → glob-or-path` |
-| `ls` | `ls → <path>` (defaults to `.` when no path) |
-| `find` | `find → <pattern> in <path>` or `find → <pattern>` (no path) |
-| `bash` | `bash → first line of command (smart && splitting)` |
-| `read` | `read → path:offset+limit (L lines)` |
-| `delegate_to_subagents` | `delegate_to_subagents → N tasks [profile names]` |
-| LSP tools | `lsp_diagnostics → file` |
-| `fetch_content`/`web_search` | `fetch_content → url (truncated)` |
-| Generic | `toolName {"key":"value",...}` (full JSON args, truncated to width budget; empty `{}` omitted) |
-| `write_todos` | `write_todos → N todos written` |
-| `edit_todos` | `edit_todos → description or action [indices]` |
-| `list_todos` | `list_todos` |
-| LSP tools (5) | `lsp_name → file:line:column` (varies; `lsp_find_symbol` → `query`; `lsp_refactor_symbol` → `file:line:col → newName`) |
-| `lint_files` | `lint → files... +N more` or `lint → (all)` |
-| `fetch_repo` | `fetch_repo → url` |
-| Session retrieval (3) | `tool_name → sessionId` or just tool name |
-| `workflow_step` | `workflow_step → action` |
+| Tool                         | Format                                                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `edit`                       | `edit → path (N edits) +A/-R`                                                                                          |
+| `write`                      | `write → path +L`                                                                                                      |
+| `grep`                       | `grep → /pattern/ → glob-or-path`                                                                                      |
+| `ls`                         | `ls → <path>` (defaults to `.` when no path)                                                                           |
+| `find`                       | `find → <pattern> in <path>` or `find → <pattern>` (no path)                                                           |
+| `bash`                       | `bash → first line of command (smart && splitting)`                                                                    |
+| `read`                       | `read → path:offset+limit (L lines)`                                                                                   |
+| `delegate_to_subagents`      | `delegate_to_subagents → N tasks [profile names]`                                                                      |
+| LSP tools                    | `lsp_diagnostics → file`                                                                                               |
+| `fetch_content`/`web_search` | `fetch_content → url (truncated)`                                                                                      |
+| Generic                      | `toolName {"key":"value",...}` (full JSON args, truncated to width budget; empty `{}` omitted)                         |
+| `write_todos`                | `write_todos → N todos written`                                                                                        |
+| `edit_todos`                 | `edit_todos → description or action [indices]`                                                                         |
+| `list_todos`                 | `list_todos`                                                                                                           |
+| LSP tools (5)                | `lsp_name → file:line:column` (varies; `lsp_find_symbol` → `query`; `lsp_refactor_symbol` → `file:line:col → newName`) |
+| `lint_files`                 | `lint → files... +N more` or `lint → (all)`                                                                            |
+| `fetch_repo`                 | `fetch_repo → url`                                                                                                     |
+| Session retrieval (3)        | `tool_name → sessionId` or just tool name                                                                              |
+| `workflow_step`              | `workflow_step → action`                                                                                               |
 
 Where A=lines added, R=lines removed, L=line count. The `(L lines)` suffix only appears when `limit` is specified. Diff stats are computed using `countNonEmptyLines()`, which counts non-blank lines without allocating intermediate arrays.
 
@@ -358,7 +360,7 @@ export async function mapWithConcurrencyLimit<TIn, TOut>(
   items: TIn[],
   concurrency: number,
   fn: (item: TIn, index: number) => Promise<TOut>,
-): Promise<TOut[]>
+): Promise<TOut[]>;
 ```
 
 Implementation uses a shared `nextIndex` counter accessed by `concurrency` worker coroutines:
@@ -367,7 +369,7 @@ Implementation uses a shared `nextIndex` counter accessed by `concurrency` worke
 let nextIndex = 0;
 const workers = new Array(limit).fill(null).map(async () => {
   while (true) {
-    const current = nextIndex++;       // atomic-ish: JS single-threaded
+    const current = nextIndex++; // atomic-ish: JS single-threaded
     if (current >= items.length) return;
     results[current] = await fn(items[current], current);
   }
@@ -379,10 +381,10 @@ This is a work-stealing pattern — as each worker completes its task, it immedi
 
 ### 7.2 Concurrency Constants
 
-| Constant | Value | Meaning |
-|----------|-------|---------|
-| `MAX_CONCURRENCY` | 4 | Active sub-agent processes at once |
-| `MAX_PARALLEL_TASKS` | 16 | Maximum tasks in a single `delegate_to_subagents` call (enforced by TypeBox schema) |
+| Constant             | Value | Meaning                                                                             |
+| -------------------- | ----- | ----------------------------------------------------------------------------------- |
+| `MAX_CONCURRENCY`    | 4     | Active sub-agent processes at once                                                  |
+| `MAX_PARALLEL_TASKS` | 16    | Maximum tasks in a single `delegate_to_subagents` call (enforced by TypeBox schema) |
 
 When a delegation call has 16 tasks with concurrency 4, the first 4 spawn immediately, and the remaining 12 queue — each starts as a slot opens.
 
@@ -394,10 +396,10 @@ See [docs/profiles.md](profiles.md) for the full profile documentation. This sec
 
 Profiles are loaded from two directories:
 
-| Scope | Path |
-|-------|------|
-| Global | `~/.pi/agent/agent-profiles/*.md` (configurable via `PI_CODING_AGENT_DIR`) |
-| Project | `<cwd>/.pi/agent-profiles/*.md` |
+| Scope   | Path                                                                       |
+| ------- | -------------------------------------------------------------------------- |
+| Global  | `~/.pi/agent/agent-profiles/*.md` (configurable via `PI_CODING_AGENT_DIR`) |
+| Project | `<cwd>/.pi/agent-profiles/*.md`                                            |
 
 Project-local profiles **override** global profiles with the same name. Loading is synchronous via `readFileSync` — each `.md` file is parsed with `parseFrontmatter()`:
 
@@ -414,7 +416,11 @@ suggestedSkills (comma-separated), loadSkills (comma-separated)
 ### 8.2 5-Second TTL Cache
 
 ```ts
-let profilesCache: { cwd: string | undefined; profiles: SubagentProfiles; timestamp: number } | null = null;
+let profilesCache: {
+  cwd: string | undefined;
+  profiles: SubagentProfiles;
+  timestamp: number;
+} | null = null;
 const CACHE_TTL = 5000;
 ```
 
@@ -459,14 +465,15 @@ Converts a `SubagentProfile` to CLI arguments and environment variables:
 
 ```ts
 interface ProfileInvocation {
-  args: string[];       // CLI flags appended before the prompt
-  env: Record<string, string>;  // merged into process.env
+  args: string[]; // CLI flags appended before the prompt
+  env: Record<string, string>; // merged into process.env
 }
 ```
 
 **Security note:** API keys are passed via `PI_API_KEY` environment variable, **not** as CLI arguments (which would be visible in `/proc/PID/cmdline`).
 
 **Safety validation for `extraArgs`:**
+
 - Null bytes (`\0`) are rejected.
 - Characters at the start of an arg: whitespace, `|`, `&`, `;`, `$`, `\`, `` ` ``, `!`
 - Command separators anywhere in the arg: `&&`, `||`, `;`, `>`, `>>`, `<`, `<<`
@@ -475,12 +482,12 @@ interface ProfileInvocation {
 
 **Tool-override blocking:** When any tool restriction is active on the profile (`noTools`, `tools`, or `excludeTools`), `extraArgs` containing tool-override flags are rejected. The blocked flags are:
 
-| Flag | Variants |
-|------|----------|
-| `--tools` | `--tools`, `--tools=value` |
-| `-t` | `-t`, `-t=value` |
+| Flag         | Variants                         |
+| ------------ | -------------------------------- |
+| `--tools`    | `--tools`, `--tools=value`       |
+| `-t`         | `-t`, `-t=value`                 |
 | `--no-tools` | `--no-tools`, `--no-tools=value` |
-| `-nt` | `-nt`, `-nt=value` |
+| `-nt`        | `-nt`, `-nt=value`               |
 
 This prevents `extraArgs` from bypassing the profile's intended tool restrictions via equals-sign forms or short flags.
 
@@ -488,10 +495,10 @@ This prevents `extraArgs` from bypassing the profile's intended tool restriction
 
 Two settings locations are checked (project overrides global):
 
-| Scope | Path |
-|-------|------|
-| Global | `~/.pi/agent/settings.json` |
-| Project | `<cwd>/.pi/settings.json` |
+| Scope   | Path                        |
+| ------- | --------------------------- |
+| Global  | `~/.pi/agent/settings.json` |
+| Project | `<cwd>/.pi/settings.json`   |
 
 Settings are read from the `subagents` key:
 

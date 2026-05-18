@@ -253,8 +253,10 @@ function formatLsResultText(text: string, details?: { entryLimitReached?: number
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
     if (i === text.length || text.charCodeAt(i) === 10) {
-      if (i > lineStart && text.charCodeAt(lineStart) !== 91) { // skip empty and '[' lines
-        if (text.charCodeAt(i - 1) === 47) dirs++; else files++; // 47 = '/', trailing slash = dir
+      if (i > lineStart && text.charCodeAt(lineStart) !== 91) {
+        // skip empty and '[' lines
+        if (text.charCodeAt(i - 1) === 47) dirs++;
+        else files++; // 47 = '/', trailing slash = dir
       }
       lineStart = i + 1;
     }
@@ -270,7 +272,11 @@ function formatLsResultText(text: string, details?: { entryLimitReached?: number
 }
 
 function formatFindResultText(text: string, details?: { resultLimitReached?: number }): string {
-  if (!text || text === "No files found matching pattern" || text === "No files found matching pattern\n") {
+  if (
+    !text ||
+    text === "No files found matching pattern" ||
+    text === "No files found matching pattern\n"
+  ) {
     return "  0 matches";
   }
   let count = 0;

@@ -45,24 +45,24 @@ performance. Be thorough but concise in your feedback.
 
 Every field in the frontmatter is **optional**. Only `name` is required for the profile to be loaded.
 
-| Field | Type | Description |
-|---|---|---|
-| `name` | `string` | **Required.** The profile's identifier. Must match `[a-zA-Z0-9_-]+`. Determines the filename (`{name}.md`). Note: `name` is not part of the `SubagentProfile` type — it is extracted during loading and used as the key in the profiles map. |
-| `provider` | `string` | LLM provider name (e.g., `anthropic`, `openai`, `dashscope`). Maps to `--provider`. |
-| `model` | `string` | Model ID or pattern. Supports `provider/id` format (e.g., `anthropic/claude-sonnet-4-5`) and `:thinking` shorthand (e.g., `sonnet:high`). Maps to `--model`. |
-| `thinkingLevel` | `string` | Extended thinking level. Valid values: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`. Maps to `--thinking`. |
-| `tools` | `string` or `string[]` | Comma-separated string **or** YAML array of tool names to **allow**. If set, only these tools are available. E.g., `read,bash,grep` or `[read, bash, grep]`. Maps to `--tools`. |
-| `noTools` | `boolean` | If `true`, disables all tools for the sub-agent. Maps to `--no-tools`. Mutually exclusive with `tools` and `excludeTools` — if multiple are set, precedence is `noTools` > `tools` > `excludeTools`. |
-| `excludeTools` | `string` or `string[]` | Comma-separated string **or** YAML array of tool names to **exclude** from the parent session's full tool set. The allowed tools are computed at spawn time: all available tools minus the blacklisted ones, passed as `--tools` to the child process. Mutually exclusive with `tools` — if both are set, an error is thrown. If `noTools` is also set, `noTools` takes precedence and `excludeTools` is silently ignored. |
-| `noExtensions` | `boolean` | If `true`, disables all extensions. Maps to `--no-extensions`. |
-| `extensions` | `string` or `string[]` | Comma-separated string **or** YAML array of extension file paths to load. Each entry maps to a separate `--extension` flag. |
-| `noSkills` | `boolean` | If `true`, disables skills. Maps to `--no-skills`. Mutually exclusive with `suggestedSkills` and `loadSkills` — if combined, an error is thrown. |
-| `suggestedSkills` | `string` or `string[]` | Comma-separated string **or** YAML array of skill names to *suggest* to the sub-agent via `--skill` CLI flags. The sub-agent's model decides whether to load them. E.g., `web-search,code-review` or `[web-search, code-review]`. Mutually exclusive with `noSkills`. |
-| `loadSkills` | `string` or `string[]` | Comma-separated string **or** YAML array of skill names to *pre-load* into the sub-agent's system prompt. Skill content is read at spawn time, stripped of frontmatter, and injected into `appendSystemPrompt` wrapped in `<loaded_skill>` XML tags. Mutually exclusive with `noSkills`. |
-| `noContextFiles` | `boolean` | If `true`, disables context files (`AGENTS.md`, `CLAUDE.md`). Maps to `--no-context-files`. |
-| `appendSystemPrompt` | `string` | Text appended to pi's default system prompt. Use when you want to add instructions without replacing the default entirely. Maps to `--append-system-prompt`. |
-| `apiKey` | `string` | Custom API key for this profile. Stored as the `PI_API_KEY` environment variable — **never passed as a CLI argument**. |
-| `extraArgs` | `string` or `string[]` | Comma-separated string **or** YAML array of additional CLI arguments passed verbatim to the sub-agent. Subject to [security validation](#8-security-considerations). |
+| Field                | Type                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`               | `string`               | **Required.** The profile's identifier. Must match `[a-zA-Z0-9_-]+`. Determines the filename (`{name}.md`). Note: `name` is not part of the `SubagentProfile` type — it is extracted during loading and used as the key in the profiles map.                                                                                                                                                                               |
+| `provider`           | `string`               | LLM provider name (e.g., `anthropic`, `openai`, `dashscope`). Maps to `--provider`.                                                                                                                                                                                                                                                                                                                                        |
+| `model`              | `string`               | Model ID or pattern. Supports `provider/id` format (e.g., `anthropic/claude-sonnet-4-5`) and `:thinking` shorthand (e.g., `sonnet:high`). Maps to `--model`.                                                                                                                                                                                                                                                               |
+| `thinkingLevel`      | `string`               | Extended thinking level. Valid values: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`. Maps to `--thinking`.                                                                                                                                                                                                                                                                                                           |
+| `tools`              | `string` or `string[]` | Comma-separated string **or** YAML array of tool names to **allow**. If set, only these tools are available. E.g., `read,bash,grep` or `[read, bash, grep]`. Maps to `--tools`.                                                                                                                                                                                                                                            |
+| `noTools`            | `boolean`              | If `true`, disables all tools for the sub-agent. Maps to `--no-tools`. Mutually exclusive with `tools` and `excludeTools` — if multiple are set, precedence is `noTools` > `tools` > `excludeTools`.                                                                                                                                                                                                                       |
+| `excludeTools`       | `string` or `string[]` | Comma-separated string **or** YAML array of tool names to **exclude** from the parent session's full tool set. The allowed tools are computed at spawn time: all available tools minus the blacklisted ones, passed as `--tools` to the child process. Mutually exclusive with `tools` — if both are set, an error is thrown. If `noTools` is also set, `noTools` takes precedence and `excludeTools` is silently ignored. |
+| `noExtensions`       | `boolean`              | If `true`, disables all extensions. Maps to `--no-extensions`.                                                                                                                                                                                                                                                                                                                                                             |
+| `extensions`         | `string` or `string[]` | Comma-separated string **or** YAML array of extension file paths to load. Each entry maps to a separate `--extension` flag.                                                                                                                                                                                                                                                                                                |
+| `noSkills`           | `boolean`              | If `true`, disables skills. Maps to `--no-skills`. Mutually exclusive with `suggestedSkills` and `loadSkills` — if combined, an error is thrown.                                                                                                                                                                                                                                                                           |
+| `suggestedSkills`    | `string` or `string[]` | Comma-separated string **or** YAML array of skill names to _suggest_ to the sub-agent via `--skill` CLI flags. The sub-agent's model decides whether to load them. E.g., `web-search,code-review` or `[web-search, code-review]`. Mutually exclusive with `noSkills`.                                                                                                                                                      |
+| `loadSkills`         | `string` or `string[]` | Comma-separated string **or** YAML array of skill names to _pre-load_ into the sub-agent's system prompt. Skill content is read at spawn time, stripped of frontmatter, and injected into `appendSystemPrompt` wrapped in `<loaded_skill>` XML tags. Mutually exclusive with `noSkills`.                                                                                                                                   |
+| `noContextFiles`     | `boolean`              | If `true`, disables context files (`AGENTS.md`, `CLAUDE.md`). Maps to `--no-context-files`.                                                                                                                                                                                                                                                                                                                                |
+| `appendSystemPrompt` | `string`               | Text appended to pi's default system prompt. Use when you want to add instructions without replacing the default entirely. Maps to `--append-system-prompt`.                                                                                                                                                                                                                                                               |
+| `apiKey`             | `string`               | Custom API key for this profile. Stored as the `PI_API_KEY` environment variable — **never passed as a CLI argument**.                                                                                                                                                                                                                                                                                                     |
+| `extraArgs`          | `string` or `string[]` | Comma-separated string **or** YAML array of additional CLI arguments passed verbatim to the sub-agent. Subject to [security validation](#8-security-considerations).                                                                                                                                                                                                                                                       |
 
 ### Markdown Body → `systemPrompt`
 
@@ -78,9 +78,9 @@ The Markdown body (everything after the closing `---`) becomes the sub-agent's `
 
 ### Directory Paths
 
-| Scope | Directory | Example |
-|---|---|---|
-| **Global** | `~/.pi/agent/agent-profiles/` | `~/.pi/agent/agent-profiles/code-reviewer.md` |
+| Scope             | Directory                                        | Example                                          |
+| ----------------- | ------------------------------------------------ | ------------------------------------------------ |
+| **Global**        | `~/.pi/agent/agent-profiles/`                    | `~/.pi/agent/agent-profiles/code-reviewer.md`    |
 | **Project-local** | `.pi/agent-profiles/` (relative to project root) | `my-project/.pi/agent-profiles/code-reviewer.md` |
 
 The global directory respects the `PI_CODING_AGENT_DIR` environment variable. If set, the base path is `$PI_CODING_AGENT_DIR` instead of `~/.pi/agent`.
@@ -300,11 +300,11 @@ Set a default profile for all tasks at the top level. Individual tasks can still
 
 ### Resolution Order
 
-| Priority | Source | Example |
-|---|---|---|
-| **1 (highest)** | Per-task `profile` field | `tasks[0].profile` |
-| **2** | Top-level `profile` parameter | `delegate_to_subagents.profile` |
-| **3 (lowest)** | No profile — pi defaults | Neither field set |
+| Priority        | Source                        | Example                         |
+| --------------- | ----------------------------- | ------------------------------- |
+| **1 (highest)** | Per-task `profile` field      | `tasks[0].profile`              |
+| **2**           | Top-level `profile` parameter | `delegate_to_subagents.profile` |
+| **3 (lowest)**  | No profile — pi defaults      | Neither field set               |
 
 If a profile name cannot be resolved (doesn't exist in any profiles directory), the task fails with an error:
 
@@ -332,13 +332,13 @@ Manage profiles interactively from the TUI. The `/profile` command provides a fu
 
 ### Subcommands
 
-| Command | Aliases | Description |
-|---|---|---|
-| `/profile list` | `ls` | List all loaded profiles with one-line summaries |
-| `/profile show <name>` | `<name>` (bare) | Display full details of a profile |
-| `/profile create <name>` | `new` | Launch interactive wizard to create a new profile |
-| `/profile edit <name>` | — | Launch interactive wizard to edit an existing profile |
-| `/profile delete <name>` | `rm`, `remove` | Delete a profile (confirms first) |
+| Command                  | Aliases         | Description                                           |
+| ------------------------ | --------------- | ----------------------------------------------------- |
+| `/profile list`          | `ls`            | List all loaded profiles with one-line summaries      |
+| `/profile show <name>`   | `<name>` (bare) | Display full details of a profile                     |
+| `/profile create <name>` | `new`           | Launch interactive wizard to create a new profile     |
+| `/profile edit <name>`   | —               | Launch interactive wizard to edit an existing profile |
+| `/profile delete <name>` | `rm`, `remove`  | Delete a profile (confirms first)                     |
 
 ### Name Validation
 
@@ -360,8 +360,8 @@ Both `/profile create` and `/profile edit` launch a step-by-step wizard:
 6. **Thinking level** — confirm whether to set; if yes, select from: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`
 7. **Tools** — confirm whether to configure; if yes, choose from three options:
    - **Disable all tools** (`noTools`) — sub-agent runs with no tool access
-   - **Allowlist** — enter a comma-separated list of tools to *allow* (all others excluded)
-   - **Blacklist** — enter a comma-separated list of tools to *exclude* (all others allowed)
+   - **Allowlist** — enter a comma-separated list of tools to _allow_ (all others excluded)
+   - **Blacklist** — enter a comma-separated list of tools to _exclude_ (all others allowed)
 8. **Extensions** — confirm whether to configure; if yes, choose to disable all extensions (`noExtensions`) or enter comma-separated paths
 9. **Skills** — if skill configuration already exists (`suggestedSkills` or `loadSkills`), offers to remove it. Otherwise, asks whether to configure skills. If yes, prompts for two fields:
    - **Suggested skills** — comma-separated skill names (the model chooses whether to load them)
@@ -376,24 +376,24 @@ At any step, answering "No" or canceling skips that field. Skipped fields are om
 
 Profiles are converted to CLI arguments and environment variables via `profileToArgs()`. The resulting args are injected into the `pi` subprocess invocation for the sub-agent.
 
-| Profile Field | CLI Flag | Notes |
-|---|---|---|
-| `provider` | `--provider <value>` | |
-| `model` | `--model <value>` | |
-| `systemPrompt` | `--system-prompt <value>` | Sourced from Markdown body |
-| `appendSystemPrompt` | `--append-system-prompt <value>` | |
-| `thinkingLevel` | `--thinking <value>` | |
-| `tools` | `--tools <comma-separated>` | Joined with commas: `read,bash,grep` |
-| `noTools` | `--no-tools` | Boolean flag; no value |
-| `excludeTools` | `--tools <computed>` | Resolved at runtime via `applyExcludeTools()`: all parent tools minus blacklisted names, joined into a comma-separated `--tools` value |
-| `noExtensions` | `--no-extensions` | Boolean flag; no value |
-| `extensions` | `--extension <value>` (×N) | One `--extension` flag per entry |
-| `noSkills` | `--no-skills` | Boolean flag; no value |
-| `suggestedSkills` | `--skill <path>` (×N) | After [resolution](#skill-resolution-pipeline), each skill name becomes a file path; one `--skill` flag per entry |
-| `loadSkills` | Merged into `--append-system-prompt` | Skill content is wrapped in `<loaded_skill name="...">` XML tags and appended to any existing `appendSystemPrompt` text |
-| `noContextFiles` | `--no-context-files` | Boolean flag; no value |
-| `apiKey` | *(env var)* | Set as `PI_API_KEY` in process environment — **not a CLI flag** |
-| `extraArgs` | *(appended verbatim)* | Each array element appended directly to the args array |
+| Profile Field        | CLI Flag                             | Notes                                                                                                                                  |
+| -------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`           | `--provider <value>`                 |                                                                                                                                        |
+| `model`              | `--model <value>`                    |                                                                                                                                        |
+| `systemPrompt`       | `--system-prompt <value>`            | Sourced from Markdown body                                                                                                             |
+| `appendSystemPrompt` | `--append-system-prompt <value>`     |                                                                                                                                        |
+| `thinkingLevel`      | `--thinking <value>`                 |                                                                                                                                        |
+| `tools`              | `--tools <comma-separated>`          | Joined with commas: `read,bash,grep`                                                                                                   |
+| `noTools`            | `--no-tools`                         | Boolean flag; no value                                                                                                                 |
+| `excludeTools`       | `--tools <computed>`                 | Resolved at runtime via `applyExcludeTools()`: all parent tools minus blacklisted names, joined into a comma-separated `--tools` value |
+| `noExtensions`       | `--no-extensions`                    | Boolean flag; no value                                                                                                                 |
+| `extensions`         | `--extension <value>` (×N)           | One `--extension` flag per entry                                                                                                       |
+| `noSkills`           | `--no-skills`                        | Boolean flag; no value                                                                                                                 |
+| `suggestedSkills`    | `--skill <path>` (×N)                | After [resolution](#skill-resolution-pipeline), each skill name becomes a file path; one `--skill` flag per entry                      |
+| `loadSkills`         | Merged into `--append-system-prompt` | Skill content is wrapped in `<loaded_skill name="...">` XML tags and appended to any existing `appendSystemPrompt` text                |
+| `noContextFiles`     | `--no-context-files`                 | Boolean flag; no value                                                                                                                 |
+| `apiKey`             | _(env var)_                          | Set as `PI_API_KEY` in process environment — **not a CLI flag**                                                                        |
+| `extraArgs`          | _(appended verbatim)_                | Each array element appended directly to the args array                                                                                 |
 
 ### `noTools` vs `tools` vs `excludeTools` Precedence
 
@@ -489,13 +489,13 @@ env: {
 
 The `extraArgs` field is subject to security validation before being passed to the subprocess. The following are **blocked**:
 
-| Pattern | Example | Error |
-|---|---|---|
-| Null bytes | `"test\0arg"` | `Invalid extraArg: contains null byte` |
-| Shell operators at start | `"| ls"`, `"& rm"`, `"; echo"` | `Refusing extraArg: potentially unsafe argument '\| ls...'` |
-| Command separators | `"&& rm"`, `"|| exit"`, `"; ls"` | `Refusing extraArg: potentially unsafe argument '&& rm...'` |
-| Shell redirection | `"> file"`, `">> file"`, `"< file"` | `Refusing extraArg: potentially unsafe argument '> file...'` |
-| Backticks / leading `$` | ``"`whoami`"``, `"$HOME"` | ``Refusing extraArg: potentially unsafe argument '`whoami`...'`` |
+| Pattern                  | Example                             | Error                                                            |
+| ------------------------ | ----------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| Null bytes               | `"test\0arg"`                       | `Invalid extraArg: contains null byte`                           |
+| Shell operators at start | `"                                  | ls"`, `"& rm"`, `"; echo"`                                       | `Refusing extraArg: potentially unsafe argument '\| ls...'` |
+| Command separators       | `"&& rm"`, `"                       |                                                                  | exit"`, `"; ls"`                                            | `Refusing extraArg: potentially unsafe argument '&& rm...'` |
+| Shell redirection        | `"> file"`, `">> file"`, `"< file"` | `Refusing extraArg: potentially unsafe argument '> file...'`     |
+| Backticks / leading `$`  | ``"`whoami`"``, `"$HOME"`           | ``Refusing extraArg: potentially unsafe argument '`whoami`...'`` |
 
 > **Note:** The validation regex catches backticks and `$` only at the **start** of an argument. It does **not** detect `$()` command substitution when it appears later in the string (e.g., `"arg$(whoami)"` passes validation).
 
@@ -509,8 +509,8 @@ The validation regex:
 
 When `excludeTools`, `tools`, or `noTools` is set in a profile, passing tool-restriction flags via `extraArgs` is **blocked**. The following `extraArgs` patterns are rejected:
 
-| Condition | Tool | Error Message | Description |
-|---|---|---|---|
+| Condition                       | Tool                    | Error Message                                                                                                          | Description                                                                                                                                          |
+| ------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Tool restriction override guard | `delegate_to_subagents` | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.` | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
 
 Both space-separated (`--tools read`) and equals-sign (`--tools=read`) forms are caught. This prevents `extraArgs` from silently overriding the profile's tool restrictions.

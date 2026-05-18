@@ -7,12 +7,12 @@ Complete reference for all tools provided by the pi-subagents extension.
 
 ## 1. Overview
 
-| Tool | Description |
-|------|-------------|
-| [`delegate_to_subagents`](#2-delegate_to_subagents) | Spawn one or more parallel sub-agents to work on separate tasks concurrently. |
-| [`get_subagent_output`](#3-get_subagent_output) | Retrieve the final assistant text output from a completed sub-agent session. |
-| [`get_subagent_session`](#4-get_subagent_session) | Retrieve the complete session transcript, including all messages, tool calls, and tool results. |
-| [`list_subagent_profiles`](#5-list_subagent_profiles) | List all available named sub-agent profiles and their configurations. |
+| Tool                                                  | Description                                                                                     |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`delegate_to_subagents`](#2-delegate_to_subagents)   | Spawn one or more parallel sub-agents to work on separate tasks concurrently.                   |
+| [`get_subagent_output`](#3-get_subagent_output)       | Retrieve the final assistant text output from a completed sub-agent session.                    |
+| [`get_subagent_session`](#4-get_subagent_session)     | Retrieve the complete session transcript, including all messages, tool calls, and tool results. |
+| [`list_subagent_profiles`](#5-list_subagent_profiles) | List all available named sub-agent profiles and their configurations.                           |
 
 All tools are registered on the pi-coding-agent `ExtensionAPI` via `pi.registerTool()`.
 
@@ -30,23 +30,23 @@ The tool returns session IDs for each task, which can be used with `get_subagent
 
 Defined by `DelegateParams` (TypeBox schema in [`schemas.ts`](../src/schemas.ts)):
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `tasks` | `Array<TaskObject>` | Yes | — | Array of 1–16 tasks to execute in parallel. See Task Object below. |
-| `profile` | `string` | No | — | Default profile name applied to all tasks. Overridden by any per-task `profile` field. |
+| Parameter | Type                | Required | Default | Description                                                                            |
+| --------- | ------------------- | -------- | ------- | -------------------------------------------------------------------------------------- |
+| `tasks`   | `Array<TaskObject>` | Yes      | —       | Array of 1–16 tasks to execute in parallel. See Task Object below.                     |
+| `profile` | `string`            | No       | —       | Default profile name applied to all tasks. Overridden by any per-task `profile` field. |
 
 ### Task Object
 
 Each element of the `tasks` array has the following fields:
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `name` | `string` | Yes | — | Display name for this sub-agent's TUI window. |
-| `prompt` | `string` | Yes | — | The task/prompt sent to the sub-agent. When `resume` is set, the prior transcript is prepended (see [Resume Mechanics](#resume-mechanics)). |
-| `cwd` | `string` | No | `process.cwd()` | Working directory for this sub-agent. Must be an absolute path and must not contain `..` segments. |
-| `profile` | `string` | No | — | Named sub-agent profile for this specific task (overrides the top-level `profile`). See [docs/profiles.md](profiles.md). |
-| `timeout` | `number` | No | `600` | Timeout in seconds. Must be ≥ 1. Aborts the sub-agent when exceeded. |
-| `resume` | `string` | No | — | A previous session ID to continue work from. The resumed agent receives the prior session's transcript as context. |
+| Field     | Type     | Required | Default         | Description                                                                                                                                 |
+| --------- | -------- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | `string` | Yes      | —               | Display name for this sub-agent's TUI window.                                                                                               |
+| `prompt`  | `string` | Yes      | —               | The task/prompt sent to the sub-agent. When `resume` is set, the prior transcript is prepended (see [Resume Mechanics](#resume-mechanics)). |
+| `cwd`     | `string` | No       | `process.cwd()` | Working directory for this sub-agent. Must be an absolute path and must not contain `..` segments.                                          |
+| `profile` | `string` | No       | —               | Named sub-agent profile for this specific task (overrides the top-level `profile`). See [docs/profiles.md](profiles.md).                    |
+| `timeout` | `number` | No       | `600`           | Timeout in seconds. Must be ≥ 1. Aborts the sub-agent when exceeded.                                                                        |
+| `resume`  | `string` | No       | —               | A previous session ID to continue work from. The resumed agent receives the prior session's transcript as context.                          |
 
 ### Return Value
 
@@ -56,6 +56,7 @@ Returns an object with:
 - **`details`**: A `WindowedSubagentDetails` object containing live window state, max lines per window, global status (`"running"` or `"done"`), and all session IDs.
 
 **Summary text format:**
+
 ```
 ✓ build-assets: completed (session: a3f7b9c2d1e8f4a1)
 ✗ run-tests: error — Timed out after 300s. Consider resuming with a longer timeout. (session: f4e1d8a7c0b39265)
@@ -167,6 +168,7 @@ If validation fails for **any** task, the entire tool call throws — no sub-age
 The tool provides custom `renderCall` and `renderResult` implementations:
 
 - **`renderCall`**: Displays the tool name, task count, and profile information.
+
   ```
   delegate_to_subagents 3 sub-agents (default profile: researcher) profiles: [writer, researcher]
   ```
@@ -177,7 +179,7 @@ The tool provides custom `renderCall` and `renderResult` implementations:
     - `ls → src/` (call) → `  2 files, 1 dir` (result); empty results show `  (empty)`
     - `find → *.ts in src/` (call) → `  3 matches` (result); empty results show `  0 matches`
     - Truncated results show a `+` suffix (e.g., `  500 files, 3 dirs+`)
-    The todo segment `[completed/total]` only appears when todos are active and incomplete. Elapsed time updates live every second and freezes when the subagent completes.
+      The todo segment `[completed/total]` only appears when todos are active and incomplete. Elapsed time updates live every second and freezes when the subagent completes.
   - **Expanded mode** (Ctrl+O): Shows all captured messages instead of just the latest N lines.
   - **Error display**: Red-colored error message beneath the agent's output.
   - **Footer**: When all agents are done, displays session IDs for use with retrieval tools.
@@ -247,9 +249,9 @@ For **resumed sessions** (multiple runs), returns the output from the **latest**
 
 ### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `sessionId` | `string` | Yes | The session ID returned by `delegate_to_subagents`. |
+| Parameter   | Type     | Required | Description                                         |
+| ----------- | -------- | -------- | --------------------------------------------------- |
+| `sessionId` | `string` | Yes      | The session ID returned by `delegate_to_subagents`. |
 
 Defined inline as `Type.Object({ sessionId: Type.String(...) })`.
 
@@ -299,9 +301,9 @@ For **resumed sessions** (multiple runs), returns **all runs' data concatenated*
 
 ### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `sessionId` | `string` | Yes | The session ID returned by `delegate_to_subagents`. |
+| Parameter   | Type     | Required | Description                                         |
+| ----------- | -------- | -------- | --------------------------------------------------- |
+| `sessionId` | `string` | Yes      | The session ID returned by `delegate_to_subagents`. |
 
 Defined inline as `Type.Object({ sessionId: Type.String(...) })`.
 
@@ -316,6 +318,7 @@ Defined inline as `Type.Object({ sessionId: Type.String(...) })`.
   - **Error messages**: Formatted as `[Error: {message}]`.
 
   Runs are separated by `\n---\n`. For multi-run (resumed) sessions, each run is prefixed with a header:
+
   ```
   === Run 1/3 (completed) ===
   ...
@@ -394,21 +397,21 @@ Uses a **simple (non-truncating) renderer** — the full profile list is display
 
 All error conditions and their messages:
 
-| Condition | Tool(s) | Error Message | When |
-|-----------|---------|---------------|------|
-| **Session not found** | `get_subagent_output`, `get_subagent_session` | `Session "{id}" not found. The session may have expired or the ID is incorrect.` | Session ID not in store or has zero runs. |
-| **Resume session still running** | `delegate_to_subagents` | `Cannot resume: session "{id}" is still running. Wait for it to complete before resuming.` | `resume` references a session currently in the active set. |
-| **Resume session not found** | `delegate_to_subagents` | `Cannot resume: session "{id}" not found. The session may have expired or the ID is incorrect.` | `resume` references a non-existent session or one with zero runs. |
-| **Unknown profile** | `delegate_to_subagents` | `Unknown profile: "{name}". Available profiles: {list}` | Task specifies a profile name not found in global or project-local directories. Other tasks continue normally. |
-| **Sub-agent spawn failure** | `delegate_to_subagents` (internal) | `Failed to spawn sub-agent process` | The child `pi` process fails to start (e.g., binary not found, permission denied). Caught by the `error` event on `spawn()`. |
-| **Timeout** | `delegate_to_subagents` (internal) | `Timed out after {N}s. Consider resuming with a longer timeout.` | A task exceeds its `timeout` value (default 600s). The sub-agent is aborted via `SIGTERM` → `SIGKILL`. |
-| **Invalid cwd — relative path** | `delegate_to_subagents` (internal) | `cwd must be an absolute path` | The `cwd` parameter is not an absolute path. Thrown before the sub-agent is spawned. |
-| **Invalid cwd — path traversal** | `delegate_to_subagents` (internal) | `cwd must not contain '..' path segments` | The resolved `cwd` contains `..` segments. Thrown before the sub-agent is spawned. |
-| **Unknown skill (suggestedSkills)** | `delegate_to_subagents` | `Unknown skills: "bad-name". Available skills: skill-a, skill-b` | Profile specifies a skill name not found by skill discovery. The task is marked as error; other tasks continue normally. |
-| **Skills + noSkills conflict (suggestedSkills)** | `delegate_to_subagents` | `Profile "name" has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned. |
-| **Skills + noSkills conflict (loadSkills)** | `delegate_to_subagents` | `Profile "name" has both "loadSkills" and "noSkills" set. These are mutually exclusive — --no-skills disables skill discovery.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned. |
-| **Loop detected** | `delegate_to_subagents` (internal) | `Loop detected: sub-agent is repeating the same tool calls` | `looping_tool_count` consecutive tool calls exceeded the `looping_tool_similarity` threshold. The sub-agent is killed via `SIGTERM`. |
-| **Tool restriction override guard** | `delegate_to_subagents` | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.` | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
+| Condition                                        | Tool(s)                                       | Error Message                                                                                                                            | When                                                                                                                                                 |
+| ------------------------------------------------ | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Session not found**                            | `get_subagent_output`, `get_subagent_session` | `Session "{id}" not found. The session may have expired or the ID is incorrect.`                                                         | Session ID not in store or has zero runs.                                                                                                            |
+| **Resume session still running**                 | `delegate_to_subagents`                       | `Cannot resume: session "{id}" is still running. Wait for it to complete before resuming.`                                               | `resume` references a session currently in the active set.                                                                                           |
+| **Resume session not found**                     | `delegate_to_subagents`                       | `Cannot resume: session "{id}" not found. The session may have expired or the ID is incorrect.`                                          | `resume` references a non-existent session or one with zero runs.                                                                                    |
+| **Unknown profile**                              | `delegate_to_subagents`                       | `Unknown profile: "{name}". Available profiles: {list}`                                                                                  | Task specifies a profile name not found in global or project-local directories. Other tasks continue normally.                                       |
+| **Sub-agent spawn failure**                      | `delegate_to_subagents` (internal)            | `Failed to spawn sub-agent process`                                                                                                      | The child `pi` process fails to start (e.g., binary not found, permission denied). Caught by the `error` event on `spawn()`.                         |
+| **Timeout**                                      | `delegate_to_subagents` (internal)            | `Timed out after {N}s. Consider resuming with a longer timeout.`                                                                         | A task exceeds its `timeout` value (default 600s). The sub-agent is aborted via `SIGTERM` → `SIGKILL`.                                               |
+| **Invalid cwd — relative path**                  | `delegate_to_subagents` (internal)            | `cwd must be an absolute path`                                                                                                           | The `cwd` parameter is not an absolute path. Thrown before the sub-agent is spawned.                                                                 |
+| **Invalid cwd — path traversal**                 | `delegate_to_subagents` (internal)            | `cwd must not contain '..' path segments`                                                                                                | The resolved `cwd` contains `..` segments. Thrown before the sub-agent is spawned.                                                                   |
+| **Unknown skill (suggestedSkills)**              | `delegate_to_subagents`                       | `Unknown skills: "bad-name". Available skills: skill-a, skill-b`                                                                         | Profile specifies a skill name not found by skill discovery. The task is marked as error; other tasks continue normally.                             |
+| **Skills + noSkills conflict (suggestedSkills)** | `delegate_to_subagents`                       | `Profile "name" has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned.                                  |
+| **Skills + noSkills conflict (loadSkills)**      | `delegate_to_subagents`                       | `Profile "name" has both "loadSkills" and "noSkills" set. These are mutually exclusive — --no-skills disables skill discovery.`          | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned.                                  |
+| **Loop detected**                                | `delegate_to_subagents` (internal)            | `Loop detected: sub-agent is repeating the same tool calls`                                                                              | `looping_tool_count` consecutive tool calls exceeded the `looping_tool_similarity` threshold. The sub-agent is killed via `SIGTERM`.                 |
+| **Tool restriction override guard**              | `delegate_to_subagents`                       | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.`                   | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
 
 ---
 

@@ -7,7 +7,7 @@
 
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { formatToolCall } from "./format-tool-call";
+import { formatToolCall, formatToolResult } from "./format-tool-call";
 import { profileToArgs } from "./profiles";
 import { loadCommandPreviewWidth } from "./settings";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
@@ -122,6 +122,33 @@ function handleStdoutLine(
   } catch {
     appendLineToWindow(win, line, maxLines);
     onUpdate();
+    return { loopDetected: false };
+  }
+
+  // Handle turn_end events for ls/find result summaries
+  if (event.type === "turn_end") {
+    const turnEvent = event as { toolResults?: Array<{ toolName: string; content: Array<{ type: string; text?: string }>; details?: Record<string, unknown>; isError: boolean }> };
+    const toolResults = turnEvent.toolResults;
+    if (Array.isArray(toolResults)) {
+      for (const result of toolResults) {
+        if ((result.toolName === "ls" || result.toolName === "find") && !result.isError) {
+          const textParts: string[] = [];
+          for (const part of result.content) {
+            if (part.type === "text" && part.text) {
+              textParts.push(part.text);
+            }
+          }
+          const textContent = textParts.join("");
+          if (textContent) {
+            const summary = formatToolResult(result.toolName, textContent, result.details);
+            if (summary) {
+              appendLineToWindow(win, summary, maxLines, "tool");
+            }
+          }
+        }
+      }
+      onUpdate();
+    }
     return { loopDetected: false };
   }
 

@@ -1984,6 +1984,172 @@ describe("spawner", () => {
     });
   });
 
+  describe("turn_end ls/find result handling", () => {
+    async function emitTurnEnd(
+      toolResults: Array<{
+        toolName: string;
+        content: Array<{ type: string; text?: string }>;
+        details?: Record<string, unknown>;
+        isError: boolean;
+      }>,
+    ): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "turn_end",
+        message: { role: "assistant", content: [] },
+        toolResults,
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    it("should append ls result summary", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "file1.ts\nfile2.ts\ndir1/" }],
+          isError: false,
+        },
+      ]);
+
+      const summaryLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("files"),
+      );
+      expect(summaryLine?.text).toBe("  2 files, 1 dir");
+      expect(summaryLine?.kind).toBe("tool");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should append find result summary", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitTurnEnd([
+        {
+          toolName: "find",
+          content: [{ type: "text", text: "result1.ts\nresult2.ts\nresult3.ts" }],
+          isError: false,
+        },
+      ]);
+
+      const summaryLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("matches"));
+      expect(summaryLine?.text).toBe("  3 matches");
+      expect(summaryLine?.kind).toBe("tool");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should ignore non-ls/find tools", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const linesBefore = mockWindow.lines.length;
+
+      await emitTurnEnd([
+        {
+          toolName: "read",
+          content: [{ type: "text", text: "file contents here" }],
+          isError: false,
+        },
+      ]);
+
+      expect(mockWindow.lines.length).toBe(linesBefore);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should ignore error results", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const linesBefore = mockWindow.lines.length;
+
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "file1.ts\nfile2.ts" }],
+          isError: true,
+        },
+      ]);
+
+      expect(mockWindow.lines.length).toBe(linesBefore);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle multiple tool results in single turn_end", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "a.ts\nb.ts\nc.ts" }],
+          isError: false,
+        },
+        {
+          toolName: "find",
+          content: [{ type: "text", text: "match1.ts\nmatch2.ts" }],
+          isError: false,
+        },
+      ]);
+
+      const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("files"));
+      const findLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("matches"));
+
+      expect(lsLine?.text).toBe("  3 files");
+      expect(lsLine?.kind).toBe("tool");
+
+      expect(findLine?.text).toBe("  2 matches");
+      expect(findLine?.kind).toBe("tool");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
   describe("handleStderrData", () => {
     it("should process stderr buffer and display with [stderr] prefix", async () => {
       const promise = runSubAgent({

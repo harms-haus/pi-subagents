@@ -244,6 +244,63 @@ export function countNonEmptyLines(text: string): number {
   return count;
 }
 
+function formatLsResultText(text: string, details?: { entryLimitReached?: number }): string {
+  if (!text || text === "(empty directory)" || text === "(empty directory)\n") {
+    return "  (empty)";
+  }
+  let dirs = 0;
+  let files = 0;
+  let lineStart = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i === text.length || text.charCodeAt(i) === 10) {
+      if (i > lineStart && text.charCodeAt(lineStart) !== 91) { // skip empty and '[' lines
+        if (text.charCodeAt(i - 1) === 47) dirs++; else files++; // 47 = '/', trailing slash = dir
+      }
+      lineStart = i + 1;
+    }
+  }
+  if (dirs === 0 && files === 0) {
+    return "  (empty)";
+  }
+  const parts: string[] = [];
+  if (files > 0) parts.push(`${files} file${files !== 1 ? "s" : ""}`);
+  if (dirs > 0) parts.push(`${dirs} dir${dirs !== 1 ? "s" : ""}`);
+  const truncationIndicator = details?.entryLimitReached ? "+" : "";
+  return `  ${parts.join(", ")}${truncationIndicator}`;
+}
+
+function formatFindResultText(text: string, details?: { resultLimitReached?: number }): string {
+  if (!text || text === "No files found matching pattern" || text === "No files found matching pattern\n") {
+    return "  0 matches";
+  }
+  let count = 0;
+  let lineStart = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i === text.length || text.charCodeAt(i) === 10) {
+      if (i > lineStart && text.charCodeAt(lineStart) !== 91) {
+        count++;
+      }
+      lineStart = i + 1;
+    }
+  }
+  const truncationIndicator = details?.resultLimitReached ? "+" : "";
+  return `  ${count} match${count !== 1 ? "es" : ""}${truncationIndicator}`;
+}
+
+export function formatToolResult(
+  toolName: string,
+  resultText: string,
+  details?: Record<string, unknown>,
+): string | null {
+  if (toolName === "ls") {
+    return formatLsResultText(resultText, details);
+  }
+  if (toolName === "find") {
+    return formatFindResultText(resultText, details);
+  }
+  return null;
+}
+
 /**
  * Format a tool call as a concise one-liner for the sub-agent rolling window.
  * Avoids dumping full JSON arguments for common tools.
@@ -409,6 +466,20 @@ export function formatToolCall(
     case "workflow_step": {
       const action = (args.action as string) ?? "?";
       return `workflow_step → ${action}`;
+    }
+
+    // File listing
+    case "ls": {
+      const path = a.path ? shortenPath(a.path, cwd) : ".";
+      return `ls → ${path}`;
+    }
+
+    case "find": {
+      const pattern = a.pattern ?? "...";
+      if (a.path) {
+        return `find → ${pattern} in ${shortenPath(a.path, cwd)}`;
+      }
+      return `find → ${pattern}`;
     }
 
     default: {

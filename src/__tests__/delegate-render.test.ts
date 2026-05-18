@@ -886,5 +886,100 @@ describe("delegate_to_subagents render functions", () => {
       expect(colorNames).not.toContain("toolDiffAdded");
       expect(colorNames).not.toContain("toolDiffRemoved");
     });
+
+    it("colorizes ls result summary with entry count", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "  15 files, 3 dirs";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // Indent (two spaces) should get muted color
+      expect(fgCalls).toContainEqual(["muted", "  "]);
+      // Count should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "15"]);
+      // Rest of the summary should get muted color
+      expect(fgCalls).toContainEqual(["muted", " files, 3 dirs"]);
+    });
+
+    it("colorizes find result summary with match count", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "  23 matches";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // Indent (two spaces) should get muted color
+      expect(fgCalls).toContainEqual(["muted", "  "]);
+      // Count should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "23"]);
+      // Rest of the summary should get muted color
+      expect(fgCalls).toContainEqual(["muted", " matches"]);
+    });
+
+    it("falls through to default for empty result line", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "  (empty)";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // The entire line should be in a single muted call (no count match)
+      expect(fgCalls).toContainEqual(["muted", "  (empty)"]);
+      // Should NOT use toolDiffAdded for any part
+      const colorNames = fgCalls.map((c: [string, string]) => c[0]);
+      expect(colorNames).not.toContain("toolDiffAdded");
+    });
   });
 });

@@ -59,6 +59,13 @@ export function colorizeToolLine(line: string, theme: Theme): string {
     );
   }
 
+  // Pattern 4: ls/find result summaries (indented lines with entry counts)
+  const resultSummaryMatch = line.match(/^(\s{2})(\d+)(\s.*)$/);
+  if (resultSummaryMatch) {
+    const [, indent, count, rest] = resultSummaryMatch;
+    return theme.fg("muted", indent) + theme.fg("toolDiffAdded", count) + theme.fg("muted", rest);
+  }
+
   // Default: muted
   return theme.fg("muted", line);
 }

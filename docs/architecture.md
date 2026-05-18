@@ -12,8 +12,8 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 |------|----------------|
 | `src/index.ts` | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_shutdown` lifecycle event |
 | `src/types.ts` | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper. Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts` |
-| `src/spawner.ts` | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Also contains `getPiInvocation()` (moved from `utils.ts`) |
-| `src/format-tool-call.ts` | `formatToolCall()` (one-line tool previews), `countNonEmptyLines()` (edit/write diff stats), `shortenPath()`, `formatBashCommand()`, `collapseCdDot()`, `shortenPathsInText()` |
+| `src/spawner.ts` | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Also processes `turn_end` events to capture ls/find tool result summaries. Also contains `getPiInvocation()` (moved from `utils.ts`) |
+| `src/format-tool-call.ts` | `formatToolCall()` (one-line tool previews), `countNonEmptyLines()` (edit/write diff stats), `shortenPath()`, `formatBashCommand()`, `collapseCdDot()`, `shortenPathsInText()`, `formatToolResult()` (ls/find result summaries) |
 | `src/settings.ts` | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local) |
 | `src/format-transcript.ts` | `formatRunsForResume()` (resume transcript formatting), `getTextContent()` (message text extraction) |
 | `src/profile-types.ts` | `SubagentProfile`, `SubagentProfiles`, `ThinkingLevel`, `ProfileInvocation` type definitions |
@@ -116,7 +116,7 @@ pi.on("session_shutdown", async () => {
    a. Per-task AbortController with timeout (default 600s)
    b. Parent abort signal forwarded to task controller
    c. runSubAgent() spawns pi subprocess
-   d. stdout lines parsed as JSONL, appended to rolling window
+   d. stdout lines parsed as JSONL, appended to rolling window; `turn_end` events processed to capture ls/find tool result summaries
    e. Process exit → status set to "completed" or "error"
 8. Summary result returned with session IDs
 9. LLM retrieves output via get_subagent_output(sessionId)
@@ -188,8 +188,9 @@ Each complete line is processed by `handleStdoutLine()`:
 
 1. **Empty lines** — skipped.
 2. **Non-JSON lines** — appended to the rolling window as plain text.
-3. **JSON lines** — parsed. Only events with `type === "message_end"` and a `message` field are processed:
-   - Message is pushed to `session.messages` (capped at `MAX_MESSAGES_PER_SESSION = 500`).
+3. **JSON lines** — parsed. Two event types are processed:
+   - **`turn_end` events** — `toolResults` array is inspected for `ls`/`find` tool results; summaries are generated via `formatToolResult()` and appended as `"tool"`-kind lines.
+   - **`message_end` events** (with a `message` field) — Message is pushed to `session.messages` (capped at `MAX_MESSAGES_PER_SESSION = 500`).
    - Text parts extracted via `getTextParts()` → appended to rolling window.
    - Tool call parts formatted via `formatToolCall()` → appended as `"tool"`-kind lines.
    - Model metadata (`model`, `stopReason`, `errorMessage`) synced to window and session via `syncState()`.
@@ -292,7 +293,7 @@ export function appendLineToWindow(win, line, maxLines, kind = "text") {
 }
 ```
 
-Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering — tool lines are colorized by `colorizeToolLine()` in `delegate-render.ts`: diff additions in `toolDiffAdded` (green), removals in `toolDiffRemoved` (red), line counts in `toolDiffAdded`, and all other text in `muted`.
+Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering — tool lines are colorized by `colorizeToolLine()` in `delegate-render.ts`: diff additions in `toolDiffAdded` (green), removals in `toolDiffRemoved` (red), line counts in `toolDiffAdded`, ls/find result summary counts in `toolDiffAdded` (green), and all other text in `muted`.
 
 ### 6.2 Debounced TUI Updates
 
@@ -325,6 +326,8 @@ Tool calls in the rolling window are rendered as concise one-liners by `formatTo
 | `edit` | `edit → path (N edits) +A/-R` |
 | `write` | `write → path +L` |
 | `grep` | `grep → /pattern/ → glob-or-path` |
+| `ls` | `ls → <path>` (defaults to `.` when no path) |
+| `find` | `find → <pattern> in <path>` or `find → <pattern>` (no path) |
 | `bash` | `bash → first line of command (smart && splitting)` |
 | `read` | `read → path:offset+limit (L lines)` |
 | `delegate_to_subagents` | `delegate_to_subagents → N tasks [profile names]` |
@@ -342,7 +345,7 @@ Tool calls in the rolling window are rendered as concise one-liners by `formatTo
 
 Where A=lines added, R=lines removed, L=line count. The `(L lines)` suffix only appears when `limit` is specified. Diff stats are computed using `countNonEmptyLines()`, which counts non-blank lines without allocating intermediate arrays.
 
-Diff stats (`+A/-R`) and line counts (`(L lines)`) are colorized in the TUI using `colorizeToolLine()`: additions use `toolDiffAdded` (green), removals use `toolDiffRemoved` (red), and line counts use `toolDiffAdded` (green).
+Diff stats (`+A/-R`), line counts (`(L lines)`), and numeric counts in ls/find result summary lines are colorized in the TUI using `colorizeToolLine()`: additions use `toolDiffAdded` (green), removals use `toolDiffRemoved` (red), and line counts use `toolDiffAdded` (green).
 
 Paths are shortened via `shortenPath()` (replaces home prefix with `~`, uses relative paths when shorter). Bash commands are collapsed (stripping redundant `cd <cwd>` prefixes) and formatted with `formatBashCommand()` (smart `&&` splitting with `│` continuation prefixes).
 

@@ -1404,7 +1404,7 @@ describe("spawner", () => {
       const firstRetainedIndex = totalMessages - (MAX_MESSAGES - 1);
       const firstMsgContent = (
         mockSession.messages[0].content as Array<{ type: string; text: string }>
-      )?.[0]?.text;
+      )[0].text;
       expect(firstMsgContent).toBe(`msg-${firstRetainedIndex}`);
 
       // The last message should be the most recent
@@ -1413,7 +1413,7 @@ describe("spawner", () => {
           type: string;
           text: string;
         }>
-      )?.[0]?.text;
+      )[0].text;
       expect(lastMsgContent).toBe(`msg-${totalMessages - 1}`);
 
       mockProcess.emit("close", 0);
@@ -2050,7 +2050,9 @@ describe("spawner", () => {
         },
       ]);
 
-      const summaryLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("matches"));
+      const summaryLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("matches"),
+      );
       expect(summaryLine?.text).toBe("  3 matches");
       expect(summaryLine?.kind).toBe("tool");
 
@@ -2137,7 +2139,9 @@ describe("spawner", () => {
       ]);
 
       const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("files"));
-      const findLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("matches"));
+      const findLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("matches"),
+      );
 
       expect(lsLine?.text).toBe("  3 files");
       expect(lsLine?.kind).toBe("tool");

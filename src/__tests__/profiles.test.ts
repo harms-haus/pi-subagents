@@ -460,27 +460,37 @@ describe("getProfilesDir", () => {
 describe("validateProfileTools", () => {
   it("should not throw when only tools is set", () => {
     const profile: SubagentProfile = { tools: ["read", "bash"] };
-    expect(() => { validateProfileTools(profile); }).not.toThrow();
+    expect(() => {
+      validateProfileTools(profile);
+    }).not.toThrow();
   });
 
   it("should not throw when only excludeTools is set", () => {
     const profile: SubagentProfile = { excludeTools: ["write", "bash"] };
-    expect(() => { validateProfileTools(profile); }).not.toThrow();
+    expect(() => {
+      validateProfileTools(profile);
+    }).not.toThrow();
   });
 
   it("should throw error when both tools and excludeTools are set", () => {
     const profile: SubagentProfile = { tools: ["read"], excludeTools: ["write"] };
-    expect(() => { validateProfileTools(profile); }).toThrow(/mutually exclusive/);
+    expect(() => {
+      validateProfileTools(profile);
+    }).toThrow(/mutually exclusive/);
   });
 
   it("should include profile name in error when both are set", () => {
     const profile: SubagentProfile = { tools: ["read"], excludeTools: ["write"] };
-    expect(() => { validateProfileTools(profile, "my-profile"); }).toThrow(/"my-profile"/);
+    expect(() => {
+      validateProfileTools(profile, "my-profile");
+    }).toThrow(/"my-profile"/);
   });
 
   it("should not throw when neither tools nor excludeTools is set", () => {
     const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
-    expect(() => { validateProfileTools(profile); }).not.toThrow();
+    expect(() => {
+      validateProfileTools(profile);
+    }).not.toThrow();
   });
 });
 
@@ -807,7 +817,9 @@ describe("validateProfileSkills", () => {
       suggestedSkills: ["my-skill"],
       noSkills: true,
     };
-    expect(() => { validateProfileSkills(profile); }).toThrow(/mutually exclusive/);
+    expect(() => {
+      validateProfileSkills(profile);
+    }).toThrow(/mutually exclusive/);
   });
 
   it("should include profile name in error message", () => {
@@ -815,24 +827,30 @@ describe("validateProfileSkills", () => {
       suggestedSkills: ["my-skill"],
       noSkills: true,
     };
-    expect(() => { validateProfileSkills(profile, "conflicted-profile"); }).toThrow(
-      /"conflicted-profile"/,
-    );
+    expect(() => {
+      validateProfileSkills(profile, "conflicted-profile");
+    }).toThrow(/"conflicted-profile"/);
   });
 
   it("should not throw when only suggestedSkills is set", () => {
     const profile: SubagentProfile = { suggestedSkills: ["my-skill"] };
-    expect(() => { validateProfileSkills(profile); }).not.toThrow();
+    expect(() => {
+      validateProfileSkills(profile);
+    }).not.toThrow();
   });
 
   it("should not throw when only loadSkills is set", () => {
     const profile: SubagentProfile = { loadSkills: ["my-skill"] };
-    expect(() => { validateProfileSkills(profile); }).not.toThrow();
+    expect(() => {
+      validateProfileSkills(profile);
+    }).not.toThrow();
   });
 
   it("should not throw when neither is set", () => {
     const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
-    expect(() => { validateProfileSkills(profile); }).not.toThrow();
+    expect(() => {
+      validateProfileSkills(profile);
+    }).not.toThrow();
   });
 
   it("should throw when loadSkills and noSkills are both set", () => {
@@ -840,7 +858,9 @@ describe("validateProfileSkills", () => {
       loadSkills: ["my-skill"],
       noSkills: true,
     };
-    expect(() => { validateProfileSkills(profile); }).toThrow(/mutually exclusive/);
+    expect(() => {
+      validateProfileSkills(profile);
+    }).toThrow(/mutually exclusive/);
   });
 });
 

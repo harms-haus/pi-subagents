@@ -329,7 +329,7 @@ export function formatToolCall(
       return `write_todos → ${n} todos written`;
     }
     case "edit_todos": {
-      const action = args.action as string ?? "?";
+      const action = (args.action as string) ?? "?";
       const indices = (args.indices as number[] | undefined) ?? [];
       const todos = args.todos as Array<{ text?: string }> | undefined;
       let desc: string;
@@ -399,15 +399,15 @@ export function formatToolCall(
 
     // Session retrieval
     case "get_subagent_output":
-      return `get_subagent_output → ${args.sessionId as string ?? "..."}`;
+      return `get_subagent_output → ${(args.sessionId as string) ?? "..."}`;
     case "get_subagent_session":
-      return `get_subagent_session → ${args.sessionId as string ?? "..."}`;
+      return `get_subagent_session → ${(args.sessionId as string) ?? "..."}`;
     case "list_subagent_profiles":
       return "list_subagent_profiles";
 
     // Workflow
     case "workflow_step": {
-      const action = args.action as string ?? "?";
+      const action = (args.action as string) ?? "?";
       return `workflow_step → ${action}`;
     }
 

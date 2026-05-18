@@ -330,7 +330,9 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
     if (bufferTimeout) {
       clearTimeout(bufferTimeout);
     }
-    bufferTimeout = setTimeout(() => { onUpdate(); }, 50);
+    bufferTimeout = setTimeout(() => {
+      onUpdate();
+    }, 50);
   };
 
   // Validate and resolve the cwd parameter

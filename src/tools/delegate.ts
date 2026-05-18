@@ -337,7 +337,9 @@ export function registerDelegateTool(
           };
 
           // Forward parent signal to task controller
-          const onParentAbort = () => { taskAbortController.abort(); };
+          const onParentAbort = () => {
+            taskAbortController.abort();
+          };
           if (signal?.aborted) {
             taskAbortController.abort();
           } else if (signal) {

@@ -1088,9 +1088,15 @@ describe("tools", () => {
             resolve({ loopDetected: false });
             return;
           }
-          opts.signal?.addEventListener("abort", () => { resolve({ loopDetected: false }); }, {
-            once: true,
-          });
+          opts.signal?.addEventListener(
+            "abort",
+            () => {
+              resolve({ loopDetected: false });
+            },
+            {
+              once: true,
+            },
+          );
         });
       });
 

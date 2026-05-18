@@ -18,9 +18,7 @@ describe("formatToolCall", () => {
         "edit",
         {
           path: `${cwd}/src/index.ts`,
-          edits: [
-            { oldText: "foo\nbar", newText: "baz" },
-          ],
+          edits: [{ oldText: "foo\nbar", newText: "baz" }],
         },
         cwd,
         W,
@@ -46,32 +44,17 @@ describe("formatToolCall", () => {
     });
 
     it("with no edits (empty array) — no suffix", () => {
-      const result = formatToolCall(
-        "edit",
-        { path: `${cwd}/src/index.ts`, edits: [] },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("edit", { path: `${cwd}/src/index.ts`, edits: [] }, cwd, W);
       expect(result).toBe("edit → src/index.ts");
     });
 
     it("with undefined edits — no suffix", () => {
-      const result = formatToolCall(
-        "edit",
-        { path: `${cwd}/src/index.ts` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("edit", { path: `${cwd}/src/index.ts` }, cwd, W);
       expect(result).toBe("edit → src/index.ts");
     });
 
     it("falls back to filePath if path is absent", () => {
-      const result = formatToolCall(
-        "edit",
-        { filePath: `${cwd}/src/foo.ts`, edits: [] },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("edit", { filePath: `${cwd}/src/foo.ts`, edits: [] }, cwd, W);
       expect(result).toBe("edit → src/foo.ts");
     });
 
@@ -94,12 +77,7 @@ describe("formatToolCall", () => {
     });
 
     it("with empty content — shows +0", () => {
-      const result = formatToolCall(
-        "write",
-        { path: `${cwd}/src/empty.ts`, content: "" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("write", { path: `${cwd}/src/empty.ts`, content: "" }, cwd, W);
       expect(result).toBe("write → src/empty.ts +0");
     });
 
@@ -133,12 +111,7 @@ describe("formatToolCall", () => {
     });
 
     it("pattern+path", () => {
-      const result = formatToolCall(
-        "grep",
-        { pattern: "FIXME", path: `${cwd}/src` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("grep", { pattern: "FIXME", path: `${cwd}/src` }, cwd, W);
       expect(result).toBe("grep → /FIXME/ → src");
     });
 
@@ -153,12 +126,7 @@ describe("formatToolCall", () => {
     });
 
     it("pattern with neither glob nor path", () => {
-      const result = formatToolCall(
-        "grep",
-        { pattern: "banana" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("grep", { pattern: "banana" }, cwd, W);
       expect(result).toBe("grep → /banana/");
     });
   });
@@ -166,42 +134,22 @@ describe("formatToolCall", () => {
   // ── bash tool ────────────────────────────────────────────────────
   describe("bash", () => {
     it("normal command", () => {
-      const result = formatToolCall(
-        "bash",
-        { command: "npm test" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("bash", { command: "npm test" }, cwd, W);
       expect(result).toBe("bash → npm test");
     });
 
     it("`cd <cwd>` → should show as `cd .`", () => {
-      const result = formatToolCall(
-        "bash",
-        { command: `cd ${cwd}` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("bash", { command: `cd ${cwd}` }, cwd, W);
       expect(result).toBe("bash → cd .");
     });
 
     it("`cd <cwd> && cmd` → should collapse cd prefix", () => {
-      const result = formatToolCall(
-        "bash",
-        { command: `cd ${cwd} && npm test` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("bash", { command: `cd ${cwd} && npm test` }, cwd, W);
       expect(result).toBe("bash → npm test");
     });
 
     it("empty command after collapse → `cd .`", () => {
-      const result = formatToolCall(
-        "bash",
-        { command: `cd ${cwd} &&` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("bash", { command: `cd ${cwd} &&` }, cwd, W);
       expect(result).toBe("bash → cd .");
     });
 
@@ -214,32 +162,17 @@ describe("formatToolCall", () => {
     });
 
     it("command that is just `.`", () => {
-      const result = formatToolCall(
-        "bash",
-        { command: "." },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("bash", { command: "." }, cwd, W);
       expect(result).toBe("bash → cd .");
     });
 
     it("multiline command only uses first line", () => {
-      const result = formatToolCall(
-        "bash",
-        { command: "echo hello\necho world" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("bash", { command: "echo hello\necho world" }, cwd, W);
       expect(result).toBe("bash → echo hello");
     });
 
     it("shortens paths in command", () => {
-      const result = formatToolCall(
-        "bash",
-        { command: `cat ${cwd}/src/main.ts` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("bash", { command: `cat ${cwd}/src/main.ts` }, cwd, W);
       expect(result).toBe("bash → cat src/main.ts");
     });
   });
@@ -257,32 +190,17 @@ describe("formatToolCall", () => {
     });
 
     it("with offset only", () => {
-      const result = formatToolCall(
-        "read",
-        { path: `${cwd}/src/main.ts`, offset: "5" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("read", { path: `${cwd}/src/main.ts`, offset: "5" }, cwd, W);
       expect(result).toBe("read → src/main.ts:5");
     });
 
     it("with limit only", () => {
-      const result = formatToolCall(
-        "read",
-        { path: `${cwd}/src/main.ts`, limit: "30" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("read", { path: `${cwd}/src/main.ts`, limit: "30" }, cwd, W);
       expect(result).toBe("read → src/main.ts+30 (30 lines)");
     });
 
     it("neither (just filename)", () => {
-      const result = formatToolCall(
-        "read",
-        { path: `${cwd}/src/main.ts` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("read", { path: `${cwd}/src/main.ts` }, cwd, W);
       expect(result).toBe("read → src/main.ts");
     });
   });
@@ -293,10 +211,7 @@ describe("formatToolCall", () => {
       const result = formatToolCall(
         "delegate_to_subagents",
         {
-          tasks: [
-            { profile: "coder" },
-            { profile: "reviewer" },
-          ],
+          tasks: [{ profile: "coder" }, { profile: "reviewer" }],
         },
         cwd,
         W,
@@ -342,10 +257,7 @@ describe("formatToolCall", () => {
         "write_todos",
         {
           mode: "replace",
-          todos: [
-            { text: "Task 1" },
-            { text: "Task 2" },
-          ],
+          todos: [{ text: "Task 1" }, { text: "Task 2" }],
         },
         cwd,
         W,
@@ -384,12 +296,7 @@ describe("formatToolCall", () => {
     });
 
     it("without text (action+indices)", () => {
-      const result = formatToolCall(
-        "edit_todos",
-        { action: "start", indices: [2, 5] },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("edit_todos", { action: "start", indices: [2, 5] }, cwd, W);
       expect(result).toBe("edit_todos → start [2,5]");
     });
 
@@ -432,12 +339,7 @@ describe("formatToolCall", () => {
   // ── LSP tools ─────────────────────────────────────────────────────
   describe("LSP tools", () => {
     it("lsp_diagnostics: with file", () => {
-      const result = formatToolCall(
-        "lsp_diagnostics",
-        { file: `${cwd}/src/app.ts` },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("lsp_diagnostics", { file: `${cwd}/src/app.ts` }, cwd, W);
       expect(result).toBe("lsp_diagnostics → src/app.ts");
     });
 
@@ -462,12 +364,7 @@ describe("formatToolCall", () => {
     });
 
     it("lsp_find_symbol: with query", () => {
-      const result = formatToolCall(
-        "lsp_find_symbol",
-        { query: "MyClass" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("lsp_find_symbol", { query: "MyClass" }, cwd, W);
       expect(result).toBe("lsp_find_symbol → MyClass");
     });
 
@@ -508,13 +405,7 @@ describe("formatToolCall", () => {
       const result = formatToolCall(
         "lint_files",
         {
-          files: [
-            `${cwd}/a.ts`,
-            `${cwd}/b.ts`,
-            `${cwd}/c.ts`,
-            `${cwd}/d.ts`,
-            `${cwd}/e.ts`,
-          ],
+          files: [`${cwd}/a.ts`, `${cwd}/b.ts`, `${cwd}/c.ts`, `${cwd}/d.ts`, `${cwd}/e.ts`],
         },
         cwd,
         W,
@@ -523,12 +414,7 @@ describe("formatToolCall", () => {
     });
 
     it("with empty files array → shows 'lint → (all)'", () => {
-      const result = formatToolCall(
-        "lint_files",
-        { files: [] },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("lint_files", { files: [] }, cwd, W);
       expect(result).toBe("lint → (all)");
     });
 
@@ -541,12 +427,7 @@ describe("formatToolCall", () => {
   // ── fetch_content / web_search ─────────────────────────────────────
   describe("fetch_content / web_search", () => {
     it("fetch_content: short URL", () => {
-      const result = formatToolCall(
-        "fetch_content",
-        { url: "https://example.com" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("fetch_content", { url: "https://example.com" }, cwd, W);
       expect(result).toBe("fetch_content → https://example.com");
     });
 
@@ -559,12 +440,7 @@ describe("formatToolCall", () => {
     });
 
     it("web_search: short query", () => {
-      const result = formatToolCall(
-        "web_search",
-        { query: "vitest docs" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("web_search", { query: "vitest docs" }, cwd, W);
       expect(result).toBe("web_search → vitest docs");
     });
 
@@ -580,12 +456,7 @@ describe("formatToolCall", () => {
   // ── fetch_repo ─────────────────────────────────────────────────────
   describe("fetch_repo", () => {
     it("with URL", () => {
-      const result = formatToolCall(
-        "fetch_repo",
-        { url: "https://github.com/org/repo" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("fetch_repo", { url: "https://github.com/org/repo" }, cwd, W);
       expect(result).toBe("fetch_repo → https://github.com/org/repo");
     });
   });
@@ -593,12 +464,7 @@ describe("formatToolCall", () => {
   // ── get_subagent_output / get_subagent_session ────────────────────
   describe("session retrieval tools", () => {
     it("get_subagent_output: with sessionId", () => {
-      const result = formatToolCall(
-        "get_subagent_output",
-        { sessionId: "abc-123" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("get_subagent_output", { sessionId: "abc-123" }, cwd, W);
       expect(result).toBe("get_subagent_output → abc-123");
     });
 
@@ -608,12 +474,7 @@ describe("formatToolCall", () => {
     });
 
     it("get_subagent_session: with sessionId", () => {
-      const result = formatToolCall(
-        "get_subagent_session",
-        { sessionId: "xyz-456" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("get_subagent_session", { sessionId: "xyz-456" }, cwd, W);
       expect(result).toBe("get_subagent_session → xyz-456");
     });
 
@@ -626,21 +487,14 @@ describe("formatToolCall", () => {
   // ── list_subagent_profiles ────────────────────────────────────────
   describe("list_subagent_profiles", () => {
     it("returns just name", () => {
-      expect(formatToolCall("list_subagent_profiles", {}, cwd, W)).toBe(
-        "list_subagent_profiles",
-      );
+      expect(formatToolCall("list_subagent_profiles", {}, cwd, W)).toBe("list_subagent_profiles");
     });
   });
 
   // ── workflow_step ─────────────────────────────────────────────────
   describe("workflow_step", () => {
     it("with action", () => {
-      const result = formatToolCall(
-        "workflow_step",
-        { action: "next" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("workflow_step", { action: "next" }, cwd, W);
       expect(result).toBe("workflow_step → next");
     });
   });
@@ -653,22 +507,12 @@ describe("formatToolCall", () => {
     });
 
     it("unknown tool name with short args", () => {
-      const result = formatToolCall(
-        "my_tool",
-        { key: "value" },
-        cwd,
-        W,
-      );
+      const result = formatToolCall("my_tool", { key: "value" }, cwd, W);
       expect(result).toBe('my_tool {"key":"value"}');
     });
 
     it("unknown tool name with long args (truncated)", () => {
-      const result = formatToolCall(
-        "my_tool",
-        { data: "a".repeat(200) },
-        cwd,
-        25,
-      );
+      const result = formatToolCall("my_tool", { data: "a".repeat(200) }, cwd, 25);
       // Should truncate with ...
       expect(result).toContain("my_tool ");
       expect(result).toContain("...");

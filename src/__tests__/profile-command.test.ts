@@ -122,9 +122,7 @@ describe("/profile command", () => {
   it("show: displays profile detail for existing profile", async () => {
     const profiles = { "my-profile": { provider: "anthropic" } };
     (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue(profiles);
-    (formatProfileDetail as ReturnType<typeof vi.fn>).mockReturnValue(
-      "detail:my-profile",
-    );
+    (formatProfileDetail as ReturnType<typeof vi.fn>).mockReturnValue("detail:my-profile");
     const ctx = createCtx();
 
     await command.handler("show my-profile", ctx);
@@ -152,10 +150,7 @@ describe("/profile command", () => {
 
     await command.handler("show", ctx);
 
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      "Usage: /profile show <name>",
-      "warning",
-    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Usage: /profile show <name>", "warning");
   });
 
   // ── 7. /profile create <name> — valid ────────────────────────────
@@ -241,10 +236,7 @@ describe("/profile command", () => {
       expect.stringContaining("my-profile"),
     );
     expect(deleteProfile).toHaveBeenCalledWith("my-profile", "global");
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("deleted"),
-      "info",
-    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("deleted"), "info");
   });
 
   // ── 13. /profile delete <name> — confirm no ──────────────────────
@@ -271,9 +263,7 @@ describe("/profile command", () => {
   it("bare name: shows profile detail when profile exists", async () => {
     const profiles = { "my-profile": { provider: "anthropic" } };
     (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue(profiles);
-    (formatProfileDetail as ReturnType<typeof vi.fn>).mockReturnValue(
-      "detail:my-profile",
-    );
+    (formatProfileDetail as ReturnType<typeof vi.fn>).mockReturnValue("detail:my-profile");
     const ctx = createCtx();
 
     await command.handler("my-profile", ctx);

@@ -213,9 +213,7 @@ describe("index.ts — default export", () => {
       expect(record.runs[0].taskName).toBe("run-1");
 
       // Add one more
-      capturedRegisterSession(
-        makeSession({ sessionId, startedAt: 11000, taskName: "run-11" }),
-      );
+      capturedRegisterSession(makeSession({ sessionId, startedAt: 11000, taskName: "run-11" }));
 
       record = capturedSessionStore!.get(sessionId)!;
       expect(record.runs).toHaveLength(10);
@@ -230,16 +228,12 @@ describe("index.ts — default export", () => {
     it("should evict the oldest session when store is full", () => {
       // Fill to 32
       for (let i = 0; i < 32; i++) {
-        capturedRegisterSession(
-          makeSession({ sessionId: `fill-${i}`, startedAt: i * 1000 }),
-        );
+        capturedRegisterSession(makeSession({ sessionId: `fill-${i}`, startedAt: i * 1000 }));
       }
       expect(capturedSessionStore!.size).toBe(32);
 
       // Add one more — should evict the one with the oldest first run (fill-0)
-      capturedRegisterSession(
-        makeSession({ sessionId: "overflow-1", startedAt: 32000 }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "overflow-1", startedAt: 32000 }));
 
       expect(capturedSessionStore!.size).toBe(32);
       expect(capturedSessionStore!.has("fill-0")).toBe(false);
@@ -248,9 +242,7 @@ describe("index.ts — default export", () => {
 
     it("should keep the 32 most recently created sessions", () => {
       for (let i = 0; i < 33; i++) {
-        capturedRegisterSession(
-          makeSession({ sessionId: `recent-${i}`, startedAt: i * 1000 }),
-        );
+        capturedRegisterSession(makeSession({ sessionId: `recent-${i}`, startedAt: i * 1000 }));
       }
 
       // Only recent-0 should have been evicted
@@ -262,28 +254,20 @@ describe("index.ts — default export", () => {
 
     it("should correctly evict based on the oldest first run's startedAt", () => {
       // Create session A with a very old timestamp
-      capturedRegisterSession(
-        makeSession({ sessionId: "ancient", startedAt: 100 }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "ancient", startedAt: 100 }));
 
       // Create session B with a newer timestamp
-      capturedRegisterSession(
-        makeSession({ sessionId: "newer", startedAt: 9000 }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "newer", startedAt: 9000 }));
 
       // Fill up to 32 total
       for (let i = 2; i < 32; i++) {
-        capturedRegisterSession(
-          makeSession({ sessionId: `mid-${i}`, startedAt: 2000 + i * 100 }),
-        );
+        capturedRegisterSession(makeSession({ sessionId: `mid-${i}`, startedAt: 2000 + i * 100 }));
       }
 
       expect(capturedSessionStore!.size).toBe(32);
 
       // Add one more — "ancient" (startedAt=100) should be evicted
-      capturedRegisterSession(
-        makeSession({ sessionId: "trigger-eviction", startedAt: 30000 }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "trigger-eviction", startedAt: 30000 }));
 
       expect(capturedSessionStore!.size).toBe(32);
       expect(capturedSessionStore!.has("ancient")).toBe(false);
@@ -294,9 +278,7 @@ describe("index.ts — default export", () => {
     it("should handle multiple evictions over successive inserts", () => {
       // Fill store completely
       for (let i = 0; i < 32; i++) {
-        capturedRegisterSession(
-          makeSession({ sessionId: `base-${i}`, startedAt: i * 1000 }),
-        );
+        capturedRegisterSession(makeSession({ sessionId: `base-${i}`, startedAt: i * 1000 }));
       }
 
       // Insert 5 more, evicting 5 oldest
@@ -323,17 +305,13 @@ describe("index.ts — default export", () => {
 
     it("should not evict any session when store is below the limit", () => {
       for (let i = 0; i < 31; i++) {
-        capturedRegisterSession(
-          makeSession({ sessionId: `under-${i}`, startedAt: i * 1000 }),
-        );
+        capturedRegisterSession(makeSession({ sessionId: `under-${i}`, startedAt: i * 1000 }));
       }
 
       expect(capturedSessionStore!.size).toBe(31);
 
       // Add one more (32nd) — still at limit, no eviction
-      capturedRegisterSession(
-        makeSession({ sessionId: "thirty-second", startedAt: 31000 }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "thirty-second", startedAt: 31000 }));
 
       expect(capturedSessionStore!.size).toBe(32);
       expect(capturedSessionStore!.has("under-0")).toBe(true);
@@ -344,12 +322,8 @@ describe("index.ts — default export", () => {
 
   describe("getActiveSessionIds — running sessions", () => {
     it("should return a Set of session IDs with running status", () => {
-      capturedRegisterSession(
-        makeSession({ sessionId: "running-1", status: "running" }),
-      );
-      capturedRegisterSession(
-        makeSession({ sessionId: "running-2", status: "running" }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "running-1", status: "running" }));
+      capturedRegisterSession(makeSession({ sessionId: "running-2", status: "running" }));
 
       const active = capturedGetActiveSessionIds();
       expect(active).toBeInstanceOf(Set);
@@ -359,12 +333,8 @@ describe("index.ts — default export", () => {
     });
 
     it("should include a session if any of its runs is running", () => {
-      capturedRegisterSession(
-        makeSession({ sessionId: "multi-run", status: "completed" }),
-      );
-      capturedRegisterSession(
-        makeSession({ sessionId: "multi-run", status: "running" }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "multi-run", status: "completed" }));
+      capturedRegisterSession(makeSession({ sessionId: "multi-run", status: "running" }));
 
       const active = capturedGetActiveSessionIds();
       expect(active.has("multi-run")).toBe(true);
@@ -375,45 +345,31 @@ describe("index.ts — default export", () => {
 
   describe("getActiveSessionIds — excludes completed/error sessions", () => {
     it("should return empty set when there are no running sessions", () => {
-      capturedRegisterSession(
-        makeSession({ sessionId: "done-1", status: "completed" }),
-      );
-      capturedRegisterSession(
-        makeSession({ sessionId: "done-2", status: "completed" }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "done-1", status: "completed" }));
+      capturedRegisterSession(makeSession({ sessionId: "done-2", status: "completed" }));
 
       const active = capturedGetActiveSessionIds();
       expect(active.size).toBe(0);
     });
 
     it("should exclude completed sessions", () => {
-      capturedRegisterSession(
-        makeSession({ sessionId: "completed-only", status: "completed" }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "completed-only", status: "completed" }));
 
       const active = capturedGetActiveSessionIds();
       expect(active.has("completed-only")).toBe(false);
     });
 
     it("should exclude error sessions", () => {
-      capturedRegisterSession(
-        makeSession({ sessionId: "errored", status: "error" }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "errored", status: "error" }));
 
       const active = capturedGetActiveSessionIds();
       expect(active.has("errored")).toBe(false);
     });
 
     it("should return only the running sessions from a mixed set", () => {
-      capturedRegisterSession(
-        makeSession({ sessionId: "s-running", status: "running" }),
-      );
-      capturedRegisterSession(
-        makeSession({ sessionId: "s-completed", status: "completed" }),
-      );
-      capturedRegisterSession(
-        makeSession({ sessionId: "s-error", status: "error" }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "s-running", status: "running" }));
+      capturedRegisterSession(makeSession({ sessionId: "s-completed", status: "completed" }));
+      capturedRegisterSession(makeSession({ sessionId: "s-error", status: "error" }));
 
       const active = capturedGetActiveSessionIds();
       expect(active.size).toBe(1);
@@ -432,10 +388,7 @@ describe("index.ts — default export", () => {
 
   describe("tool and command registration", () => {
     it("should register session_shutdown event handler", () => {
-      expect(mockPi.on).toHaveBeenCalledWith(
-        "session_shutdown",
-        expect.any(Function),
-      );
+      expect(mockPi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
     });
 
     it("should register the delegate tool via registerDelegateTool", async () => {
@@ -450,10 +403,7 @@ describe("index.ts — default export", () => {
 
     it("should register retrieval tools via registerRetrievalTools", async () => {
       const { registerRetrievalTools } = await import("../tools/retrieval");
-      expect(registerRetrievalTools).toHaveBeenCalledWith(
-        mockPi,
-        capturedSessionStore,
-      );
+      expect(registerRetrievalTools).toHaveBeenCalledWith(mockPi, capturedSessionStore);
     });
 
     it("should register the profile command via registerProfileCommand", async () => {
@@ -464,7 +414,7 @@ describe("index.ts — default export", () => {
     it("should pass the same sessionStore to delegate and retrieval tools", async () => {
       const { registerRetrievalTools } = await import("../tools/retrieval");
       const retrievalCall = vi.mocked(registerRetrievalTools).mock.calls[0];
-      expect(retrievalCall![1]).toBe(capturedSessionStore);
+      expect(retrievalCall[1]).toBe(capturedSessionStore);
     });
   });
 });

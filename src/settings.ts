@@ -44,12 +44,17 @@ export function getProjectSettingsPath(cwd: string): string {
 // ── Settings File Reading ────────────────────────────────────────────
 
 export async function readSettingsFile(filePath: string): Promise<SettingsFile> {
-  if (!existsSync(filePath)) {return {};}
+  if (!existsSync(filePath)) {
+    return {};
+  }
   try {
     const content = await readFile(filePath, "utf8");
-    return JSON.parse(content);
+    return JSON.parse(content) as SettingsFile;
   } catch (error) {
-    console.warn(`Failed to read settings file ${filePath}:`, error instanceof Error ? error.message : error);
+    console.warn(
+      `Failed to read settings file ${filePath}:`,
+      error instanceof Error ? error.message : error,
+    );
     return {};
   }
 }
@@ -124,7 +129,7 @@ export async function loadExtendTimeoutDebounce(cwd?: string): Promise<number> {
     }
   }
 
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return 30;
   }
   return Math.max(0, Math.min(value, 300));
@@ -147,7 +152,7 @@ export async function loadLoopingToolSimilarity(cwd?: string): Promise<number> {
     }
   }
 
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return 0.95;
   }
   return Math.max(0, Math.min(value, 1));
@@ -170,7 +175,7 @@ export async function loadLoopingToolCount(cwd?: string): Promise<number> {
     }
   }
 
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return 5;
   }
   return Math.max(0, Math.min(value, 50));

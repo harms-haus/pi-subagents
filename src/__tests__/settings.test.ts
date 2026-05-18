@@ -396,9 +396,7 @@ describe("loadExtendTimeoutDebounce", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     // JSON.parse of 1e999 evaluates to Infinity in V8, which is not finite
     // This tests the !Number.isFinite(value) code path (same as NaN)
-    vi.mocked(readFile).mockResolvedValue(
-      '{"subagents":{"extend_timeout_debounce":1e999}}',
-    );
+    vi.mocked(readFile).mockResolvedValue('{"subagents":{"extend_timeout_debounce":1e999}}');
 
     const result = await loadExtendTimeoutDebounce();
 

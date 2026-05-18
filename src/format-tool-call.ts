@@ -18,7 +18,9 @@ const HOME = homedir();
  * - Uses relative path from cwd if shorter
  */
 export function shortenPath(absolutePath: string, cwd: string): string {
-  if (absolutePath === cwd) {return ".";}
+  if (absolutePath === cwd) {
+    return ".";
+  }
 
   let displayPath = absolutePath;
   if (absolutePath.startsWith(`${HOME}/`)) {
@@ -31,7 +33,9 @@ export function shortenPath(absolutePath: string, cwd: string): string {
     // For ascending paths (..), only use if significantly shorter to avoid confusing output
     if (rel.startsWith("..")) {
       const savings = displayPath.length - rel.length;
-      if (savings < 10) {return displayPath;}
+      if (savings < 10) {
+        return displayPath;
+      }
     }
     return rel;
   }
@@ -57,7 +61,9 @@ export function shortenPathsInText(text: string, cwd: string): string {
     m = ABSOLUTE_PATH_REGEX.exec(text);
   }
 
-  if (matches.length === 0) {return text;}
+  if (matches.length === 0) {
+    return text;
+  }
 
   // Build result by replacing each match
   let result = "";
@@ -93,7 +99,9 @@ function getCdPattern(cwd: string): RegExp {
 export function collapseCdDot(command: string, cwd: string): string {
   const match = command.match(getCdPattern(cwd));
 
-  if (!match) {return command;}
+  if (!match) {
+    return command;
+  }
 
   if (match[1] === undefined) {
     // Exact match: `cd <cwd>` with nothing after → return "."
@@ -127,10 +135,16 @@ export function collapseCdDot(command: string, cwd: string): string {
  *   excluding the `│ ` prefix). Defaults to `firstLineBudget`.
  * @returns Formatted multi-line string (continuation lines include `│ ` prefix)
  */
-export function formatBashCommand(cmd: string, firstLineBudget: number, contBudget?: number): string {
+export function formatBashCommand(
+  cmd: string,
+  firstLineBudget: number,
+  contBudget?: number,
+): string {
   const contLineBudget = contBudget ?? firstLineBudget;
 
-  if (cmd.length <= firstLineBudget) {return cmd;}
+  if (cmd.length <= firstLineBudget) {
+    return cmd;
+  }
 
   // Split on " && " boundaries
   const segments = cmd.split(" && ");
@@ -210,11 +224,13 @@ export function countNonEmptyLines(text: string): number {
   let count = 0;
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
-    if (i === text.length || text.charCodeAt(i) === 10) { // newline
+    if (i === text.length || text.charCodeAt(i) === 10) {
+      // newline
       let empty = true;
       for (let j = lineStart; j < i; j++) {
         const c = text.charCodeAt(j);
-        if (c !== 32 && c !== 9 && c !== 13) { // not space/tab/CR
+        if (c !== 32 && c !== 9 && c !== 13) {
+          // not space/tab/CR
           empty = false;
           break;
         }
@@ -232,14 +248,19 @@ export function countNonEmptyLines(text: string): number {
  * Format a tool call as a concise one-liner for the sub-agent rolling window.
  * Avoids dumping full JSON arguments for common tools.
  */
-export function formatToolCall(toolName: string, args: Record<string, unknown>, cwd: string, widthBudget: number): string {
+export function formatToolCall(
+  toolName: string,
+  args: Record<string, unknown>,
+  cwd: string,
+  widthBudget: number,
+): string {
   // Typed view of args for display formatting
   const a = args as Record<string, string>;
   switch (toolName) {
     // File mutations: just show the filename
     case "edit": {
       const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
-      const edits = (args.edits as Array<{oldText?: string, newText?: string}> | undefined) ?? [];
+      const edits = (args.edits as Array<{ oldText?: string; newText?: string }> | undefined) ?? [];
       const count = edits.length;
       const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
       // Count lines added/removed from edits
@@ -283,8 +304,12 @@ export function formatToolCall(toolName: string, args: Record<string, unknown>, 
     case "read": {
       const path = shortenPath(a.path ?? "...", cwd);
       const parts = [path];
-      if (a.offset) {parts.push(`:${a.offset}`);}
-      if (a.limit) {parts.push(`+${a.limit}`);}
+      if (a.offset) {
+        parts.push(`:${a.offset}`);
+      }
+      if (a.limit) {
+        parts.push(`+${a.limit}`);
+      }
       const lineCount = a.limit ? ` (${a.limit} lines)` : "";
       return `read → ${parts.join("")}${lineCount}`;
     }
@@ -293,7 +318,8 @@ export function formatToolCall(toolName: string, args: Record<string, unknown>, 
     case "delegate_to_subagents": {
       const tasks = (args.tasks ?? []) as { profile?: string }[];
       const profiles = tasks.map((t) => t.profile).filter(Boolean);
-      const profileStr = profiles.length > 0 ? ` [${profiles.join(", ")}]` : a.profile ? ` [${a.profile}]` : "";
+      const profileStr =
+        profiles.length > 0 ? ` [${profiles.join(", ")}]` : a.profile ? ` [${a.profile}]` : "";
       return `delegate_to_subagents → ${tasks.length} task${tasks.length !== 1 ? "s" : ""}${profileStr}`;
     }
 
@@ -303,13 +329,15 @@ export function formatToolCall(toolName: string, args: Record<string, unknown>, 
       return `write_todos → ${n} todos written`;
     }
     case "edit_todos": {
-      const action = String(args.action ?? "?");
+      const action = args.action as string ?? "?";
       const indices = (args.indices as number[] | undefined) ?? [];
-      const todos = args.todos as Array<{text?: string}> | undefined;
+      const todos = args.todos as Array<{ text?: string }> | undefined;
       let desc: string;
       if (todos && todos.length > 0) {
-        desc = todos.map(t => t.text ?? "").join(", ");
-        if (desc.length > 48) {desc = `${desc.slice(0, 45)}...`;}
+        desc = todos.map((t) => t.text ?? "").join(", ");
+        if (desc.length > 48) {
+          desc = `${desc.slice(0, 45)}...`;
+        }
       } else {
         desc = `${action} [${indices.join(",")}]`;
       }
@@ -371,22 +399,24 @@ export function formatToolCall(toolName: string, args: Record<string, unknown>, 
 
     // Session retrieval
     case "get_subagent_output":
-      return `get_subagent_output → ${args.sessionId ?? "..."}`;
+      return `get_subagent_output → ${args.sessionId as string ?? "..."}`;
     case "get_subagent_session":
-      return `get_subagent_session → ${args.sessionId ?? "..."}`;
+      return `get_subagent_session → ${args.sessionId as string ?? "..."}`;
     case "list_subagent_profiles":
       return "list_subagent_profiles";
 
     // Workflow
     case "workflow_step": {
-      const action = args.action ?? "?";
+      const action = args.action as string ?? "?";
       return `workflow_step → ${action}`;
     }
 
     default: {
       const argsStr = JSON.stringify(args);
       const budget = widthBudget - toolName.length - 1;
-      if (argsStr === '{}') {return toolName;}
+      if (argsStr === "{}") {
+        return toolName;
+      }
       if (argsStr.length > budget) {
         return `${toolName} ${argsStr.slice(0, Math.max(0, budget - 3))}...`;
       }

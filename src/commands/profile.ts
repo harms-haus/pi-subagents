@@ -71,12 +71,18 @@ export function registerProfileCommand(pi: ExtensionAPI): void {
       if (sub === "create" || sub === "new") {
         const name = tokens[1];
         if (!(name && /^[a-zA-Z0-9_-]+$/.test(name))) {
-          ctx.ui.notify("Usage: /profile create <name>  (alphanumeric, hyphens, underscores)", "warning");
+          ctx.ui.notify(
+            "Usage: /profile create <name>  (alphanumeric, hyphens, underscores)",
+            "warning",
+          );
           return;
         }
         const profiles = await loadProfiles(ctx.cwd);
         if (profiles[name]) {
-          ctx.ui.notify(`Profile "${name}" already exists. Use /profile edit ${name} to modify it.`, "warning");
+          ctx.ui.notify(
+            `Profile "${name}" already exists. Use /profile edit ${name} to modify it.`,
+            "warning",
+          );
           return;
         }
         await editProfileInteractive(name, {}, ctx);
@@ -93,7 +99,10 @@ export function registerProfileCommand(pi: ExtensionAPI): void {
         const profiles = await loadProfiles(ctx.cwd);
         const profile = profiles[name];
         if (!profile) {
-          ctx.ui.notify(`Profile "${name}" not found. Use /profile create ${name} to create it.`, "error");
+          ctx.ui.notify(
+            `Profile "${name}" not found. Use /profile create ${name} to create it.`,
+            "error",
+          );
           return;
         }
         await editProfileInteractive(name, { ...profile }, ctx);
@@ -108,7 +117,9 @@ export function registerProfileCommand(pi: ExtensionAPI): void {
           return;
         }
         const ok = await ctx.ui.confirm("Delete profile?", `Delete subagent profile "${name}"?`);
-        if (!ok) {return;}
+        if (!ok) {
+          return;
+        }
         const deleted = await deleteProfile(name, "global");
         const deletedProject = await deleteProfile(name, "project", ctx.cwd);
         if (deleted || deletedProject) {
@@ -129,7 +140,10 @@ export function registerProfileCommand(pi: ExtensionAPI): void {
         }
       }
 
-      ctx.ui.notify("Usage: /profile [list|show <name>|create <name>|edit <name>|delete <name>]", "warning");
+      ctx.ui.notify(
+        "Usage: /profile [list|show <name>|create <name>|edit <name>|delete <name>]",
+        "warning",
+      );
     },
   });
 }

@@ -30,7 +30,9 @@ describe("stripAnsi", () => {
 
   it("should remove ANSI escape codes", () => {
     expect(stripAnsi("\u001b[31mhello\u001b[0m")).toBe("hello");
-    expect(stripAnsi("\u001b[31mred\u001b[0m text \u001b[32mgreen\u001b[0m")).toBe("red text green");
+    expect(stripAnsi("\u001b[31mred\u001b[0m text \u001b[32mgreen\u001b[0m")).toBe(
+      "red text green",
+    );
   });
 
   it("should handle empty string", () => {
@@ -38,7 +40,9 @@ describe("stripAnsi", () => {
   });
 
   it("should handle mixed ANSI and plain text", () => {
-    expect(stripAnsi("\u001b[31merror:\u001b[0m something went wrong")).toBe("error: something went wrong");
+    expect(stripAnsi("\u001b[31merror:\u001b[0m something went wrong")).toBe(
+      "error: something went wrong",
+    );
   });
 });
 
@@ -234,7 +238,9 @@ describe("mapWithConcurrencyLimit", () => {
   it("should reject if any item fails", async () => {
     await expect(
       mapWithConcurrencyLimit([1, 2, 3, 4], 2, async (item) => {
-        if (item === 3) {throw new Error("Item 3 failed");}
+        if (item === 3) {
+          throw new Error("Item 3 failed");
+        }
         return item * 2;
       }),
     ).rejects.toThrow("Item 3 failed");
@@ -741,9 +747,9 @@ describe("shortenPath", () => {
   });
 
   it("should return relative path for deeply nested child", () => {
-    expect(shortenPath("/home/user/project/src/utils/helpers/format.ts", "/home/user/project")).toBe(
-      "src/utils/helpers/format.ts",
-    );
+    expect(
+      shortenPath("/home/user/project/src/utils/helpers/format.ts", "/home/user/project"),
+    ).toBe("src/utils/helpers/format.ts");
   });
 
   it("should keep display path for parent directory when savings are small", () => {
@@ -787,12 +793,16 @@ describe("shortenPathsInText", () => {
 
   it("should shorten multiple paths in one command", () => {
     const cwd = "/home/user/project";
-    expect(shortenPathsInText("cp /home/user/project/a.txt /home/user/project/b.txt", cwd)).toBe("cp a.txt b.txt");
+    expect(shortenPathsInText("cp /home/user/project/a.txt /home/user/project/b.txt", cwd)).toBe(
+      "cp a.txt b.txt",
+    );
   });
 
   it("should not modify URLs", () => {
     const cwd = "/home/user/project";
-    expect(shortenPathsInText("curl https://example.com/api/data", cwd)).toBe("curl https://example.com/api/data");
+    expect(shortenPathsInText("curl https://example.com/api/data", cwd)).toBe(
+      "curl https://example.com/api/data",
+    );
   });
 
   it("should leave text without paths unchanged", () => {
@@ -816,11 +826,15 @@ describe("formatBashCommand", () => {
   });
 
   it("should truncate a single segment that exceeds the budget", () => {
-    expect(formatBashCommand("a-very-long-command-that-exceeds-the-budget", 20)).toBe("a-very-long-comma...");
+    expect(formatBashCommand("a-very-long-command-that-exceeds-the-budget", 20)).toBe(
+      "a-very-long-comma...",
+    );
   });
 
   it("should split on && when segments don't fit together", () => {
-    expect(formatBashCommand("short && long-command-exceeds-budget", 15)).toBe("short &&\n\u2502 long-command...");
+    expect(formatBashCommand("short && long-command-exceeds-budget", 15)).toBe(
+      "short &&\n\u2502 long-command...",
+    );
   });
 
   it("should split multiple && segments onto separate lines", () => {
@@ -828,9 +842,9 @@ describe("formatBashCommand", () => {
   });
 
   it("should truncate oversized segment in the middle with more after", () => {
-    expect(formatBashCommand("short && also-short && very-very-very-long-command && last", 25)).toBe(
-      "short && also-short &&\n\u2502 very-very-very-long-co... &&\n\u2502 last",
-    );
+    expect(
+      formatBashCommand("short && also-short && very-very-very-long-command && last", 25),
+    ).toBe("short && also-short &&\n\u2502 very-very-very-long-co... &&\n\u2502 last");
   });
 
   it("should truncate oversized segment at the end", () => {
@@ -848,7 +862,9 @@ describe("formatBashCommand", () => {
   });
 
   it("should truncate long command without && delimiters", () => {
-    expect(formatBashCommand("a-very-long-command-without-ampersands", 20)).toBe("a-very-long-comma...");
+    expect(formatBashCommand("a-very-long-command-without-ampersands", 20)).toBe(
+      "a-very-long-comma...",
+    );
   });
 
   it("should keep all segments on one line when they fit together", () => {
@@ -870,7 +886,9 @@ describe("collapseCdDot", () => {
   });
 
   it("should leave command unchanged when cd target differs from cwd", () => {
-    expect(collapseCdDot("cd /other/path && ls", "/home/user/project")).toBe("cd /other/path && ls");
+    expect(collapseCdDot("cd /other/path && ls", "/home/user/project")).toBe(
+      "cd /other/path && ls",
+    );
   });
 
   it("should leave command unchanged when not starting with cd", () => {

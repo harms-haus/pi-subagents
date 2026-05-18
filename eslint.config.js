@@ -1,58 +1,73 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
-import importPlugin from "eslint-plugin-import-x";
-import unicorn from "eslint-plugin-unicorn";
-import { fixupPluginRules } from "@eslint/compat";
+import prettierConfig from "eslint-config-prettier";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "**/*.js", "**/*.cjs", "**/*.mjs"] },
   eslint.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...tseslint.configs.strictTypeChecked,
+  prettierConfig,
   {
-    plugins: {
-      import: fixupPluginRules(importPlugin),
-      unicorn,
+    ignores: ["dist/", "node_modules/", "coverage/", "vitest.config.ts"],
+  },
+  {
+    files: ["src/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
-      // Core strict rules
       "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
-      "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
-      eqeqeq: ["error", "always"],
-      "prefer-template": "error",
-      "prefer-const": "error",
-      "no-var": "error",
-      curly: ["error", "all"],
-      "no-param-reassign": "off",
-      "no-console": "off",
-      // Import ordering
-      "import/order": ["error", { groups: ["builtin", "external", "internal", "parent", "sibling", "index", "type"], "newlines-between": "never", alphabetize: { order: "asc", caseInsensitive: true } }],
-      "import/no-duplicates": "error",
-      "import/no-cycle": "off",
-      "import/no-unresolved": "off",
-      // Unicorn
-      "unicorn/prefer-top-level-await": "off",
-      "unicorn/no-null": "off",
-      "unicorn/prevent-abbreviations": "off",
-      "unicorn/filename-case": ["error", { case: "kebabCase" }],
-      "unicorn/prefer-spread": "warn",
-      "unicorn/prefer-ternary": "warn",
-      "unicorn/consistent-function-scoping": "warn",
-      "unicorn/prefer-event-target": "off",
-    },
-    settings: {
-      "import/resolver": { typescript: true, node: true },
+      "@typescript-eslint/no-non-null-assertion": "error",
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+
+      "max-depth": ["warn", 5],
+      "max-lines-per-function": ["warn", { max: 100, skipBlankLines: true, skipComments: true }],
+      complexity: ["warn", 15],
+
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/no-unsafe-enum-comparison": "error",
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksConditionals: true, checksVoidReturn: true },
+      ],
+      "@typescript-eslint/no-unnecessary-condition": "warn",
+      "@typescript-eslint/restrict-template-expressions": [
+        "warn",
+        { allowNumber: true, allowBoolean: true },
+      ],
+      "@typescript-eslint/require-await": "warn",
     },
   },
-  // Relax rules for test files
   {
-    files: ["src/__tests__/**/*.test.ts"],
+    files: ["src/**/*.test.ts", "src/**/setup.ts", "src/**/helpers/*.ts"],
     rules: {
-      "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-explicit-any": "off",
-      "import/order": "off",
-      "unicorn/consistent-function-scoping": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/unbound-method": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksConditionals: false, checksVoidReturn: false },
+      ],
+      "max-lines-per-function": "off",
+      complexity: "off",
+      "max-depth": "off",
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/no-base-to-string": "off",
     },
   },
 );

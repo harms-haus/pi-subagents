@@ -8,7 +8,11 @@
 import { Container, Spacer, Text } from "@earendil-works/pi-tui";
 import { countWindowStatuses } from "../utils";
 import type { WindowedSubagentDetails, WindowLine } from "../types";
-import type { AgentToolResult, Theme, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
+import type {
+  AgentToolResult,
+  Theme,
+  ToolRenderResultOptions,
+} from "@earendil-works/pi-coding-agent";
 
 /**
  * Apply theme colors to specific patterns in tool call lines.
@@ -99,7 +103,7 @@ export function renderDelegateResult(
   theme: Theme,
   _context: unknown,
 ): Container | Text {
-  const details = result.details as WindowedSubagentDetails | undefined;
+  const details = result.details;
   if (!details) {
     return new Text("(no sub-agent details)", 0, 0);
   }
@@ -139,7 +143,8 @@ export function renderDelegateResult(
 
   for (const win of details.windows) {
     const icon = win.status === "running" ? "⏳" : win.status === "error" ? "✗" : "✓";
-    const color = win.status === "running" ? "warning" : win.status === "error" ? "error" : "success";
+    const color =
+      win.status === "running" ? "warning" : win.status === "error" ? "error" : "success";
 
     let headerLine = `${theme.fg(color, icon)} ${theme.fg("accent", theme.bold(win.name))}`;
 
@@ -209,7 +214,9 @@ export function renderDelegateResult(
   } else {
     // Show session IDs for retrieval
     const idLines = details.windows.map((w) => `  ${w.name}: ${theme.fg("accent", w.sessionId)}`);
-    container.addChild(new Text(theme.fg("dim", "Session IDs (use with get_subagent_output):"), 0, 0));
+    container.addChild(
+      new Text(theme.fg("dim", "Session IDs (use with get_subagent_output):"), 0, 0),
+    );
     for (const line of idLines) {
       container.addChild(new Text(`  ${line}`, 0, 0));
     }

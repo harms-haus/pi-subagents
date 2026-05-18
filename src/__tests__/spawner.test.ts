@@ -15,7 +15,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 
 // Mock profiles module — keep real implementations
 vi.mock("../profiles", async (importOriginal) => {
-    const actual = await importOriginal<typeof ProfilesModule>();
+  const actual = await importOriginal<typeof ProfilesModule>();
   return {
     ...actual,
   };
@@ -1145,7 +1145,8 @@ describe("spawner", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      const longDesc = "This is a very long todo description that should be truncated because it exceeds 48 chars";
+      const longDesc =
+        "This is a very long todo description that should be truncated because it exceeds 48 chars";
       await emitToolCall("edit_todos", {
         action: "add",
         indices: [0],
@@ -1153,7 +1154,9 @@ describe("spawner", () => {
       });
       const editLine = findToolLine("edit_todos");
       // The description is joined and truncated to 48 chars (45 chars + "...")
-      expect(editLine.text).toContain("edit_todos → This is a very long todo description that sho...");
+      expect(editLine.text).toContain(
+        "edit_todos → This is a very long todo description that sho...",
+      );
       // The full description should NOT appear
       expect(editLine.text).not.toContain("exceeds 48 chars");
 
@@ -1373,14 +1376,16 @@ describe("spawner", () => {
       const totalMessages = MAX_MESSAGES + 50;
       const chunks: string[] = [];
       for (let i = 0; i < totalMessages; i++) {
-        chunks.push(JSON.stringify({
-          type: "message_end",
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: `msg-${i}` }],
-            model: "test-model",
-          },
-        }));
+        chunks.push(
+          JSON.stringify({
+            type: "message_end",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: `msg-${i}` }],
+              model: "test-model",
+            },
+          }),
+        );
       }
       // Send all at once as a single data event with newline separators
       mockProcess.stdout.emit("data", Buffer.from(`${chunks.join("\n")}\n`));
@@ -1397,11 +1402,18 @@ describe("spawner", () => {
       // should be msg-51 (index 51), not msg-0
       // 550 messages emitted, 499 retained, so first retained is index 51
       const firstRetainedIndex = totalMessages - (MAX_MESSAGES - 1);
-      const firstMsgContent = (mockSession.messages[0].content as Array<{ type: string; text: string }>)?.[0]?.text;
+      const firstMsgContent = (
+        mockSession.messages[0].content as Array<{ type: string; text: string }>
+      )?.[0]?.text;
       expect(firstMsgContent).toBe(`msg-${firstRetainedIndex}`);
 
       // The last message should be the most recent
-      const lastMsgContent = (mockSession.messages[mockSession.messages.length - 1].content as Array<{ type: string; text: string }>)?.[0]?.text;
+      const lastMsgContent = (
+        mockSession.messages[mockSession.messages.length - 1].content as Array<{
+          type: string;
+          text: string;
+        }>
+      )?.[0]?.text;
       expect(lastMsgContent).toBe(`msg-${totalMessages - 1}`);
 
       mockProcess.emit("close", 0);
@@ -1480,7 +1492,7 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.90,
+        loopingToolSimilarity: 0.9,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1753,18 +1765,10 @@ describe("spawner", () => {
       vi.mocked(existsSync).mockReturnValue(true);
 
       // First save
-      await saveProfile(
-        "updatable",
-        { provider: "anthropic" },
-        "global",
-      );
+      await saveProfile("updatable", { provider: "anthropic" }, "global");
 
       // Second save with updated data
-      await saveProfile(
-        "updatable",
-        { provider: "openai", model: "gpt-4" },
-        "global",
-      );
+      await saveProfile("updatable", { provider: "openai", model: "gpt-4" }, "global");
 
       // writeFile should have been called twice to the same path
       const calls = vi.mocked(writeFile).mock.calls;
@@ -1783,18 +1787,12 @@ describe("spawner", () => {
       // Directory does not exist
       vi.mocked(existsSync).mockReturnValue(false);
 
-      await saveProfile(
-        "new-profile",
-        { provider: "anthropic" },
-        "project",
-        "/tmp/my-project",
-      );
+      await saveProfile("new-profile", { provider: "anthropic" }, "project", "/tmp/my-project");
 
       // mkdirSync should have been called with recursive: true
-      expect(mkdirSync).toHaveBeenCalledWith(
-        expect.stringContaining("agent-profiles"),
-        { recursive: true },
-      );
+      expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining("agent-profiles"), {
+        recursive: true,
+      });
 
       // writeFile should still be called
       expect(writeFile).toHaveBeenCalled();
@@ -1815,9 +1813,7 @@ describe("spawner", () => {
       const result = await deleteProfile("removable", "global");
 
       expect(result).toBe(true);
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringMatching(/agent-profiles\/removable\.md$/),
-      );
+      expect(unlink).toHaveBeenCalledWith(expect.stringMatching(/agent-profiles\/removable\.md$/));
     });
 
     it("returns false for non-existent profile", async () => {

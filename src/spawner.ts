@@ -11,10 +11,7 @@ import { formatToolCall } from "./format-tool-call";
 import { profileToArgs } from "./profiles";
 import { loadCommandPreviewWidth } from "./settings";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
-import {
-  appendLineToWindow,
-  getTextParts,
-} from "./utils";
+import { appendLineToWindow, getTextParts } from "./utils";
 import type { SubagentProfile } from "./profiles";
 import type { SubAgentTask, SubAgentWindow, SubagentSessionData, ToolCallPart } from "./types";
 import type { Message } from "@earendil-works/pi-ai";
@@ -26,8 +23,12 @@ import type { Message } from "@earendil-works/pi-ai";
  * Returns a value between 0 (completely different) and 1 (identical).
  */
 function bigramSimilarity(a: string, b: string): number {
-  if (a === b) { return 1; }
-  if (a.length < 2 || b.length < 2) { return 0; }
+  if (a === b) {
+    return 1;
+  }
+  if (a.length < 2 || b.length < 2) {
+    return 0;
+  }
 
   const bigramsA = new Map<string, number>();
   for (let i = 0; i < a.length - 1; i++) {
@@ -111,7 +112,9 @@ function handleStdoutLine(
   loopingToolCount: number,
   loopingToolSimilarity: number,
 ): { loopDetected: boolean } {
-  if (!line.trim()) { return { loopDetected: false }; }
+  if (!line.trim()) {
+    return { loopDetected: false };
+  }
 
   let event: { type?: string; message?: Message };
   try {
@@ -122,7 +125,9 @@ function handleStdoutLine(
     return { loopDetected: false };
   }
 
-  if (event.type !== "message_end" || !event.message) { return { loopDetected: false }; }
+  if (event.type !== "message_end" || !event.message) {
+    return { loopDetected: false };
+  }
 
   const msg = event.message;
   session.messages.push(msg);
@@ -165,7 +170,8 @@ function handleStdoutLine(
             if (editAction === "complete" && editIndices) {
               win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
             } else if (editAction === "add" && toolArgs.todos) {
-              win.todoTotal = (win.todoTotal ?? 0) + ((toolArgs.todos as unknown[] | undefined)?.length ?? 0);
+              win.todoTotal =
+                (win.todoTotal ?? 0) + ((toolArgs.todos as unknown[] | undefined)?.length ?? 0);
             } else if (editAction === "abandon" && editIndices) {
               win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
             }
@@ -222,9 +228,16 @@ function handleStdoutLine(
 /**
  * Process stderr data from the sub-agent process.
  */
-function handleStderrData(data: Buffer, win: SubAgentWindow, maxLines: number, onUpdate: () => void): void {
+function handleStderrData(
+  data: Buffer,
+  win: SubAgentWindow,
+  maxLines: number,
+  onUpdate: () => void,
+): void {
   const text = data.toString().trim();
-  if (!text) {return;}
+  if (!text) {
+    return;
+  }
 
   appendLineToWindow(win, `[stderr]: ${text}`, maxLines);
   onUpdate();
@@ -242,8 +255,12 @@ function handleProcessExit(
   processLineFn: (line: string) => void,
   onUpdate: () => void,
 ): void {
-  if (buffer.trim()) {processLineFn(buffer);}
-  if (bufferTimeout) {clearTimeout(bufferTimeout);}
+  if (buffer.trim()) {
+    processLineFn(buffer);
+  }
+  if (bufferTimeout) {
+    clearTimeout(bufferTimeout);
+  }
 
   const exitCode = code ?? 0;
   win.exitCode = exitCode;
@@ -265,7 +282,9 @@ function setupAbortHandler(proc: ReturnType<typeof spawn>, signal: AbortSignal):
   const killProc = () => {
     proc.kill("SIGTERM");
     setTimeout(() => {
-      if (!proc.killed) {proc.kill("SIGKILL");}
+      if (!proc.killed) {
+        proc.kill("SIGKILL");
+      }
     }, 5000);
   };
 
@@ -303,14 +322,15 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
     profileEnv = envVars;
   }
 
-
   let buffer = "";
   let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Debounced onUpdate to reduce TUI pressure
   const debouncedUpdate = () => {
-    if (bufferTimeout) {clearTimeout(bufferTimeout);}
-    bufferTimeout = setTimeout(() => onUpdate(), 50);
+    if (bufferTimeout) {
+      clearTimeout(bufferTimeout);
+    }
+    bufferTimeout = setTimeout(() => { onUpdate(); }, 50);
   };
 
   // Validate and resolve the cwd parameter
@@ -327,14 +347,23 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
     let loopDetectedFlag = false;
 
     const processLine = (line: string) => {
-      if (loopDetectedFlag) { return; }  // short-circuit after detection
+      if (loopDetectedFlag) {
+        return;
+      } // short-circuit after detection
       const result = handleStdoutLine(
-        line, win, maxLines, session, debouncedUpdate, resolvedCwd, lineBudget,
-        effectiveLoopingToolCount, effectiveLoopingToolSimilarity,
+        line,
+        win,
+        maxLines,
+        session,
+        debouncedUpdate,
+        resolvedCwd,
+        lineBudget,
+        effectiveLoopingToolCount,
+        effectiveLoopingToolSimilarity,
       );
       if (result.loopDetected) {
         loopDetectedFlag = true;
-        proc.kill("SIGTERM");  // kill the looping process immediately
+        proc.kill("SIGTERM"); // kill the looping process immediately
       }
     };
 
@@ -352,7 +381,9 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
     });
 
     const handleError = () => {
-      if (bufferTimeout) {clearTimeout(bufferTimeout);}
+      if (bufferTimeout) {
+        clearTimeout(bufferTimeout);
+      }
       win.exitCode = 1;
       win.status = "error";
       win.errorMessage = win.errorMessage || "Failed to spawn sub-agent process";
@@ -369,7 +400,12 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
     // Write prompt via stdin to avoid OS ARG_MAX limits
     proc.stdin.on("error", (err: NodeJS.ErrnoException) => {
       if (err.code !== "EPIPE" && err.code !== "ERR_STREAM_DESTROYED") {
-        handleStderrData(Buffer.from(`[stdin error]: ${err.message}`), win, maxLines, debouncedUpdate);
+        handleStderrData(
+          Buffer.from(`[stdin error]: ${err.message}`),
+          win,
+          maxLines,
+          debouncedUpdate,
+        );
       }
     });
     proc.stdin.end(task.prompt);

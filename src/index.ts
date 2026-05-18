@@ -55,7 +55,9 @@ export default function (pi: ExtensionAPI) {
             oldestKey = key;
           }
         }
-        if (oldestKey) {sessionStore.delete(oldestKey);}
+        if (oldestKey) {
+          sessionStore.delete(oldestKey);
+        }
       }
       sessionStore.set(session.sessionId, { runs: [session] });
     }
@@ -71,7 +73,7 @@ export default function (pi: ExtensionAPI) {
     return active;
   }
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", () => {
     sessionStore.clear();
   });
 

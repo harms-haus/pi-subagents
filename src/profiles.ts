@@ -26,18 +26,36 @@ import { type Dirent, existsSync, mkdirSync, readdirSync, readFileSync } from "n
 import { unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { parseFrontmatter, stripFrontmatter, loadSkills as discoverSkills } from "@earendil-works/pi-coding-agent";
+import {
+  parseFrontmatter,
+  stripFrontmatter,
+  loadSkills as discoverSkills,
+} from "@earendil-works/pi-coding-agent";
 export { profileSummary, formatProfileDetail } from "./profile-formatting";
 import { serializeProfileToMarkdown } from "./profile-formatting";
-import type { SubagentProfile, SubagentProfiles, ThinkingLevel, ProfileInvocation } from "./profile-types";
-export type { SubagentProfile, SubagentProfiles, ThinkingLevel, ProfileInvocation } from "./profile-types";
+import type {
+  SubagentProfile,
+  SubagentProfiles,
+  ThinkingLevel,
+  ProfileInvocation,
+} from "./profile-types";
+export type {
+  SubagentProfile,
+  SubagentProfiles,
+  ThinkingLevel,
+  ProfileInvocation,
+} from "./profile-types";
 
 // ── Profile Types ────────────────────────────────────────────────────
 // (Types moved to ./profile-types.ts)
 
 // ── Profile Cache ─────────────────────────────────────────────────────
 
-let profilesCache: { cwd: string | undefined; profiles: SubagentProfiles; timestamp: number } | null = null;
+let profilesCache: {
+  cwd: string | undefined;
+  profiles: SubagentProfiles;
+  timestamp: number;
+} | null = null;
 const CACHE_TTL = 5000; // 5 seconds
 
 export function invalidateProfilesCache(): void {
@@ -47,7 +65,9 @@ export function invalidateProfilesCache(): void {
 // ── Helpers for array/string frontmatter fields ──────────────────────
 
 function parseStringOrArray(value: unknown): string[] | undefined {
-  if (Array.isArray(value)) {return value.map(String);}
+  if (Array.isArray(value)) {
+    return value.map(String);
+  }
   if (typeof value === "string" && value.trim()) {
     return value
       .split(",")
@@ -77,15 +97,25 @@ export function getProfilesDir(scope: ProfileScope, cwd?: string): string {
 // ── Profile Tool Validation ───────────────────────────────────────────
 
 export function validateProfileTools(profile: SubagentProfile, profileName?: string): void {
-  if (profile.tools && profile.tools.length > 0 && profile.excludeTools && profile.excludeTools.length > 0) {
+  if (
+    profile.tools &&
+    profile.tools.length > 0 &&
+    profile.excludeTools &&
+    profile.excludeTools.length > 0
+  ) {
     throw new Error(
       `Profile${profileName ? ` "${profileName}"` : ""} has both "tools" (allowlist) and "excludeTools" (blacklist) set. These are mutually exclusive — choose one or the other.`,
     );
   }
 }
 
-export function applyExcludeTools(profile: SubagentProfile, allToolNames: string[]): SubagentProfile {
-  if (!profile.excludeTools || profile.excludeTools.length === 0) {return profile;}
+export function applyExcludeTools(
+  profile: SubagentProfile,
+  allToolNames: string[],
+): SubagentProfile {
+  if (!profile.excludeTools || profile.excludeTools.length === 0) {
+    return profile;
+  }
   const excludeSet = new Set(profile.excludeTools);
   const computedTools = allToolNames.filter((name) => !excludeSet.has(name));
   return { ...profile, tools: computedTools, excludeTools: undefined };
@@ -184,66 +214,107 @@ export function resolveProfileSkills(
 // ── Profile Loading from Markdown Files ──────────────────────────────
 
 function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
-  if (!existsSync(dir)) {return;}
+  if (!existsSync(dir)) {
+    return;
+  }
 
-  let entries: Dirent<string>[];
+  let entries: Dirent[];
   try {
-    entries = readdirSync(dir, { withFileTypes: true }) as Dirent<string>[];
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
     return;
   }
 
   for (const entry of entries) {
-    if (!(entry.isFile() && entry.name.endsWith(".md"))) {continue;}
+    if (!(entry.isFile() && entry.name.endsWith(".md"))) {
+      continue;
+    }
 
     const filePath = join(dir, entry.name);
     try {
       const content = readFileSync(filePath, "utf-8");
-      const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(content);
+      const { frontmatter, body } = parseFrontmatter(content);
 
       const name = frontmatter.name;
-      if (typeof name !== "string") {continue;}
-      if (!name) {continue;}
+      if (typeof name !== "string") {
+        continue;
+      }
+      if (!name) {
+        continue;
+      }
 
       const profile: SubagentProfile = {};
 
-      if (typeof frontmatter.provider === "string") {profile.provider = frontmatter.provider;}
-      if (typeof frontmatter.model === "string") {profile.model = frontmatter.model;}
-      if (typeof frontmatter.thinkingLevel === "string")
-        {profile.thinkingLevel = frontmatter.thinkingLevel as ThinkingLevel;}
-      if (typeof frontmatter.appendSystemPrompt === "string")
-        {profile.appendSystemPrompt = frontmatter.appendSystemPrompt;}
-      if (typeof frontmatter.apiKey === "string") {profile.apiKey = frontmatter.apiKey;}
+      if (typeof frontmatter.provider === "string") {
+        profile.provider = frontmatter.provider;
+      }
+      if (typeof frontmatter.model === "string") {
+        profile.model = frontmatter.model;
+      }
+      if (typeof frontmatter.thinkingLevel === "string") {
+        profile.thinkingLevel = frontmatter.thinkingLevel as ThinkingLevel;
+      }
+      if (typeof frontmatter.appendSystemPrompt === "string") {
+        profile.appendSystemPrompt = frontmatter.appendSystemPrompt;
+      }
+      if (typeof frontmatter.apiKey === "string") {
+        profile.apiKey = frontmatter.apiKey;
+      }
 
       const trimmedBody = body.trim();
-      if (trimmedBody) {profile.systemPrompt = trimmedBody;}
+      if (trimmedBody) {
+        profile.systemPrompt = trimmedBody;
+      }
 
       const tools = parseStringOrArray(frontmatter.tools);
-      if (tools) {profile.tools = tools;}
+      if (tools) {
+        profile.tools = tools;
+      }
 
       const excludeTools = parseStringOrArray(frontmatter.excludeTools);
-      if (excludeTools) {profile.excludeTools = excludeTools;}
+      if (excludeTools) {
+        profile.excludeTools = excludeTools;
+      }
 
-      if (frontmatter.noTools === true) {profile.noTools = true;}
-      if (frontmatter.noExtensions === true) {profile.noExtensions = true;}
-      if (frontmatter.noSkills === true) {profile.noSkills = true;}
-      if (frontmatter.noContextFiles === true) {profile.noContextFiles = true;}
+      if (frontmatter.noTools === true) {
+        profile.noTools = true;
+      }
+      if (frontmatter.noExtensions === true) {
+        profile.noExtensions = true;
+      }
+      if (frontmatter.noSkills === true) {
+        profile.noSkills = true;
+      }
+      if (frontmatter.noContextFiles === true) {
+        profile.noContextFiles = true;
+      }
 
       const extensions = parseStringOrArray(frontmatter.extensions);
-      if (extensions) {profile.extensions = extensions;}
+      if (extensions) {
+        profile.extensions = extensions;
+      }
 
       const extraArgs = parseStringOrArray(frontmatter.extraArgs);
-      if (extraArgs) {profile.extraArgs = extraArgs;}
+      if (extraArgs) {
+        profile.extraArgs = extraArgs;
+      }
 
       const suggestedSkills = parseStringOrArray(frontmatter.suggestedSkills);
-      if (suggestedSkills) {profile.suggestedSkills = suggestedSkills;}
+      if (suggestedSkills) {
+        profile.suggestedSkills = suggestedSkills;
+      }
 
       const loadSkillsField = parseStringOrArray(frontmatter.loadSkills);
-      if (loadSkillsField) {profile.loadSkills = loadSkillsField;}
+      if (loadSkillsField) {
+        profile.loadSkills = loadSkillsField;
+      }
 
       profiles[name] = profile;
     } catch (error) {
-      console.warn(`Failed to load profile from ${filePath}:`, error instanceof Error ? error.message : error);
+      console.warn(
+        `Failed to load profile from ${filePath}:`,
+        error instanceof Error ? error.message : error,
+      );
     }
   }
 }
@@ -278,7 +349,10 @@ export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
  * Resolve a profile name to a SubagentProfile, falling back to
  * agentOverrides for backward compatibility.
  */
-export function resolveProfile(profiles: SubagentProfiles, profileName: string): SubagentProfile | undefined {
+export function resolveProfile(
+  profiles: SubagentProfiles,
+  profileName: string,
+): SubagentProfile | undefined {
   // Intentional abstraction point for future backward-compatibility resolution
   return profiles[profileName];
 }
@@ -397,8 +471,6 @@ export function profileToArgs(profile: SubagentProfile): ProfileInvocation {
   return { args, env: envVars };
 }
 
-
-
 // ── Profile Mutation ─────────────────────────────────────────────────
 
 /**
@@ -410,7 +482,8 @@ export async function saveProfile(
   scope: ProfileScope,
   cwd?: string,
 ): Promise<void> {
-  const dir = scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
+  const dir =
+    scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -425,15 +498,20 @@ export async function saveProfile(
  * Delete a profile markdown file from the given scope.
  * Returns true if the profile existed and was deleted.
  */
-export async function deleteProfile(name: string, scope: ProfileScope, cwd?: string): Promise<boolean> {
-  const dir = scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
+export async function deleteProfile(
+  name: string,
+  scope: ProfileScope,
+  cwd?: string,
+): Promise<boolean> {
+  const dir =
+    scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
   const filePath = join(dir, `${name}.md`);
 
-  if (!existsSync(filePath)) {return false;}
+  if (!existsSync(filePath)) {
+    return false;
+  }
 
   await unlink(filePath);
   invalidateProfilesCache();
   return true;
 }
-
-

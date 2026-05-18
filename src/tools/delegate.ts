@@ -18,13 +18,28 @@ import {
   validateProfileSkills,
 } from "../profiles";
 import { DelegateParams } from "../schemas";
-import { loadExtendTimeoutDebounce, loadLoopingToolCount, loadLoopingToolSimilarity, loadMaxLinesPerWindow } from "../settings";
+import {
+  loadExtendTimeoutDebounce,
+  loadLoopingToolCount,
+  loadLoopingToolSimilarity,
+  loadMaxLinesPerWindow,
+} from "../settings";
 import { runSubAgent } from "../spawner";
-import { DEFAULT_TIMEOUT, formatRunsForResume, LOOP_DETECTED_MESSAGE, MAX_CONCURRENCY } from "../types";
+import {
+  DEFAULT_TIMEOUT,
+  formatRunsForResume,
+  LOOP_DETECTED_MESSAGE,
+  MAX_CONCURRENCY,
+} from "../types";
 import { getSummaryText, mapWithConcurrencyLimit } from "../utils";
 import { renderDelegateCall, renderDelegateResult } from "./delegate-render";
 import type { SubagentProfile } from "../profile-types";
-import type { SessionRecord, SubAgentWindow, SubagentSessionData, WindowedSubagentDetails } from "../types";
+import type {
+  SessionRecord,
+  SubAgentWindow,
+  SubagentSessionData,
+  WindowedSubagentDetails,
+} from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 /**
@@ -73,12 +88,14 @@ export function registerDelegateTool(
     ],
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const [maxLines, extendDebounce, loopingToolCount, loopingToolSimilarity] = await Promise.all([
-        loadMaxLinesPerWindow(ctx.cwd),
-        loadExtendTimeoutDebounce(ctx.cwd),
-        loadLoopingToolCount(ctx.cwd),
-        loadLoopingToolSimilarity(ctx.cwd),
-      ]);
+      const [maxLines, extendDebounce, loopingToolCount, loopingToolSimilarity] = await Promise.all(
+        [
+          loadMaxLinesPerWindow(ctx.cwd),
+          loadExtendTimeoutDebounce(ctx.cwd),
+          loadLoopingToolCount(ctx.cwd),
+          loadLoopingToolSimilarity(ctx.cwd),
+        ],
+      );
 
       // Load profiles from settings (global + project-local)
       const profiles = await loadProfiles(ctx.cwd);
@@ -111,24 +128,44 @@ export function registerDelegateTool(
       }
 
       // Cache skill discovery: call discoverSkills once if any profile needs skill resolution
-      let skillMap: Map<string, { filePath: string; name: string; description: string }> | undefined;
+      let skillMap:
+        | Map<string, { filePath: string; name: string; description: string }>
+        | undefined;
       const needsSkillResolution = resolvedProfiles.some(
         ({ profile }) => profile && (profile.suggestedSkills?.length || profile.loadSkills?.length),
       );
       if (needsSkillResolution) {
         const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
-        const discResult = discoverSkills({ cwd: ctx.cwd, agentDir, skillPaths: [], includeDefaults: true });
+        const discResult = discoverSkills({
+          cwd: ctx.cwd,
+          agentDir,
+          skillPaths: [],
+          includeDefaults: true,
+        });
         skillMap = new Map(discResult.skills.map((s) => [s.name, s]));
       }
 
       // Pre-resolve skills for each unique profile to avoid repeated file reads (E1+E2)
-      const skillResolvedProfiles = new Map<SubagentProfile, { ok: true; profile: SubagentProfile } | { ok: false; error: string }>();
+      const skillResolvedProfiles = new Map<
+        SubagentProfile,
+        { ok: true; profile: SubagentProfile } | { ok: false; error: string }
+      >();
       for (const { profile } of resolvedProfiles) {
-        if (profile && !skillResolvedProfiles.has(profile) && (profile.suggestedSkills?.length || profile.loadSkills?.length)) {
+        if (
+          profile &&
+          !skillResolvedProfiles.has(profile) &&
+          (profile.suggestedSkills?.length || profile.loadSkills?.length)
+        ) {
           try {
-            skillResolvedProfiles.set(profile, { ok: true, profile: resolveProfileSkills(profile, ctx.cwd, skillMap) });
+            skillResolvedProfiles.set(profile, {
+              ok: true,
+              profile: resolveProfileSkills(profile, ctx.cwd, skillMap),
+            });
           } catch (skillError) {
-            skillResolvedProfiles.set(profile, { ok: false, error: skillError instanceof Error ? skillError.message : String(skillError) });
+            skillResolvedProfiles.set(profile, {
+              ok: false,
+              error: skillError instanceof Error ? skillError.message : String(skillError),
+            });
           }
         }
       }
@@ -165,7 +202,9 @@ export function registerDelegateTool(
           exitCode: null,
           profileName: resolvedProfileName,
           profileInfo:
-            resolvedProfile && resolvedProfileName ? profileSummary(resolvedProfileName, resolvedProfile) : undefined,
+            resolvedProfile && resolvedProfileName
+              ? profileSummary(resolvedProfileName, resolvedProfile)
+              : undefined,
           provider: resolvedProfile?.provider,
           model: resolvedProfile?.model,
           thinkingLevel: resolvedProfile?.thinkingLevel,
@@ -175,7 +214,7 @@ export function registerDelegateTool(
           todoCompleted: undefined,
           toolCount: resolvedProfile?.noTools
             ? 0
-            : resolvedProfile?.tools?.length ?? allToolNames?.length ?? 0,
+            : (resolvedProfile?.tools?.length ?? allToolNames?.length ?? 0),
           recentToolCalls: [],
         };
       });
@@ -215,145 +254,153 @@ export function registerDelegateTool(
       };
 
       const timerInterval = setInterval(() => {
-        if (windows.some(w => w.status === "running")) {
+        if (windows.some((w) => w.status === "running")) {
           emitUpdate();
         }
       }, 1000);
 
       try {
-      await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (task, index) => {
-        const win = windows[index];
-        const session = sessions[index];
-        const resolvedProfileName = resolvedProfiles[index].name;
-        const resolvedProfile = resolvedProfiles[index].profile;
+        await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (task, index) => {
+          const win = windows[index];
+          const session = sessions[index];
+          const resolvedProfileName = resolvedProfiles[index].name;
+          const resolvedProfile = resolvedProfiles[index].profile;
 
-        if (resolvedProfileName && !resolvedProfile) {
-          win.status = "error";
-          session.status = "error";
-          win.errorMessage = `Unknown profile: "${resolvedProfileName}". Available profiles: ${Object.keys(profiles).join(", ") || "(none)"}`;
-          session.errorMessage = win.errorMessage;
-          win.exitCode = 1;
-          session.exitCode = 1;
-          emitUpdate();
-          return;
-        }
-
-        // Look up pre-resolved skills for this profile (resolved once per unique profile above)
-        let skillResolvedProfile = resolvedProfile;
-        if (resolvedProfile?.suggestedSkills?.length || resolvedProfile?.loadSkills?.length) {
-          const result = skillResolvedProfiles.get(resolvedProfile);
-          if (!result || !result.ok) {
+          if (resolvedProfileName && !resolvedProfile) {
             win.status = "error";
             session.status = "error";
-            win.errorMessage = result?.error ?? "Skill resolution failed";
+            win.errorMessage = `Unknown profile: "${resolvedProfileName}". Available profiles: ${Object.keys(profiles).join(", ") || "(none)"}`;
             session.errorMessage = win.errorMessage;
             win.exitCode = 1;
             session.exitCode = 1;
             emitUpdate();
             return;
           }
-          skillResolvedProfile = result.profile;
-        }
 
-        // Format prompt for resume if applicable
-        let effectivePrompt = task.prompt;
-        if (task.resume) {
-          const record = sessionStore.get(task.resume);
-          if (record) {
-            const previousData = formatRunsForResume(record.runs);
-            effectivePrompt = `Previously:\n\n${previousData}\n\nInstructions:\n\n${task.prompt}`;
+          // Look up pre-resolved skills for this profile (resolved once per unique profile above)
+          let skillResolvedProfile = resolvedProfile;
+          if (resolvedProfile?.suggestedSkills?.length || resolvedProfile?.loadSkills?.length) {
+            const result = skillResolvedProfiles.get(resolvedProfile);
+            if (!result || !result.ok) {
+              win.status = "error";
+              session.status = "error";
+              win.errorMessage = result?.error ?? "Skill resolution failed";
+              session.errorMessage = win.errorMessage;
+              win.exitCode = 1;
+              session.exitCode = 1;
+              emitUpdate();
+              return;
+            }
+            skillResolvedProfile = result.profile;
           }
-        }
 
-        const effectiveTask = { ...task, prompt: effectivePrompt };
+          // Format prompt for resume if applicable
+          let effectivePrompt = task.prompt;
+          if (task.resume) {
+            const record = sessionStore.get(task.resume);
+            if (record) {
+              const previousData = formatRunsForResume(record.runs);
+              effectivePrompt = `Previously:\n\n${previousData}\n\nInstructions:\n\n${task.prompt}`;
+            }
+          }
 
-        // Create per-task timeout
-        const taskTimeout = Math.max(1, task.timeout ?? DEFAULT_TIMEOUT);
-        const taskAbortController = new AbortController();
+          const effectiveTask = { ...task, prompt: effectivePrompt };
 
-        // Two-timer approach for timeout extension:
-        // Timer 1 (originalTimeout): Fires at taskTimeout. Does NOT abort — just starts the idle timer.
-        // Timer 2 (idleTimer): Fires after extendDebounce seconds of no activity. This IS the abort.
-        let originalTimeoutElapsed = false;
-        let idleTimer: ReturnType<typeof setTimeout> | null = null;
+          // Create per-task timeout
+          const taskTimeout = Math.max(1, task.timeout ?? DEFAULT_TIMEOUT);
+          const taskAbortController = new AbortController();
 
-        const taskAbortTimeout = setTimeout(() => {
-          originalTimeoutElapsed = true;
-          idleTimer = setTimeout(() => {
+          // Two-timer approach for timeout extension:
+          // Timer 1 (originalTimeout): Fires at taskTimeout. Does NOT abort — just starts the idle timer.
+          // Timer 2 (idleTimer): Fires after extendDebounce seconds of no activity. This IS the abort.
+          let originalTimeoutElapsed = false;
+          let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+          const taskAbortTimeout = setTimeout(() => {
+            originalTimeoutElapsed = true;
+            idleTimer = setTimeout(() => {
+              taskAbortController.abort();
+            }, extendDebounce * 1000);
+          }, taskTimeout * 1000);
+
+          // Reset idle timer on activity (called by wrappedEmitUpdate)
+          const resetIdleTimer = () => {
+            if (!originalTimeoutElapsed) {
+              return;
+            }
+            if (idleTimer) {
+              clearTimeout(idleTimer);
+            }
+            idleTimer = setTimeout(() => {
+              taskAbortController.abort();
+            }, extendDebounce * 1000);
+          };
+
+          // Forward parent signal to task controller
+          const onParentAbort = () => { taskAbortController.abort(); };
+          if (signal?.aborted) {
             taskAbortController.abort();
-          }, extendDebounce * 1000);
-        }, taskTimeout * 1000);
+          } else if (signal) {
+            signal.addEventListener("abort", onParentAbort, { once: true });
+          }
 
-        // Reset idle timer on activity (called by wrappedEmitUpdate)
-        const resetIdleTimer = () => {
-          if (!originalTimeoutElapsed) { return; }
-          if (idleTimer) { clearTimeout(idleTimer); }
-          idleTimer = setTimeout(() => {
+          // Wrap emitUpdate to reset idle timer on any output activity
+          const wrappedEmitUpdate = () => {
+            emitUpdate();
+            resetIdleTimer();
+          };
+
+          // eslint-disable-next-line no-useless-assignment
+          let loopDetected = false;
+
+          try {
+            const result = await runSubAgent({
+              task: effectiveTask,
+              win,
+              maxLines,
+              signal: taskAbortController.signal,
+              onUpdate: wrappedEmitUpdate,
+              session,
+              profile: skillResolvedProfile,
+              loopingToolCount,
+              loopingToolSimilarity,
+            });
+            loopDetected = result.loopDetected;
+          } finally {
+            clearTimeout(taskAbortTimeout);
+            if (idleTimer) {
+              clearTimeout(idleTimer);
+            }
+            if (signal) {
+              signal.removeEventListener("abort", onParentAbort);
+            }
+          }
+
+          // Handle loop detection kill
+          if (loopDetected) {
+            win.status = "error";
+            session.status = "error";
+            win.errorMessage = LOOP_DETECTED_MESSAGE;
+            session.errorMessage = LOOP_DETECTED_MESSAGE;
+            win.exitCode = 1;
+            session.exitCode = 1;
+            win.completedAt = Date.now();
             taskAbortController.abort();
-          }, extendDebounce * 1000);
-        };
+            emitUpdate();
+          }
 
-        // Forward parent signal to task controller
-        const onParentAbort = () => taskAbortController.abort();
-        if (signal?.aborted) {
-          taskAbortController.abort();
-        } else if (signal) {
-          signal.addEventListener("abort", onParentAbort, { once: true });
-        }
-
-        // Wrap emitUpdate to reset idle timer on any output activity
-        const wrappedEmitUpdate = () => {
-          emitUpdate();
-          resetIdleTimer();
-        };
-
-        // eslint-disable-next-line no-useless-assignment
-        let loopDetected = false;
-
-        try {
-          const result = await runSubAgent({
-            task: effectiveTask,
-            win,
-            maxLines,
-            signal: taskAbortController.signal,
-            onUpdate: wrappedEmitUpdate,
-            session,
-            profile: skillResolvedProfile,
-            loopingToolCount,
-            loopingToolSimilarity,
-          });
-          loopDetected = result.loopDetected;
-        } finally {
-          clearTimeout(taskAbortTimeout);
-          if (idleTimer) { clearTimeout(idleTimer); }
-          if (signal) { signal.removeEventListener("abort", onParentAbort); }
-        }
-
-        // Handle loop detection kill
-        if (loopDetected) {
-          win.status = "error";
-          session.status = "error";
-          win.errorMessage = LOOP_DETECTED_MESSAGE;
-          session.errorMessage = LOOP_DETECTED_MESSAGE;
-          win.exitCode = 1;
-          session.exitCode = 1;
-          win.completedAt = Date.now();
-          taskAbortController.abort();
-          emitUpdate();
-        }
-
-        // Check if timeout caused the abort (not loop detection, not parent abort)
-        if (!loopDetected && taskAbortController.signal.aborted && !signal?.aborted) {
-          win.status = "error";
-          session.status = "error";
-          win.errorMessage = `Timed out after ${taskTimeout}s. Consider resuming with a longer timeout.`;
-          session.errorMessage = win.errorMessage;
-          win.exitCode = 1;
-          session.exitCode = 1;
-          win.completedAt = Date.now();
-          emitUpdate();
-        }
-      });
+          // Check if timeout caused the abort (not loop detection, not parent abort)
+          if (!loopDetected && taskAbortController.signal.aborted && !signal?.aborted) {
+            win.status = "error";
+            session.status = "error";
+            win.errorMessage = `Timed out after ${taskTimeout}s. Consider resuming with a longer timeout.`;
+            session.errorMessage = win.errorMessage;
+            win.exitCode = 1;
+            session.exitCode = 1;
+            win.completedAt = Date.now();
+            emitUpdate();
+          }
+        });
       } finally {
         clearInterval(timerInterval);
       }

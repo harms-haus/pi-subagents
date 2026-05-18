@@ -120,8 +120,6 @@ describe("TaskSchema", () => {
     const result = Value.Check(TaskSchema, task);
     expect(result).toBe(true);
   });
-
-
 });
 
 describe("TaskSchema - timeout and resume fields", () => {
@@ -309,6 +307,4 @@ describe("DelegateParams", () => {
     const result = Value.Check(DelegateParams, params);
     expect(result).toBe(false);
   });
-
-
 });

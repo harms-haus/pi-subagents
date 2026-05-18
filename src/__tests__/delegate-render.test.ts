@@ -334,7 +334,9 @@ describe("delegate_to_subagents render functions", () => {
       // Tool lines should use "muted" color
       const fgCalls = vi.mocked(theme.fg).mock.calls;
       const mutedCalls = fgCalls.filter((c: [string, string]) => c[0] === "muted");
-      expect(mutedCalls.some((c: [string, string]) => (c[1] as string).includes("tool invocation"))).toBe(true);
+      expect(
+        mutedCalls.some((c: [string, string]) => (c[1]).includes("tool invocation")),
+      ).toBe(true);
     });
 
     it("renders expanded mode (all messages - win.allMessages)", () => {

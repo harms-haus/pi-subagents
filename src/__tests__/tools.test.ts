@@ -46,8 +46,16 @@ vi.mock("../profiles", () => ({
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   resolveProfileSkills: vi.fn((profile: unknown) => profile),
-  validateProfileTools: (profile: { tools?: string[]; excludeTools?: string[] }, profileName?: string) => {
-    if (profile.tools && profile.tools.length > 0 && profile.excludeTools && profile.excludeTools.length > 0) {
+  validateProfileTools: (
+    profile: { tools?: string[]; excludeTools?: string[] },
+    profileName?: string,
+  ) => {
+    if (
+      profile.tools &&
+      profile.tools.length > 0 &&
+      profile.excludeTools &&
+      profile.excludeTools.length > 0
+    ) {
       throw new Error(
         `Profile${profileName ? ` "${profileName}"` : ""} has both "tools" (allowlist) and "excludeTools" (blacklist) set. These are mutually exclusive — choose one or the other.`,
       );
@@ -56,7 +64,9 @@ vi.mock("../profiles", () => ({
   validateProfileSkills: vi.fn(),
   applyExcludeTools: (profile: Record<string, unknown>, allToolNames: string[]) => {
     const excludeTools = profile.excludeTools as string[] | undefined;
-    if (!excludeTools || excludeTools.length === 0) {return profile;}
+    if (!excludeTools || excludeTools.length === 0) {
+      return profile;
+    }
     const excludeSet = new Set(excludeTools);
     const computedTools = allToolNames.filter((name) => !excludeSet.has(name));
     return { ...profile, tools: computedTools, excludeTools: undefined };
@@ -120,7 +130,9 @@ describe("tools", () => {
 
         expect(mockPi.registerTool).toHaveBeenCalledTimes(3);
 
-        const toolNames = vi.mocked(mockPi.registerTool).mock.calls.map((call: [{ name: string }]) => call[0].name);
+        const toolNames = vi
+          .mocked(mockPi.registerTool)
+          .mock.calls.map((call: [{ name: string }]) => call[0].name);
         expect(toolNames).toContain("get_subagent_output");
         expect(toolNames).toContain("get_subagent_session");
         expect(toolNames).toContain("list_subagent_profiles");
@@ -191,7 +203,13 @@ describe("tools", () => {
         if (!executeFn) {
           throw new Error("Tool not registered");
         }
-        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any);
+        const result = await executeFn(
+          "tool-call-id",
+          { sessionId: "test-session" },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
 
         expect(result.content[0].type).toBe("text");
         expect((result.content[0] as { text: string }).text).toBe("Final output from sub-agent");
@@ -212,7 +230,9 @@ describe("tools", () => {
         }
 
         await expect(
-          executeFn("tool-call-id", { sessionId: "non-existent-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any),
+          executeFn("tool-call-id", { sessionId: "non-existent-session" }, undefined, vi.fn(), {
+            cwd: process.cwd(),
+          } as any),
         ).rejects.toThrow('Session "non-existent-session" not found');
       });
 
@@ -238,9 +258,17 @@ describe("tools", () => {
         if (!executeFn) {
           throw new Error("Tool not registered");
         }
-        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any);
+        const result = await executeFn(
+          "tool-call-id",
+          { sessionId: "test-session" },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
 
-        expect((result.content[0] as { text: string }).text).toBe("(no text output from sub-agent)");
+        expect((result.content[0] as { text: string }).text).toBe(
+          "(no text output from sub-agent)",
+        );
       });
     });
 
@@ -280,7 +308,13 @@ describe("tools", () => {
         if (!executeFn) {
           throw new Error("Tool not registered");
         }
-        const result = await executeFn("tool-call-id", { sessionId: "test-session" }, undefined, vi.fn(), { cwd: process.cwd() } as any);
+        const result = await executeFn(
+          "tool-call-id",
+          { sessionId: "test-session" },
+          undefined,
+          vi.fn(),
+          { cwd: process.cwd() } as any,
+        );
 
         expect(result.content[0].type).toBe("text");
         expect((result.content[0] as { text: string }).text).toContain("First response");
@@ -299,9 +333,11 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        await expect(executeFn("tool-call-id", { sessionId: "non-existent" }, undefined, vi.fn(), { cwd: process.cwd() } as any)).rejects.toThrow(
-          'Session "non-existent" not found',
-        );
+        await expect(
+          executeFn("tool-call-id", { sessionId: "non-existent" }, undefined, vi.fn(), {
+            cwd: process.cwd(),
+          } as any),
+        ).rejects.toThrow('Session "non-existent" not found');
       });
     });
 
@@ -486,7 +522,26 @@ describe("tools", () => {
         const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
 
         // Mock getAllTools to return a set of tools
-        vi.mocked(mockPi.getAllTools).mockReturnValue([{ name: "read", description: "", parameters: {} as any, sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" } }, { name: "bash", description: "", parameters: {} as any, sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" } }, { name: "write", description: "", parameters: {} as any, sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" } }]);
+        vi.mocked(mockPi.getAllTools).mockReturnValue([
+          {
+            name: "read",
+            description: "",
+            parameters: {},
+            sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" },
+          },
+          {
+            name: "bash",
+            description: "",
+            parameters: {},
+            sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" },
+          },
+          {
+            name: "write",
+            description: "",
+            parameters: {},
+            sourceInfo: { path: "", source: "", scope: "user", origin: "top-level" },
+          },
+        ]);
 
         // Mock resolveProfile to return a profile with excludeTools
         vi.mocked(resolveProfile).mockReturnValue({
@@ -889,7 +944,9 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), { cwd: process.cwd() } as any);
+        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), {
+          cwd: process.cwd(),
+        } as any);
 
         expect((result.content[0] as { text: string }).text).toBe("Second run output");
       });
@@ -940,7 +997,9 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), { cwd: process.cwd() } as any);
+        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), {
+          cwd: process.cwd(),
+        } as any);
 
         expect((result.content[0] as { text: string }).text).toContain("Run 1/2");
         expect((result.content[0] as { text: string }).text).toContain("Run 2/2");
@@ -982,7 +1041,9 @@ describe("tools", () => {
           throw new Error("Tool not registered");
         }
 
-        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), { cwd: process.cwd() } as any);
+        const result = await executeFn("tool-call-id", { sessionId }, undefined, vi.fn(), {
+          cwd: process.cwd(),
+        } as any);
 
         expect((result.details as any).runCount).toBe(2);
       });
@@ -1027,7 +1088,9 @@ describe("tools", () => {
             resolve({ loopDetected: false });
             return;
           }
-          opts.signal?.addEventListener("abort", () => resolve({ loopDetected: false }), { once: true });
+          opts.signal?.addEventListener("abort", () => { resolve({ loopDetected: false }); }, {
+            once: true,
+          });
         });
       });
 
@@ -1140,7 +1203,9 @@ describe("tools", () => {
       vi.mocked(runSubAgent).mockResolvedValue({ loopDetected: false });
       // Reset skill mocks to defaults and clear call history
       vi.mocked(resolveProfileSkills).mockClear();
-      vi.mocked(resolveProfileSkills).mockImplementation((profile: unknown) => profile as Record<string, unknown>);
+      vi.mocked(resolveProfileSkills).mockImplementation(
+        (profile: unknown) => profile as Record<string, unknown>,
+      );
       vi.mocked(validateProfileSkills).mockClear();
       vi.mocked(validateProfileSkills).mockImplementation(() => {});
     });
@@ -1172,7 +1237,7 @@ describe("tools", () => {
         return {
           ...p,
           suggestedSkills: ["/skills/my-skill/SKILL.md"],
-        } as Record<string, unknown>;
+        };
       });
 
       const executeFn = await getDelegateExecute();
@@ -1269,14 +1334,16 @@ describe("tools", () => {
         noSkills: true,
       });
 
-      vi.mocked(validateProfileSkills).mockImplementation((profile: unknown, profileName?: string) => {
-        const p = profile as Record<string, unknown>;
-        if (p.suggestedSkills && p.noSkills) {
-          throw new Error(
-            `Profile${profileName ? ` "${profileName}"` : ""} has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.`,
-          );
-        }
-      });
+      vi.mocked(validateProfileSkills).mockImplementation(
+        (profile: unknown, profileName?: string) => {
+          const p = profile as Record<string, unknown>;
+          if (p.suggestedSkills && p.noSkills) {
+            throw new Error(
+              `Profile${profileName ? ` "${profileName}"` : ""} has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.`,
+            );
+          }
+        },
+      );
 
       const executeFn = await getDelegateExecute();
 
@@ -1526,7 +1593,7 @@ describe("tools", () => {
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
         .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
-        expect(toolRegistration).toBeDefined();
+      expect(toolRegistration).toBeDefined();
 
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) {

@@ -34,7 +34,9 @@ export function appendLineToWindow(
   kind: "text" | "tool" = "text",
 ): void {
   const clean = stripAnsi(line).trimEnd();
-  if (!clean) {return;}
+  if (!clean) {
+    return;
+  }
   const entry = { text: clean, kind };
   win.lines.push(entry);
   while (win.lines.length > maxLines) {
@@ -53,7 +55,9 @@ export function appendLineToWindow(
  * Returns an array of text strings from the message content.
  */
 export function getTextParts(msg: Message): string[] {
-  if (msg.role !== "assistant" || !msg.content) {return [];}
+  if (msg.role !== "assistant" || !msg.content) {
+    return [];
+  }
   const parts: string[] = [];
   for (const part of msg.content) {
     if (part.type === "text") {
@@ -70,7 +74,9 @@ export function getTextParts(msg: Message): string[] {
 export function getLastAssistantText(messages: Message[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const parts = getTextParts(messages[i]);
-    if (parts.length > 0) {return parts[0];}
+    if (parts.length > 0) {
+      return parts[0];
+    }
   }
   return "";
 }
@@ -99,9 +105,15 @@ export function countWindowStatuses(windows: SubAgentWindow[]): {
 export function getSummaryText(windows: SubAgentWindow[]): string {
   const { running, completed: done, error: errors } = countWindowStatuses(windows);
   const parts: string[] = [];
-  if (running > 0) {parts.push(`${running} running`);}
-  if (done > 0) {parts.push(`${done} done`);}
-  if (errors > 0) {parts.push(`${errors} error${errors > 1 ? "s" : ""}`);}
+  if (running > 0) {
+    parts.push(`${running} running`);
+  }
+  if (done > 0) {
+    parts.push(`${done} done`);
+  }
+  if (errors > 0) {
+    parts.push(`${errors} error${errors > 1 ? "s" : ""}`);
+  }
   return parts.join(", ") || "processing...";
 }
 
@@ -116,14 +128,18 @@ export async function mapWithConcurrencyLimit<TIn, TOut>(
   concurrency: number,
   fn: (item: TIn, index: number) => Promise<TOut>,
 ): Promise<TOut[]> {
-  if (items.length === 0) {return [];}
+  if (items.length === 0) {
+    return [];
+  }
   const limit = Math.max(1, Math.min(concurrency, items.length));
-  const results: TOut[] = new Array(items.length);
+  const results: TOut[] = new Array<TOut>(items.length);
   let nextIndex = 0;
   const workers = new Array(limit).fill(null).map(async () => {
     while (true) {
       const current = nextIndex++;
-      if (current >= items.length) {return;}
+      if (current >= items.length) {
+        return;
+      }
       results[current] = await fn(items[current], current);
     }
   });

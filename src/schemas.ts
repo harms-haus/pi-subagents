@@ -16,10 +16,13 @@ export const TaskSchema = Type.Object({
   cwd: Type.Optional(Type.String({ description: "Working directory for this sub-agent" })),
   profile: Type.Optional(
     Type.String({
-      description: "Named subagent profile from settings (sets provider/model, system prompt, thinking level, etc.)",
+      description:
+        "Named subagent profile from settings (sets provider/model, system prompt, thinking level, etc.)",
     }),
   ),
-  timeout: Type.Optional(Type.Number({ description: "Timeout in seconds for this subagent (default 600)" })),
+  timeout: Type.Optional(
+    Type.Number({ description: "Timeout in seconds for this subagent (default 600)" }),
+  ),
   resume: Type.Optional(Type.String({ description: "Previous session ID to resume from" })),
 });
 

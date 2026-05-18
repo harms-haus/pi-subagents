@@ -6,11 +6,7 @@
  */
 import { EventEmitter } from "node:events";
 import { vi } from "vitest";
-import type {
-	SubAgentWindow,
-	SubagentSessionData,
-	WindowedSubagentDetails,
-} from "../types";
+import type { SubAgentWindow, SubagentSessionData, WindowedSubagentDetails } from "../types";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 
 // ─── createMockPi ───────────────────────────────────────────────────
@@ -21,20 +17,18 @@ import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
  * Create a minimal mock ExtensionAPI with sensible defaults.
  * Pass `overrides` to replace or extend any property.
  */
-export function createMockPi(
-	overrides: Partial<ExtensionAPI> = {},
-): ExtensionAPI {
-	return {
-		registerTool: vi.fn(),
-		registerCommand: vi.fn(),
-		on: vi.fn(),
-		getAllTools: vi.fn().mockReturnValue([]),
-		ui: {
-			notify: vi.fn(),
-			confirm: vi.fn(),
-		},
-		...overrides,
-	} as unknown as ExtensionAPI;
+export function createMockPi(overrides: Partial<ExtensionAPI> = {}): ExtensionAPI {
+  return {
+    registerTool: vi.fn(),
+    registerCommand: vi.fn(),
+    on: vi.fn(),
+    getAllTools: vi.fn().mockReturnValue([]),
+    ui: {
+      notify: vi.fn(),
+      confirm: vi.fn(),
+    },
+    ...overrides,
+  } as unknown as ExtensionAPI;
 }
 
 // ─── makeSession ────────────────────────────────────────────────────
@@ -45,20 +39,18 @@ export function createMockPi(
  * Factory for SubagentSessionData with sensible defaults.
  * Override any field via `overrides`.
  */
-export function makeSession(
-	overrides: Partial<SubagentSessionData> = {},
-): SubagentSessionData {
-	return {
-		sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
-		taskName: "test-task",
-		prompt: "test prompt",
-		cwd: "/tmp",
-		status: "completed",
-		messages: [],
-		exitCode: 0,
-		startedAt: Date.now(),
-		...overrides,
-	};
+export function makeSession(overrides: Partial<SubagentSessionData> = {}): SubagentSessionData {
+  return {
+    sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
+    taskName: "test-task",
+    prompt: "test prompt",
+    cwd: "/tmp",
+    status: "completed",
+    messages: [],
+    exitCode: 0,
+    startedAt: Date.now(),
+    ...overrides,
+  };
 }
 
 // ─── makeWindow ─────────────────────────────────────────────────────
@@ -69,21 +61,19 @@ export function makeSession(
  * Factory for SubAgentWindow with sensible defaults.
  * Override any field via `overrides`.
  */
-export function makeWindow(
-	overrides: Partial<SubAgentWindow> = {},
-): SubAgentWindow {
-	return {
-		sessionId: "session-abc123",
-		name: "test-window",
-		status: "running",
-		lines: [],
-		allMessages: [],
-		exitCode: null,
-		startedAt: Date.now(),
-		timeout: 600,
-		toolCount: 0,
-		...overrides,
-	};
+export function makeWindow(overrides: Partial<SubAgentWindow> = {}): SubAgentWindow {
+  return {
+    sessionId: "session-abc123",
+    name: "test-window",
+    status: "running",
+    lines: [],
+    allMessages: [],
+    exitCode: null,
+    startedAt: Date.now(),
+    timeout: 600,
+    toolCount: 0,
+    ...overrides,
+  };
 }
 
 // ─── makeDetails ────────────────────────────────────────────────────
@@ -94,15 +84,15 @@ export function makeWindow(
  * Override any field via `overrides`.
  */
 export function makeDetails(
-	overrides: Partial<WindowedSubagentDetails> = {},
+  overrides: Partial<WindowedSubagentDetails> = {},
 ): WindowedSubagentDetails {
-	return {
-		windows: [],
-		maxLinesPerWindow: 15,
-		globalStatus: "running",
-		sessionIds: [],
-		...overrides,
-	};
+  return {
+    windows: [],
+    maxLinesPerWindow: 15,
+    globalStatus: "running",
+    sessionIds: [],
+    ...overrides,
+  };
 }
 
 // ─── createMockProcess ──────────────────────────────────────────────
@@ -110,14 +100,14 @@ export function makeDetails(
 
 /** Type for the mock ChildProcess returned by createMockProcess */
 export type MockChildProcess = EventEmitter & {
-	stdout: EventEmitter;
-	stderr: EventEmitter;
-	stdin: EventEmitter & {
-		write: ReturnType<typeof vi.fn>;
-		end: ReturnType<typeof vi.fn>;
-	};
-	killed: boolean;
-	kill: ReturnType<typeof vi.fn>;
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  stdin: EventEmitter & {
+    write: ReturnType<typeof vi.fn>;
+    end: ReturnType<typeof vi.fn>;
+  };
+  killed: boolean;
+  kill: ReturnType<typeof vi.fn>;
 };
 
 /**
@@ -125,19 +115,19 @@ export type MockChildProcess = EventEmitter & {
  * The `kill` mock emits "exit" with code 0 for SIGTERM and 1 otherwise.
  */
 export function createMockProcess(): MockChildProcess {
-	const proc = new EventEmitter() as MockChildProcess;
-	proc.stdout = new EventEmitter();
-	proc.stderr = new EventEmitter();
-	proc.stdin = Object.assign(new EventEmitter(), {
-		write: vi.fn(),
-		end: vi.fn(),
-	}) as MockChildProcess["stdin"];
-	proc.killed = false;
-	proc.kill = vi.fn((signal: string) => {
-		proc.killed = true;
-		proc.emit("exit", signal === "SIGTERM" ? 0 : 1);
-	});
-	return proc;
+  const proc = new EventEmitter() as MockChildProcess;
+  proc.stdout = new EventEmitter();
+  proc.stderr = new EventEmitter();
+  proc.stdin = Object.assign(new EventEmitter(), {
+    write: vi.fn(),
+    end: vi.fn(),
+  });
+  proc.killed = false;
+  proc.kill = vi.fn((signal: string) => {
+    proc.killed = true;
+    proc.emit("exit", signal === "SIGTERM" ? 0 : 1);
+  });
+  return proc;
 }
 
 // ─── createMockTheme ────────────────────────────────────────────────
@@ -148,8 +138,8 @@ export function createMockProcess(): MockChildProcess {
  * Useful for testing that theme methods are called with correct arguments.
  */
 export function createMockTheme(): Theme {
-	return {
-		fg: vi.fn((_color: string, text: string) => text),
-		bold: vi.fn((text: string) => text),
-	} as unknown as Theme;
+  return {
+    fg: vi.fn((_color: string, text: string) => text),
+    bold: vi.fn((text: string) => text),
+  } as unknown as Theme;
 }

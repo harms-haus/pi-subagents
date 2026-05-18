@@ -37,33 +37,58 @@ export async function editProfileInteractive(
   const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
   // Scope
-  const scope = (await ctx.ui.select("Save to which scope?", [
+  const scope = await ctx.ui.select("Save to which scope?", [
     `Global (~/.pi/agent-profiles/${name}.md)`,
     `Project (.pi/agent-profiles/${name}.md)`,
-  ]));
-  if (!scope) {return;}
+  ]);
+  if (!scope) {
+    return;
+  }
   const scopeValue: ProfileScope = scope.startsWith("Global") ? "global" : "project";
 
   // Provider
-  const provider = await ctx.ui.input("Provider (e.g. anthropic, openai, dashscope):", profile.provider ?? "");
-  if (provider === undefined) {return;}
-  if (provider) {profile.provider = provider;}
-  else {delete profile.provider;}
+  const provider = await ctx.ui.input(
+    "Provider (e.g. anthropic, openai, dashscope):",
+    profile.provider ?? "",
+  );
+  if (provider === undefined) {
+    return;
+  }
+  if (provider) {
+    profile.provider = provider;
+  } else {
+    delete profile.provider;
+  }
 
   // Model
-  const model = await ctx.ui.input("Model (supports provider/id and :thinking shorthand):", profile.model ?? "");
-  if (model === undefined) {return;}
-  if (model) {profile.model = model;}
-  else {delete profile.model;}
+  const model = await ctx.ui.input(
+    "Model (supports provider/id and :thinking shorthand):",
+    profile.model ?? "",
+  );
+  if (model === undefined) {
+    return;
+  }
+  if (model) {
+    profile.model = model;
+  } else {
+    delete profile.model;
+  }
 
   // System prompt
   const hasSystem = await ctx.ui.confirm(
     "System prompt?",
-    profile.systemPrompt ? "A custom system prompt is set. Keep it?" : "Set a custom system prompt?",
+    profile.systemPrompt
+      ? "A custom system prompt is set. Keep it?"
+      : "Set a custom system prompt?",
   );
   if (hasSystem) {
-    const sp = await ctx.ui.editor("System prompt:", profile.systemPrompt ?? "You are a helpful coding assistant.");
-    if (sp === undefined) {return;}
+    const sp = await ctx.ui.editor(
+      "System prompt:",
+      profile.systemPrompt ?? "You are a helpful coding assistant.",
+    );
+    if (sp === undefined) {
+      return;
+    }
     profile.systemPrompt = sp;
   } else {
     delete profile.systemPrompt;
@@ -78,8 +103,12 @@ export async function editProfileInteractive(
   );
   if (hasAppend) {
     const ap = await ctx.ui.input("Append text:", profile.appendSystemPrompt ?? "");
-    if (ap === undefined) {return;}
-    if (ap) {profile.appendSystemPrompt = ap;}
+    if (ap === undefined) {
+      return;
+    }
+    if (ap) {
+      profile.appendSystemPrompt = ap;
+    }
   } else {
     delete profile.appendSystemPrompt;
   }
@@ -87,11 +116,15 @@ export async function editProfileInteractive(
   // Thinking level
   const hasThinking = await ctx.ui.confirm(
     "Thinking level?",
-    profile.thinkingLevel ? `Thinking level is ${profile.thinkingLevel}. Set one?` : "Set a thinking level?",
+    profile.thinkingLevel
+      ? `Thinking level is ${profile.thinkingLevel}. Set one?`
+      : "Set a thinking level?",
   );
   if (hasThinking) {
     const tl = await ctx.ui.select("Thinking level:", THINKING_LEVELS);
-    if (tl) {profile.thinkingLevel = tl as ThinkingLevel;}
+    if (tl) {
+      profile.thinkingLevel = tl as ThinkingLevel;
+    }
   } else {
     delete profile.thinkingLevel;
   }
@@ -115,14 +148,18 @@ export async function editProfileInteractive(
         "Allowlist (only these tools)",
         "Blacklist (all tools except these)",
       ]);
-      if (!toolMode) {return;}
+      if (!toolMode) {
+        return;
+      }
       if (toolMode.startsWith("Blacklist")) {
         delete profile.tools;
         const excludeStr = await ctx.ui.input(
           "Tool blacklist (comma-separated, e.g. read,bash,grep):",
           profile.excludeTools?.join(",") ?? "",
         );
-        if (excludeStr === undefined) {return;}
+        if (excludeStr === undefined) {
+          return;
+        }
         if (excludeStr.trim()) {
           profile.excludeTools = excludeStr
             .split(",")
@@ -137,7 +174,9 @@ export async function editProfileInteractive(
           "Tool allowlist (comma-separated, e.g. read,bash,grep):",
           profile.tools?.join(",") ?? "",
         );
-        if (toolsStr === undefined) {return;}
+        if (toolsStr === undefined) {
+          return;
+        }
         if (toolsStr.trim()) {
           profile.tools = toolsStr
             .split(",")
@@ -153,7 +192,9 @@ export async function editProfileInteractive(
   // Extensions
   const hasExts = await ctx.ui.confirm(
     "Configure extensions?",
-    profile.noExtensions || profile.extensions ? "Extension config is set. Change it?" : "Configure extension loading?",
+    profile.noExtensions || profile.extensions
+      ? "Extension config is set. Change it?"
+      : "Configure extension loading?",
   );
   if (hasExts) {
     const noExt = await ctx.ui.confirm("Disable all extensions?", "");
@@ -162,8 +203,13 @@ export async function editProfileInteractive(
       delete profile.extensions;
     } else {
       delete profile.noExtensions;
-      const extStr = await ctx.ui.input("Extension paths (comma-separated):", profile.extensions?.join(",") ?? "");
-      if (extStr === undefined) {return;}
+      const extStr = await ctx.ui.input(
+        "Extension paths (comma-separated):",
+        profile.extensions?.join(",") ?? "",
+      );
+      if (extStr === undefined) {
+        return;
+      }
       if (extStr.trim()) {
         profile.extensions = extStr
           .split(",")
@@ -196,7 +242,9 @@ export async function editProfileInteractive(
         "Suggested skills (comma-separated skill names, model chooses to load):",
         "",
       );
-      if (suggestedStr === undefined) {return;}
+      if (suggestedStr === undefined) {
+        return;
+      }
       if (suggestedStr.trim()) {
         profile.suggestedSkills = suggestedStr
           .split(",")
@@ -208,7 +256,9 @@ export async function editProfileInteractive(
         "Pre-loaded skills (comma-separated skill names, content injected into system prompt):",
         "",
       );
-      if (loadStr === undefined) {return;}
+      if (loadStr === undefined) {
+        return;
+      }
       if (loadStr.trim()) {
         profile.loadSkills = loadStr
           .split(",")
@@ -220,7 +270,10 @@ export async function editProfileInteractive(
 
   // Review and save
   const summary = formatProfileDetail(name, profile);
-  const confirmed = await ctx.ui.confirm(`Save profile "${name}"?`, `${summary}\n\nSave this profile?`);
+  const confirmed = await ctx.ui.confirm(
+    `Save profile "${name}"?`,
+    `${summary}\n\nSave this profile?`,
+  );
   if (!confirmed) {
     ctx.ui.notify("Cancelled.", "info");
     return;

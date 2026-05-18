@@ -14,10 +14,14 @@ export function formatRunsForResume(runs: SubagentSessionData[]): string {
     for (const msg of run.messages) {
       if (msg.role === "user") {
         const text = getTextContent(msg);
-        if (text) {parts.push(`User: ${text}`);}
+        if (text) {
+          parts.push(`User: ${text}`);
+        }
       } else if (msg.role === "assistant") {
         const text = getTextContent(msg);
-        if (text) {parts.push(`Assistant: ${text}`);}
+        if (text) {
+          parts.push(`Assistant: ${text}`);
+        }
         // Extract tool calls
         if (msg.content) {
           for (const part of msg.content as ContentPart[]) {
@@ -44,12 +48,18 @@ export function formatRunsForResume(runs: SubagentSessionData[]): string {
 
 /** Extract text content from a Message */
 export function getTextContent(msg: { content?: unknown }): string | undefined {
-  if (!msg.content) {return undefined;}
-  if (typeof msg.content === "string") {return msg.content;}
+  if (!msg.content) {
+    return undefined;
+  }
+  if (typeof msg.content === "string") {
+    return msg.content;
+  }
   if (Array.isArray(msg.content)) {
     const texts: string[] = [];
     for (const part of msg.content as ContentPart[]) {
-      if (part.type === "text" && "text" in part && typeof part.text === "string") {texts.push(part.text);}
+      if (part.type === "text" && "text" in part && typeof part.text === "string") {
+        texts.push(part.text);
+      }
     }
     return texts.join("\n") || undefined;
   }

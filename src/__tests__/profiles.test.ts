@@ -18,7 +18,6 @@ import {
   validateProfileTools,
 } from "../profiles";
 
-
 // Mock filesystem functions
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
@@ -36,14 +35,16 @@ vi.mock("node:fs/promises", () => ({
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   parseFrontmatter: vi.fn(),
-  stripFrontmatter: vi.fn((content: string) =>
-    content.replace(/^---[\s\S]*?---\n*/, ""),
-  ),
+  stripFrontmatter: vi.fn((content: string) => content.replace(/^---[\s\S]*?---\n*/, "")),
   loadSkills: vi.fn(() => ({ skills: [], diagnostics: [] })),
 }));
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { loadSkills as discoverSkills, parseFrontmatter, stripFrontmatter } from "@earendil-works/pi-coding-agent";
+import {
+  loadSkills as discoverSkills,
+  parseFrontmatter,
+  stripFrontmatter,
+} from "@earendil-works/pi-coding-agent";
 
 describe("profileToArgs", () => {
   beforeEach(() => {
@@ -459,27 +460,27 @@ describe("getProfilesDir", () => {
 describe("validateProfileTools", () => {
   it("should not throw when only tools is set", () => {
     const profile: SubagentProfile = { tools: ["read", "bash"] };
-    expect(() => validateProfileTools(profile)).not.toThrow();
+    expect(() => { validateProfileTools(profile); }).not.toThrow();
   });
 
   it("should not throw when only excludeTools is set", () => {
     const profile: SubagentProfile = { excludeTools: ["write", "bash"] };
-    expect(() => validateProfileTools(profile)).not.toThrow();
+    expect(() => { validateProfileTools(profile); }).not.toThrow();
   });
 
   it("should throw error when both tools and excludeTools are set", () => {
     const profile: SubagentProfile = { tools: ["read"], excludeTools: ["write"] };
-    expect(() => validateProfileTools(profile)).toThrow(/mutually exclusive/);
+    expect(() => { validateProfileTools(profile); }).toThrow(/mutually exclusive/);
   });
 
   it("should include profile name in error when both are set", () => {
     const profile: SubagentProfile = { tools: ["read"], excludeTools: ["write"] };
-    expect(() => validateProfileTools(profile, "my-profile")).toThrow(/"my-profile"/);
+    expect(() => { validateProfileTools(profile, "my-profile"); }).toThrow(/"my-profile"/);
   });
 
   it("should not throw when neither tools nor excludeTools is set", () => {
     const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
-    expect(() => validateProfileTools(profile)).not.toThrow();
+    expect(() => { validateProfileTools(profile); }).not.toThrow();
   });
 });
 
@@ -517,7 +518,10 @@ describe("profileToArgs extraArgs tool-override security", () => {
   });
 
   it("should throw when extraArgs contains --tools and tools is set", () => {
-    const profile: SubagentProfile = { tools: ["read", "bash"], extraArgs: ["--tools", "write,delete"] };
+    const profile: SubagentProfile = {
+      tools: ["read", "bash"],
+      extraArgs: ["--tools", "write,delete"],
+    };
     expect(() => profileToArgs(profile)).toThrow(
       /Refusing extraArg "--tools" which would override profile tool restrictions/,
     );
@@ -631,7 +635,9 @@ describe("loadProfilesFromDir (excludeTools parsing)", () => {
 
   it("should parse excludeTools from comma-separated string", async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdirSync).mockReturnValue([{ name: "string-exclude.md", isFile: () => true }] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "string-exclude.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
     vi.mocked(readFileSync).mockReturnValue(
       ["---", "name: string-exclude", "excludeTools: bash,write", "---", ""].join("\n"),
     );
@@ -647,9 +653,13 @@ describe("loadProfilesFromDir (excludeTools parsing)", () => {
 
   it("should parse excludeTools from YAML array", async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdirSync).mockReturnValue([{ name: "array-exclude.md", isFile: () => true }] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "array-exclude.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
     vi.mocked(readFileSync).mockReturnValue(
-      ["---", "name: array-exclude", "excludeTools:", "  - bash", "  - write", "---", ""].join("\n"),
+      ["---", "name: array-exclude", "excludeTools:", "  - bash", "  - write", "---", ""].join(
+        "\n",
+      ),
     );
     vi.mocked(parseFrontmatter).mockReturnValue({
       frontmatter: { name: "array-exclude", excludeTools: ["bash", "write"] },
@@ -711,17 +721,29 @@ describe("loadProfiles - project-local profile overriding", () => {
 
     // readFileSync is called for each .md file (global-only, shared [global], shared [project], project-only)
     vi.mocked(readFileSync)
-      .mockReturnValueOnce('---\nname: global-only\nprovider: openai\nmodel: gpt-4\n---\n')
-      .mockReturnValueOnce('---\nname: shared\nprovider: anthropic\nmodel: claude-3\n---\n')
-      .mockReturnValueOnce('---\nname: shared\nprovider: openai\nmodel: gpt-4o\n---\n')
-      .mockReturnValueOnce('---\nname: project-only\nprovider: dashscope\nmodel: qwen-max\n---\n');
+      .mockReturnValueOnce("---\nname: global-only\nprovider: openai\nmodel: gpt-4\n---\n")
+      .mockReturnValueOnce("---\nname: shared\nprovider: anthropic\nmodel: claude-3\n---\n")
+      .mockReturnValueOnce("---\nname: shared\nprovider: openai\nmodel: gpt-4o\n---\n")
+      .mockReturnValueOnce("---\nname: project-only\nprovider: dashscope\nmodel: qwen-max\n---\n");
 
     // parseFrontmatter is called for each file
     vi.mocked(parseFrontmatter)
-      .mockReturnValueOnce({ frontmatter: { name: "global-only", provider: "openai", model: "gpt-4" }, body: "" })
-      .mockReturnValueOnce({ frontmatter: { name: "shared", provider: "anthropic", model: "claude-3" }, body: "" })
-      .mockReturnValueOnce({ frontmatter: { name: "shared", provider: "openai", model: "gpt-4o" }, body: "" })
-      .mockReturnValueOnce({ frontmatter: { name: "project-only", provider: "dashscope", model: "qwen-max" }, body: "" });
+      .mockReturnValueOnce({
+        frontmatter: { name: "global-only", provider: "openai", model: "gpt-4" },
+        body: "",
+      })
+      .mockReturnValueOnce({
+        frontmatter: { name: "shared", provider: "anthropic", model: "claude-3" },
+        body: "",
+      })
+      .mockReturnValueOnce({
+        frontmatter: { name: "shared", provider: "openai", model: "gpt-4o" },
+        body: "",
+      })
+      .mockReturnValueOnce({
+        frontmatter: { name: "project-only", provider: "dashscope", model: "qwen-max" },
+        body: "",
+      });
 
     const profiles = await loadProfiles("/fake/project");
 
@@ -785,7 +807,7 @@ describe("validateProfileSkills", () => {
       suggestedSkills: ["my-skill"],
       noSkills: true,
     };
-    expect(() => validateProfileSkills(profile)).toThrow(/mutually exclusive/);
+    expect(() => { validateProfileSkills(profile); }).toThrow(/mutually exclusive/);
   });
 
   it("should include profile name in error message", () => {
@@ -793,24 +815,24 @@ describe("validateProfileSkills", () => {
       suggestedSkills: ["my-skill"],
       noSkills: true,
     };
-    expect(() => validateProfileSkills(profile, "conflicted-profile")).toThrow(
+    expect(() => { validateProfileSkills(profile, "conflicted-profile"); }).toThrow(
       /"conflicted-profile"/,
     );
   });
 
   it("should not throw when only suggestedSkills is set", () => {
     const profile: SubagentProfile = { suggestedSkills: ["my-skill"] };
-    expect(() => validateProfileSkills(profile)).not.toThrow();
+    expect(() => { validateProfileSkills(profile); }).not.toThrow();
   });
 
   it("should not throw when only loadSkills is set", () => {
     const profile: SubagentProfile = { loadSkills: ["my-skill"] };
-    expect(() => validateProfileSkills(profile)).not.toThrow();
+    expect(() => { validateProfileSkills(profile); }).not.toThrow();
   });
 
   it("should not throw when neither is set", () => {
     const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
-    expect(() => validateProfileSkills(profile)).not.toThrow();
+    expect(() => { validateProfileSkills(profile); }).not.toThrow();
   });
 
   it("should throw when loadSkills and noSkills are both set", () => {
@@ -818,7 +840,7 @@ describe("validateProfileSkills", () => {
       loadSkills: ["my-skill"],
       noSkills: true,
     };
-    expect(() => validateProfileSkills(profile)).toThrow(/mutually exclusive/);
+    expect(() => { validateProfileSkills(profile); }).toThrow(/mutually exclusive/);
   });
 });
 
@@ -836,8 +858,32 @@ describe("resolveProfileSkills", () => {
   it("should resolve suggestedSkills names to file paths", () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
-        { name: "skill-a", filePath: "/skills/a/SKILL.md", description: "Skill A", baseDir: "/skills/a", sourceInfo: { path: "/skills/a/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
-        { name: "skill-b", filePath: "/skills/b/SKILL.md", description: "Skill B", baseDir: "/skills/b", sourceInfo: { path: "/skills/b/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+        {
+          name: "skill-a",
+          filePath: "/skills/a/SKILL.md",
+          description: "Skill A",
+          baseDir: "/skills/a",
+          sourceInfo: {
+            path: "/skills/a/SKILL.md",
+            source: "local",
+            scope: "user",
+            origin: "top-level",
+          },
+          disableModelInvocation: false,
+        },
+        {
+          name: "skill-b",
+          filePath: "/skills/b/SKILL.md",
+          description: "Skill B",
+          baseDir: "/skills/b",
+          sourceInfo: {
+            path: "/skills/b/SKILL.md",
+            source: "local",
+            scope: "user",
+            origin: "top-level",
+          },
+          disableModelInvocation: false,
+        },
       ],
       diagnostics: [],
     });
@@ -845,28 +891,35 @@ describe("resolveProfileSkills", () => {
     const profile: SubagentProfile = { suggestedSkills: ["skill-a", "skill-b"] };
     const result = resolveProfileSkills(profile, "/fake/cwd");
 
-    expect(result.suggestedSkills).toEqual([
-      "/skills/a/SKILL.md",
-      "/skills/b/SKILL.md",
-    ]);
+    expect(result.suggestedSkills).toEqual(["/skills/a/SKILL.md", "/skills/b/SKILL.md"]);
   });
 
   it("should inject loadSkills content into appendSystemPrompt", () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
-        { name: "coding", filePath: "/skills/coding/SKILL.md", description: "Coding skill", baseDir: "/skills/coding", sourceInfo: { path: "/skills/coding/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+        {
+          name: "coding",
+          filePath: "/skills/coding/SKILL.md",
+          description: "Coding skill",
+          baseDir: "/skills/coding",
+          sourceInfo: {
+            path: "/skills/coding/SKILL.md",
+            source: "local",
+            scope: "user",
+            origin: "top-level",
+          },
+          disableModelInvocation: false,
+        },
       ],
       diagnostics: [],
     });
-    vi.mocked(readFileSync).mockReturnValue(
-      "---\nname: coding\n---\nYou are a coding expert.",
-    );
+    vi.mocked(readFileSync).mockReturnValue("---\nname: coding\n---\nYou are a coding expert.");
     vi.mocked(stripFrontmatter).mockReturnValue("You are a coding expert.");
 
     const profile: SubagentProfile = { loadSkills: ["coding"] };
     const result = resolveProfileSkills(profile, "/fake/cwd");
 
-    expect(result.appendSystemPrompt).toContain("<loaded_skill name=\"coding\">");
+    expect(result.appendSystemPrompt).toContain('<loaded_skill name="coding">');
     expect(result.appendSystemPrompt).toContain("You are a coding expert.");
     expect(result.appendSystemPrompt).toContain("</loaded_skill>");
   });
@@ -878,9 +931,7 @@ describe("resolveProfileSkills", () => {
     });
 
     const profile: SubagentProfile = { suggestedSkills: ["unknown-skill"] };
-    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(
-      /Unknown skills/,
-    );
+    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(/Unknown skills/);
   });
 
   it("should throw when loadSkill name not found", () => {
@@ -890,21 +941,29 @@ describe("resolveProfileSkills", () => {
     });
 
     const profile: SubagentProfile = { loadSkills: ["unknown-skill"] };
-    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(
-      /Unknown skills/,
-    );
+    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(/Unknown skills/);
   });
 
   it("should concatenate loadSkills content with existing appendSystemPrompt", () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
-        { name: "testing", filePath: "/skills/testing/SKILL.md", description: "Testing skill", baseDir: "/skills/testing", sourceInfo: { path: "/skills/testing/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+        {
+          name: "testing",
+          filePath: "/skills/testing/SKILL.md",
+          description: "Testing skill",
+          baseDir: "/skills/testing",
+          sourceInfo: {
+            path: "/skills/testing/SKILL.md",
+            source: "local",
+            scope: "user",
+            origin: "top-level",
+          },
+          disableModelInvocation: false,
+        },
       ],
       diagnostics: [],
     });
-    vi.mocked(readFileSync).mockReturnValue(
-      "---\nname: testing\n---\nRun all tests.",
-    );
+    vi.mocked(readFileSync).mockReturnValue("---\nname: testing\n---\nRun all tests.");
     vi.mocked(stripFrontmatter).mockReturnValue("Run all tests.");
 
     const profile: SubagentProfile = {
@@ -914,20 +973,30 @@ describe("resolveProfileSkills", () => {
     const result = resolveProfileSkills(profile, "/fake/cwd");
 
     expect(result.appendSystemPrompt).toContain("Original prompt.");
-    expect(result.appendSystemPrompt).toContain("<loaded_skill name=\"testing\">");
+    expect(result.appendSystemPrompt).toContain('<loaded_skill name="testing">');
     expect(result.appendSystemPrompt).toContain("Run all tests.");
   });
 
   it("should skip loadSkills with empty body after stripping frontmatter", () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
-        { name: "empty-skill", filePath: "/skills/empty/SKILL.md", description: "Empty skill", baseDir: "/skills/empty", sourceInfo: { path: "/skills/empty/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+        {
+          name: "empty-skill",
+          filePath: "/skills/empty/SKILL.md",
+          description: "Empty skill",
+          baseDir: "/skills/empty",
+          sourceInfo: {
+            path: "/skills/empty/SKILL.md",
+            source: "local",
+            scope: "user",
+            origin: "top-level",
+          },
+          disableModelInvocation: false,
+        },
       ],
       diagnostics: [],
     });
-    vi.mocked(readFileSync).mockReturnValue(
-      "---\nname: empty-skill\n---\n",
-    );
+    vi.mocked(readFileSync).mockReturnValue("---\nname: empty-skill\n---\n");
     vi.mocked(stripFrontmatter).mockReturnValue("");
 
     const profile: SubagentProfile = { loadSkills: ["empty-skill"] };
@@ -940,13 +1009,23 @@ describe("resolveProfileSkills", () => {
   it("should set loadSkills to undefined after resolution", () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
-        { name: "my-skill", filePath: "/skills/my/SKILL.md", description: "My skill", baseDir: "/skills/my", sourceInfo: { path: "/skills/my/SKILL.md", source: "local", scope: "user", origin: "top-level" }, disableModelInvocation: false },
+        {
+          name: "my-skill",
+          filePath: "/skills/my/SKILL.md",
+          description: "My skill",
+          baseDir: "/skills/my",
+          sourceInfo: {
+            path: "/skills/my/SKILL.md",
+            source: "local",
+            scope: "user",
+            origin: "top-level",
+          },
+          disableModelInvocation: false,
+        },
       ],
       diagnostics: [],
     });
-    vi.mocked(readFileSync).mockReturnValue(
-      "---\nname: my-skill\n---\nDo stuff.",
-    );
+    vi.mocked(readFileSync).mockReturnValue("---\nname: my-skill\n---\nDo stuff.");
     vi.mocked(stripFrontmatter).mockReturnValue("Do stuff.");
 
     const profile: SubagentProfile = { loadSkills: ["my-skill"] };
@@ -986,7 +1065,9 @@ describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
       { name: "load-profile.md", isFile: () => true },
     ] as unknown as ReturnType<typeof readdirSync>);
     vi.mocked(readFileSync).mockReturnValue(
-      ["---", "name: load-profile", "loadSkills:", "  - coding", "  - testing", "---", ""].join("\n"),
+      ["---", "name: load-profile", "loadSkills:", "  - coding", "  - testing", "---", ""].join(
+        "\n",
+      ),
     );
     vi.mocked(parseFrontmatter).mockReturnValue({
       frontmatter: { name: "load-profile", loadSkills: ["coding", "testing"] },
@@ -1004,7 +1085,15 @@ describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
       { name: "both-skills.md", isFile: () => true },
     ] as unknown as ReturnType<typeof readdirSync>);
     vi.mocked(readFileSync).mockReturnValue(
-      ["---", "name: both-skills", "suggestedSkills: coding", "loadSkills:", "  - testing", "---", ""].join("\n"),
+      [
+        "---",
+        "name: both-skills",
+        "suggestedSkills: coding",
+        "loadSkills:",
+        "  - testing",
+        "---",
+        "",
+      ].join("\n"),
     );
     vi.mocked(parseFrontmatter).mockReturnValue({
       frontmatter: { name: "both-skills", suggestedSkills: "coding", loadSkills: ["testing"] },

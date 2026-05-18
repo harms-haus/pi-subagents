@@ -100,18 +100,18 @@ describe("editProfileInteractive", () => {
         "Project (.pi/agent-profiles/test.md)", // scope
       ],
       inputs: [
-        "anthropic",       // provider
-        "claude-sonnet",   // model
-        "Be helpful",      // appendSystemPrompt
+        "anthropic", // provider
+        "claude-sonnet", // model
+        "Be helpful", // appendSystemPrompt
       ],
       confirms: [
-        true,  // system prompt?
+        true, // system prompt?
         false, // append system prompt? — actually we'll test no
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
       editors: [
         "You are a helpful assistant.", // system prompt content
@@ -131,10 +131,7 @@ describe("editProfileInteractive", () => {
       "project",
       "/tmp/project",
     );
-    expect(ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("my-agent"),
-      "info",
-    );
+    expect(ui.notify).toHaveBeenCalledWith(expect.stringContaining("my-agent"), "info");
   });
 
   // ── 4. User sets thinking level ───────────────────────────────────
@@ -142,20 +139,20 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "high",                                    // thinking level
+        "high", // thinking level
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
-        true,  // thinking level?
+        true, // thinking level?
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -179,17 +176,17 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
-        true,  // disable all tools?
+        true, // configure tools?
+        true, // disable all tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -215,22 +212,22 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "Allowlist (only these tools)",           // tool mode
+        "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
-        "anthropic",          // provider
-        "claude",             // model
-        "read, bash, grep",  // tools allowlist
+        "anthropic", // provider
+        "claude", // model
+        "read, bash, grep", // tools allowlist
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -255,22 +252,22 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "Blacklist (all tools except these)",    // tool mode
+        "Blacklist (all tools except these)", // tool mode
       ],
       inputs: [
-        "anthropic",       // provider
-        "claude",          // model
-        "bash, write",    // excluded tools
+        "anthropic", // provider
+        "claude", // model
+        "bash, write", // excluded tools
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -298,17 +295,17 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
         false, // configure tools?
-        true,  // configure extensions?
-        true,  // disable all extensions?
+        true, // configure extensions?
+        true, // disable all extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -335,7 +332,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
@@ -359,21 +356,21 @@ describe("editProfileInteractive", () => {
     const ui2 = queueUISteps({
       selects: [
         "Project (.pi/agent-profiles/test.md)", // scope
-        "medium",                                // thinking level
+        "medium", // thinking level
       ],
       inputs: [
-        "openai",               // provider
-        "gpt-4",                // model
-        "Focus on testing.",    // appendSystemPrompt
+        "openai", // provider
+        "gpt-4", // model
+        "Focus on testing.", // appendSystemPrompt
       ],
       confirms: [
-        true,  // system prompt?
-        true,  // append system prompt?
-        true,  // thinking level?
+        true, // system prompt?
+        true, // append system prompt?
+        true, // thinking level?
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
       editors: [
         "You are a testing expert.", // system prompt content
@@ -400,10 +397,7 @@ describe("editProfileInteractive", () => {
     );
 
     // Verify success notification
-    expect(ui2.notify).toHaveBeenCalledWith(
-      expect.stringContaining("full-agent"),
-      "info",
-    );
+    expect(ui2.notify).toHaveBeenCalledWith(expect.stringContaining("full-agent"), "info");
   });
 
   // ── Extra: cancelling at model input ──────────────────────────────
@@ -414,7 +408,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        undefined,   // cancel at model
+        undefined, // cancel at model
       ],
     });
 
@@ -430,7 +424,7 @@ describe("editProfileInteractive", () => {
         "Global (~/.pi/agent-profiles/test.md)", // scope
       ],
       inputs: [
-        "",     // empty provider → delete provider
+        "", // empty provider → delete provider
         "gpt-4", // model
       ],
       confirms: [
@@ -440,15 +434,11 @@ describe("editProfileInteractive", () => {
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      { provider: "anthropic" },
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", { provider: "anthropic" }, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.provider).toBeUndefined();
@@ -463,7 +453,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         true, // system prompt?
@@ -486,7 +476,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt? — no
@@ -495,15 +485,11 @@ describe("editProfileInteractive", () => {
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      { systemPrompt: "old prompt" },
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", { systemPrompt: "old prompt" }, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.systemPrompt).toBeUndefined();
@@ -517,12 +503,12 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        undefined,   // cancel at append
+        "claude", // model
+        undefined, // cancel at append
       ],
       confirms: [
         false, // system prompt?
-        true,  // append system prompt?
+        true, // append system prompt?
       ],
     });
 
@@ -539,7 +525,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
@@ -548,15 +534,11 @@ describe("editProfileInteractive", () => {
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      { appendSystemPrompt: "old append" },
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", { appendSystemPrompt: "old append" }, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.appendSystemPrompt).toBeUndefined();
@@ -570,7 +552,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
@@ -579,15 +561,11 @@ describe("editProfileInteractive", () => {
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      { thinkingLevel: "high" as const },
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", { thinkingLevel: "high" as const }, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.thinkingLevel).toBeUndefined();
@@ -598,17 +576,17 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        undefined,                                // cancel at tool mode select
+        undefined, // cancel at tool mode select
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
       ],
     });
@@ -623,18 +601,18 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "Allowlist (only these tools)",           // tool mode
+        "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        undefined,   // cancel at tools input
+        "claude", // model
+        undefined, // cancel at tools input
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
       ],
     });
@@ -649,18 +627,18 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "Blacklist (all tools except these)",    // tool mode
+        "Blacklist (all tools except these)", // tool mode
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        undefined,   // cancel at exclude input
+        "claude", // model
+        undefined, // cancel at exclude input
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
       ],
     });
@@ -675,30 +653,26 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "Allowlist (only these tools)",           // tool mode
+        "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        "",          // empty tools string → delete tools
+        "claude", // model
+        "", // empty tools string → delete tools
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      { tools: ["read", "bash"] },
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", { tools: ["read", "bash"] }, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.tools).toBeUndefined();
@@ -709,30 +683,26 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "Blacklist (all tools except these)",    // tool mode
+        "Blacklist (all tools except these)", // tool mode
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        "",          // empty exclude string → delete excludeTools
+        "claude", // model
+        "", // empty exclude string → delete excludeTools
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      { excludeTools: ["bash"] },
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", { excludeTools: ["bash"] }, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.excludeTools).toBeUndefined();
@@ -745,19 +715,19 @@ describe("editProfileInteractive", () => {
         "Global (~/.pi/agent-profiles/test.md)", // scope
       ],
       inputs: [
-        "anthropic",                         // provider
-        "claude",                            // model
-        "/path/to/ext1, /path/to/ext2",     // extensions
+        "anthropic", // provider
+        "claude", // model
+        "/path/to/ext1, /path/to/ext2", // extensions
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
         false, // configure tools?
-        true,  // configure extensions?
+        true, // configure extensions?
         false, // disable all extensions? — no
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -781,15 +751,15 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        undefined,   // cancel at extensions input
+        "claude", // model
+        undefined, // cancel at extensions input
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
         false, // configure tools?
-        true,  // configure extensions?
+        true, // configure extensions?
         false, // disable all extensions? — no
       ],
     });
@@ -807,26 +777,22 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        "",          // empty extensions → delete
+        "claude", // model
+        "", // empty extensions → delete
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
         false, // configure tools?
-        true,  // configure extensions?
+        true, // configure extensions?
         false, // disable all extensions? — no
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      { extensions: ["/old/ext"] },
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", { extensions: ["/old/ext"] }, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.extensions).toBeUndefined();
@@ -849,7 +815,7 @@ describe("editProfileInteractive", () => {
         false, // configure tools?
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -866,22 +832,22 @@ describe("editProfileInteractive", () => {
     const ui = queueUISteps({
       selects: [
         "Global (~/.pi/agent-profiles/test.md)", // scope
-        "Allowlist (only these tools)",           // tool mode
+        "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
-        "anthropic",            // provider
-        "claude",               // model
+        "anthropic", // provider
+        "claude", // model
         "read, bash, , grep,", // tools with empty entries
       ],
       confirms: [
         false, // system prompt?
         false, // append system prompt?
         false, // thinking level?
-        true,  // configure tools?
+        true, // configure tools?
         false, // disable all tools? — no
         false, // configure extensions?
         false, // configure skills?
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -898,10 +864,10 @@ describe("editProfileInteractive", () => {
         "Global (~/.pi/agent-profiles/test.md)", // scope
       ],
       inputs: [
-        "anthropic",                // provider
-        "claude",                   // model
-        "skill1, skill2, skill3",  // suggestedSkills
-        "skill4, skill5",          // loadSkills
+        "anthropic", // provider
+        "claude", // model
+        "skill1, skill2, skill3", // suggestedSkills
+        "skill4, skill5", // loadSkills
       ],
       confirms: [
         false, // system prompt?
@@ -909,8 +875,8 @@ describe("editProfileInteractive", () => {
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
-        true,  // configure skills?
-        true,  // save confirmation
+        true, // configure skills?
+        true, // save confirmation
       ],
     });
 
@@ -935,8 +901,8 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        undefined,   // cancel at suggestedSkills input
+        "claude", // model
+        undefined, // cancel at suggestedSkills input
       ],
       confirms: [
         false, // system prompt?
@@ -944,7 +910,7 @@ describe("editProfileInteractive", () => {
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
-        true,  // configure skills?
+        true, // configure skills?
       ],
     });
 
@@ -960,10 +926,10 @@ describe("editProfileInteractive", () => {
         "Global (~/.pi/agent-profiles/test.md)", // scope
       ],
       inputs: [
-        "anthropic",           // provider
-        "claude",              // model
-        "skill1, skill2",     // suggestedSkills
-        undefined,             // cancel at loadSkills input
+        "anthropic", // provider
+        "claude", // model
+        "skill1, skill2", // suggestedSkills
+        undefined, // cancel at loadSkills input
       ],
       confirms: [
         false, // system prompt?
@@ -971,7 +937,7 @@ describe("editProfileInteractive", () => {
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
-        true,  // configure skills?
+        true, // configure skills?
       ],
     });
 
@@ -988,9 +954,9 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        "",          // empty suggestedSkills → not set
-        "skill1",    // loadSkills
+        "claude", // model
+        "", // empty suggestedSkills → not set
+        "skill1", // loadSkills
       ],
       confirms: [
         false, // system prompt?
@@ -998,16 +964,12 @@ describe("editProfileInteractive", () => {
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
-        true,  // configure skills?
-        true,  // save confirmation
+        true, // configure skills?
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      {},
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", {}, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.suggestedSkills).toBeUndefined();
@@ -1022,9 +984,9 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
-        "skill1",    // suggestedSkills
-        "",          // empty loadSkills → not set
+        "claude", // model
+        "skill1", // suggestedSkills
+        "", // empty loadSkills → not set
       ],
       confirms: [
         false, // system prompt?
@@ -1032,16 +994,12 @@ describe("editProfileInteractive", () => {
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
-        true,  // configure skills?
-        true,  // save confirmation
+        true, // configure skills?
+        true, // save confirmation
       ],
     });
 
-    await editProfileInteractive(
-      "test",
-      {},
-      createCtx(ui),
-    );
+    await editProfileInteractive("test", {}, createCtx(ui));
 
     const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(savedProfile.loadSkills).toBeUndefined();
@@ -1056,7 +1014,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
@@ -1065,7 +1023,7 @@ describe("editProfileInteractive", () => {
         false, // configure tools?
         false, // configure extensions?
         false, // remove skills? — no → keep
-        true,  // save confirmation
+        true, // save confirmation
       ],
     });
 
@@ -1088,7 +1046,7 @@ describe("editProfileInteractive", () => {
       ],
       inputs: [
         "anthropic", // provider
-        "claude",    // model
+        "claude", // model
       ],
       confirms: [
         false, // system prompt?
@@ -1096,8 +1054,8 @@ describe("editProfileInteractive", () => {
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
-        true,  // remove skills? — yes → delete
-        true,  // save confirmation
+        true, // remove skills? — yes → delete
+        true, // save confirmation
       ],
     });
 
@@ -1119,10 +1077,10 @@ describe("editProfileInteractive", () => {
         "Global (~/.pi/agent-profiles/test.md)", // scope
       ],
       inputs: [
-        "anthropic",              // provider
-        "claude",                 // model
+        "anthropic", // provider
+        "claude", // model
         "skill1, skill2, , skill3,", // suggestedSkills with empty entries
-        "skill4, , skill5",       // loadSkills with empty entries
+        "skill4, , skill5", // loadSkills with empty entries
       ],
       confirms: [
         false, // system prompt?
@@ -1130,8 +1088,8 @@ describe("editProfileInteractive", () => {
         false, // thinking level?
         false, // configure tools?
         false, // configure extensions?
-        true,  // configure skills?
-        true,  // save confirmation
+        true, // configure skills?
+        true, // save confirmation
       ],
     });
 

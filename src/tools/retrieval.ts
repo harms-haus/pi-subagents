@@ -19,7 +19,12 @@ import type { ExtensionAPI, Theme, AgentToolResult } from "@earendil-works/pi-co
  * Used by list_subagent_profiles (no truncation needed).
  */
 function createSimpleRenderResult(defaultLabel: string = "(no output)") {
-  return (result: AgentToolResult<unknown>, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
+  return (
+    result: AgentToolResult<unknown>,
+    _options: { expanded: boolean },
+    theme: Theme,
+    _context: unknown,
+  ) => {
     const text = result.content[0];
     const content = text?.type === "text" ? text.text : defaultLabel;
     return new Text(theme.fg("toolOutput", content), 0, 0);
@@ -32,11 +37,17 @@ function createSimpleRenderResult(defaultLabel: string = "(no output)") {
  * The full content is still injected into context; only the TUI display is shortened.
  */
 function createTruncatingRenderResult(defaultLabel: string = "(no output)") {
-  return (result: AgentToolResult<unknown>, _options: { expanded: boolean }, theme: Theme, _context: unknown) => {
+  return (
+    result: AgentToolResult<unknown>,
+    _options: { expanded: boolean },
+    theme: Theme,
+    _context: unknown,
+  ) => {
     const text = result.content[0];
     const content = text?.type === "text" ? text.text : defaultLabel;
     const lines = content.split("\n");
-    const maxLines: number = ((result.details as Record<string, unknown>)?.maxLines as number) ?? 15;
+    const maxLines: number =
+      ((result.details as Record<string, unknown>)?.maxLines as number) ?? 15;
 
     if (lines.length <= maxLines) {
       return new Text(theme.fg("toolOutput", content), 0, 0);
@@ -59,7 +70,8 @@ function createTruncatingRenderResult(defaultLabel: string = "(no output)") {
 function createSessionRenderCall(toolName: string) {
   return (args: { sessionId?: string }, theme: Theme, _context: unknown) => {
     return new Text(
-      theme.fg("toolTitle", theme.bold(`${toolName} `)) + theme.fg("accent", args.sessionId ?? "..."),
+      theme.fg("toolTitle", theme.bold(`${toolName} `)) +
+        theme.fg("accent", args.sessionId ?? "..."),
       0,
       0,
     );
@@ -75,7 +87,10 @@ const SESSION_NOT_FOUND_ERROR = (sessionId: string) =>
 /**
  * Register the retrieval tools: get_subagent_output, get_subagent_session, and list_subagent_profiles.
  */
-export function registerRetrievalTools(pi: ExtensionAPI, sessionStore: Map<string, SessionRecord>): void {
+export function registerRetrievalTools(
+  pi: ExtensionAPI,
+  sessionStore: Map<string, SessionRecord>,
+): void {
   // ── Tool: get_subagent_output ───────────────────────────────────
 
   pi.registerTool({

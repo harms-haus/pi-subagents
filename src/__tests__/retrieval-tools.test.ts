@@ -114,8 +114,8 @@ describe("retrieval-tools", () => {
 
     it("returns summaries when profiles exist", async () => {
       vi.mocked(loadProfiles).mockResolvedValueOnce({
-        "coder": { model: "claude-sonnet-4-5" },
-        "reviewer": { model: "gpt-4o" },
+        coder: { model: "claude-sonnet-4-5" },
+        reviewer: { model: "gpt-4o" },
       });
       vi.mocked(profileSummary)
         .mockReturnValueOnce("coder: claude-sonnet-4-5")
@@ -152,7 +152,7 @@ describe("retrieval-tools", () => {
         details: { maxLines: 15 },
       };
 
-      renderResult(result as any, { expanded: false, isPartial: false }, theme, null as any);
+      renderResult(result, { expanded: false, isPartial: false }, theme, null as any);
 
       // Should render full content via Text (not Container)
       expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolOutput", shortContent);
@@ -171,7 +171,12 @@ describe("retrieval-tools", () => {
         details: { maxLines: 5 },
       };
 
-      const output = renderResult(result as any, { expanded: false, isPartial: false }, theme, null as any);
+      const output = renderResult(
+        result,
+        { expanded: false, isPartial: false },
+        theme,
+        null as any,
+      );
 
       // Should return a Container (for truncation layout)
       expect(output).toHaveProperty("addChild");
@@ -215,7 +220,9 @@ describe("retrieval-tools", () => {
       const execute = getToolExecute(mockPi, "get_subagent_session");
       const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), null as any);
 
-      expect((result.content[0] as { text: string }).text).toContain("[tool result]: Tool returned successfully");
+      expect((result.content[0] as { text: string }).text).toContain(
+        "[tool result]: Tool returned successfully",
+      );
     });
 
     it("truncates tool results > 500 chars", async () => {
@@ -235,7 +242,7 @@ describe("retrieval-tools", () => {
       const execute = getToolExecute(mockPi, "get_subagent_session");
       const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), null as any);
 
-      const outputText = (result.content[0] as { text: string }).text as string;
+      const outputText = (result.content[0] as { text: string }).text;
       // Should contain truncated text (500 chars + "...")
       expect(outputText).toContain("...");
       const match = outputText.match(/\[tool result\]: (.+)\.\.\./);
@@ -275,27 +282,42 @@ describe("retrieval-tools", () => {
         sessionId: "multi",
         taskName: "task-1",
         messages: [
-          { role: "assistant", content: [{ type: "text" as const, text: "Run 1 output" }] } as unknown as Message,
+          {
+            role: "assistant",
+            content: [{ type: "text" as const, text: "Run 1 output" }],
+          } as unknown as Message,
         ],
       });
       const run2 = makeSession({
         sessionId: "multi",
         taskName: "task-2",
         messages: [
-          { role: "assistant", content: [{ type: "text" as const, text: "Run 2 output" }] } as unknown as Message,
+          {
+            role: "assistant",
+            content: [{ type: "text" as const, text: "Run 2 output" }],
+          } as unknown as Message,
         ],
       });
       const run3 = makeSession({
         sessionId: "multi",
         taskName: "task-3",
         messages: [
-          { role: "assistant", content: [{ type: "text" as const, text: "Run 3 output" }] } as unknown as Message,
+          {
+            role: "assistant",
+            content: [{ type: "text" as const, text: "Run 3 output" }],
+          } as unknown as Message,
         ],
       });
       sessionStore.set("multi", { runs: [run1, run2, run3] });
 
       const execute = getToolExecute(mockPi, "get_subagent_output");
-      const result = await execute("tc-id", { sessionId: "multi" }, undefined, vi.fn(), null as any);
+      const result = await execute(
+        "tc-id",
+        { sessionId: "multi" },
+        undefined,
+        vi.fn(),
+        null as any,
+      );
 
       // Should return latest (3rd) run output
       expect((result.content[0] as { text: string }).text).toBe("Run 3 output");
@@ -332,7 +354,13 @@ describe("retrieval-tools", () => {
       sessionStore.set("tools-only", { runs: [session] });
 
       const execute = getToolExecute(mockPi, "get_subagent_output");
-      const result = await execute("tc-id", { sessionId: "tools-only" }, undefined, vi.fn(), null as any);
+      const result = await execute(
+        "tc-id",
+        { sessionId: "tools-only" },
+        undefined,
+        vi.fn(),
+        null as any,
+      );
 
       // No assistant text → placeholder message
       expect((result.content[0] as { text: string }).text).toBe("(no text output from sub-agent)");
@@ -359,7 +387,13 @@ describe("retrieval-tools", () => {
       sessionStore.set("error-session", { runs: [session] });
 
       const execute = getToolExecute(mockPi, "get_subagent_session");
-      const result = await execute("tc-id", { sessionId: "error-session" }, undefined, vi.fn(), null as any);
+      const result = await execute(
+        "tc-id",
+        { sessionId: "error-session" },
+        undefined,
+        vi.fn(),
+        null as any,
+      );
 
       const text = (result.content[0] as { text: string }).text;
       expect(text).toContain("Partial response");

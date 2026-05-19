@@ -49,6 +49,13 @@ export interface ToolResultMessage {
   }>;
 }
 
+/** A file to inject into the sub-agent prompt, specified as a path string or an object with range options */
+export type FileSpec =
+  | string
+  | { path: string; start?: number; end?: number }
+  | { path: string; tail: number }
+  | { path: string; head: number };
+
 /** Task definition for spawning a sub-agent */
 export interface SubAgentTask {
   name: string;
@@ -60,6 +67,8 @@ export interface SubAgentTask {
   timeout?: number;
   /** Previous session ID to resume from */
   resume?: string;
+  /** Files to read and prepend to the prompt */
+  files?: FileSpec[];
 }
 
 /** A single line in a sub-agent's rolling window */

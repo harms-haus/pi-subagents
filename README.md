@@ -45,13 +45,35 @@ Once installed, the LLM can use the tool:
 }
 ```
 
+### Providing File Context
+
+Each task can include a `files` array to read file contents and prepend them to the sub-agent's prompt:
+
+```json
+{
+  "delegate_to_subagents": {
+    "tasks": [
+      {
+        "name": "fix-lint",
+        "prompt": "Fix all linting errors in this file.",
+        "files": ["src/utils.ts"]
+      }
+    ]
+  }
+}
+```
+
+File specs support line ranges: `{ "path": "src/main.ts", "start": 10, "end": 50 }`, `{ "path": "log.txt", "tail": 20 }`, or `{ "path": "config.json", "head": 5 }`.
+
+> See [docs/tools-reference.md](docs/tools-reference.md) for complete parameter documentation.
+
 After `delegate_to_subagents` completes, it returns **session IDs** for each task. Use `get_subagent_output` to retrieve the final text output:
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `tasks` | `Array<{name, prompt, cwd?, profile?, timeout?, resume?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
+| `tasks` | `Array<{name, prompt, cwd?, profile?, timeout?, resume?, files?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
 | `profile` | `string` | No | Default profile for all tasks (overridden by per-task profile) |
 
 Each task:
@@ -64,6 +86,7 @@ Each task:
 | `profile` | `string` | No | Named profile to use for this sub-agent (see below) |
 | `timeout` | `number` | No | Timeout in seconds for this sub-agent. Default: 600. Timeouts auto-extend when the sub-agent is actively producing output — after the initial timeout expires, the sub-agent is only killed after a configurable idle period (see `extend_timeout_debounce` setting). |
 | `resume` | `string` | No | Previous session ID to resume from. The resumed sub-agent receives the prior session's transcript as context. Only completed or errored sessions can be resumed. |
+| `files` | `Array<FileSpec>` | No | File paths to read and prepend to the sub-agent's prompt. See "Providing File Context" above. |
 
 The `maxLinesPerWindow` setting is configured in `settings.json` under `subagents.maxLinesPerWindow` (default: 15).
 

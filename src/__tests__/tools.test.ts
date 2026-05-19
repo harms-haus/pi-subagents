@@ -32,6 +32,7 @@ vi.mock("typebox", () => ({
     Number: vi.fn(() => ({})),
     Optional: vi.fn((fn: unknown) => fn),
     Array: vi.fn(() => ({})),
+    Union: vi.fn(() => ({})),
   },
 }));
 
@@ -79,6 +80,17 @@ vi.mock("../settings", () => ({
   loadExtendTimeoutDebounce: vi.fn().mockResolvedValue(30),
   loadLoopingToolCount: vi.fn().mockResolvedValue(5),
   loadLoopingToolSimilarity: vi.fn().mockResolvedValue(0.95),
+}));
+
+const { mockExistsSync, mockReadFileSync, mockStatSync } = vi.hoisted(() => ({
+  mockExistsSync: vi.fn().mockReturnValue(true),
+  mockReadFileSync: vi.fn().mockReturnValue("file content here\n"),
+  mockStatSync: vi.fn().mockReturnValue({ size: 100 }),
+}));
+vi.mock("node:fs", () => ({
+  existsSync: mockExistsSync,
+  readFileSync: mockReadFileSync,
+  statSync: mockStatSync,
 }));
 
 describe("tools", () => {
@@ -1820,6 +1832,345 @@ describe("tools", () => {
       const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
       expect(callArgs.loopingToolCount).toBe(3);
       expect(callArgs.loopingToolSimilarity).toBe(0.8);
+    });
+  });
+
+  describe("delegate_to_subagents - files parameter", () => {
+    let mockPi: ExtensionAPI;
+    let sessionStore: Map<string, SessionRecord>;
+
+    const getDelegateExecute = async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+      expect(toolRegistration).toBeDefined();
+      return toolRegistration![0].execute;
+    };
+
+    beforeEach(() => {
+      sessionStore = new Map();
+      mockPi = createMockPi();
+      vi.mocked(runSubAgent).mockClear();
+      vi.mocked(runSubAgent).mockResolvedValue({ loopDetected: false });
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue("file content here\n");
+      mockStatSync.mockReturnValue({ size: 100 });
+    });
+
+    it("should prepend file contents before the prompt", async () => {
+      mockReadFileSync.mockReturnValue("hello world\n");
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "do the thing", files: ["src/foo.ts"] }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("=== src/foo.ts ===");
+      expect(prompt).toContain("hello world");
+      const fileIdx = prompt.indexOf("=== src/foo.ts ===");
+      const promptIdx = prompt.indexOf("do the thing");
+      expect(fileIdx).toBeLessThan(promptIdx);
+    });
+
+    it("should handle missing files with placeholder", async () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "do the thing", files: ["missing.ts"] }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("[file not found: missing.ts]");
+    });
+
+    it("should handle read errors with placeholder", async () => {
+      mockReadFileSync.mockImplementation(() => {
+        throw new Error("permission denied");
+      });
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "do the thing", files: ["no-access.ts"] }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("[could not read file: no-access.ts]");
+    });
+
+    it("should apply head slicing", async () => {
+      mockReadFileSync.mockReturnValue("line1\nline2\nline3\nline4\nline5\n");
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              files: [{ path: "src/foo.ts", head: 2 }],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("line1");
+      expect(prompt).toContain("line2");
+      expect(prompt).not.toContain("line3");
+    });
+
+    it("should apply tail slicing", async () => {
+      mockReadFileSync.mockReturnValue("line1\nline2\nline3\nline4\nline5\n");
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              files: [{ path: "src/foo.ts", tail: 2 }],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).not.toContain("line3");
+      expect(prompt).toContain("line4");
+      expect(prompt).toContain("line5");
+    });
+
+    it("should apply start/end range slicing", async () => {
+      mockReadFileSync.mockReturnValue("line1\nline2\nline3\nline4\nline5\n");
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              files: [{ path: "src/foo.ts", start: 2, end: 4 }],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).not.toContain("line1");
+      expect(prompt).toContain("line2");
+      expect(prompt).toContain("line3");
+      expect(prompt).toContain("line4");
+      expect(prompt).not.toContain("line5");
+    });
+
+    it("should handle multiple files", async () => {
+      mockReadFileSync
+        .mockReturnValueOnce("content-a\n")
+        .mockReturnValueOnce("content-b\n");
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              files: ["a.ts", "b.ts"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("=== a.ts ===");
+      expect(prompt).toContain("=== b.ts ===");
+      expect(prompt).toContain("content-a");
+      expect(prompt).toContain("content-b");
+    });
+
+    it("should work without files parameter (backward compatibility)", async () => {
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "do the thing" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toBe("do the thing");
+    });
+
+    it("should return placeholder for files exceeding size limit", async () => {
+      mockStatSync.mockReturnValue({ size: 2 * 1024 * 1024 }); // 2MB
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "large-file-task",
+              prompt: "review",
+              files: ["huge.log"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: "/project" } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      expect(callArgs.task.prompt).toContain("[file too large: huge.log");
+      expect(callArgs.task.prompt).toContain("review");
+    });
+
+    it("should use task.cwd for path resolution when set", async () => {
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              cwd: "/custom/dir",
+              files: ["src/foo.ts"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(mockExistsSync).toHaveBeenCalled();
+      const existsCalls = vi.mocked(mockExistsSync).mock.calls.map((call) => call[0] as string);
+      const hasCustomDir = existsCalls.some((p) => p.includes("/custom/dir"));
+      expect(hasCustomDir).toBe(true);
+    });
+
+    it("should prepend files before resume context", async () => {
+      const previousSessionId = "prev-session";
+      const previousSession: SubagentSessionData = {
+        sessionId: previousSessionId,
+        taskName: "prev-task",
+        prompt: "prev prompt",
+        cwd: "/tmp",
+        status: "completed",
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Previous result" }],
+          } as unknown as Message,
+        ],
+        exitCode: 0,
+        startedAt: Date.now(),
+      };
+      sessionStore.set(previousSessionId, { runs: [previousSession] });
+
+      mockReadFileSync.mockReturnValue("data contents\n");
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              resume: previousSessionId,
+              files: ["data.ts"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+
+      // Verify ordering: files come first, then resume context, then prompt
+      const fileIdx = prompt.indexOf("=== data.ts ===");
+      const resumeIdx = prompt.indexOf("Previously:");
+      const promptIdx = prompt.indexOf("do the thing");
+      expect(fileIdx).toBeLessThan(resumeIdx);
+      expect(resumeIdx).toBeLessThan(promptIdx);
     });
   });
 });

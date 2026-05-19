@@ -47,6 +47,7 @@ Each element of the `tasks` array has the following fields:
 | `profile` | `string` | No       | —               | Named sub-agent profile for this specific task (overrides the top-level `profile`). See [docs/profiles.md](profiles.md).                    |
 | `timeout` | `number` | No       | `600`           | Timeout in seconds. Must be ≥ 1. Aborts the sub-agent when exceeded.                                                                        |
 | `resume`  | `string` | No       | —               | A previous session ID to continue work from. The resumed agent receives the prior session's transcript as context.                          |
+| `files`   | `Array<FileSpec>` | No | —         | File paths to read and prepend to the sub-agent's prompt. See [Files Parameter](#files-parameter).                                          |
 
 ### Return Value
 
@@ -111,6 +112,54 @@ Continue by refactoring the main loop.
 
 4. The resumed task uses the **same session ID** as the original (not a new UUID).
 5. The session store records the new run as an additional entry in the `SessionRecord.runs` array.
+
+### Files Parameter
+
+When a task specifies `files`, each file is read from disk and its contents are prepended to the prompt before the sub-agent is spawned. This provides context to the sub-agent without embedding large file contents directly in the prompt string.
+
+Each entry in the `files` array can be:
+
+- **A string** — Just a file path (relative to the task's `cwd` or absolute):
+  ```json
+  "src/main.ts"
+  ```
+
+- **A range object** — Read specific lines (1-indexed, inclusive):
+  ```json
+  { "path": "src/main.ts", "start": 10, "end": 50 }
+  ```
+  If `start` is omitted, defaults to line 1. If `end` is omitted, reads to end of file.
+
+- **A head object** — Read the first N lines (minimum: 1):
+  ```json
+  { "path": "src/main.ts", "head": 20 }
+  ```
+
+- **A tail object** — Read the last N lines (minimum: 1):
+  ```json
+  { "path": "src/main.ts", "tail": 30 }
+  ```
+
+Files are resolved relative to the task's `cwd` (or the extension's working directory if not set). The file size limit is **1 MB** per file — larger files produce a placeholder message.
+
+File contents are formatted with a header and prepended before the prompt (and before any resume context):
+
+```
+=== src/main.ts ===
+import { foo } from "bar";
+...
+
+=== README.md ===
+# My Project
+...
+
+[task prompt here]
+```
+
+Missing or unreadable files produce a placeholder instead of failing the entire task:
+- `[file not found: path]` — File does not exist
+- `[could not read file: path]` — File exists but cannot be read (permissions, encoding)
+- `[file too large: path (NKB, limit 1024KB)]` — File exceeds the 1 MB size limit
 
 #### Timeout Behavior
 
@@ -232,6 +281,25 @@ The tool provides custom `renderCall` and `renderResult` implementations:
       "prompt": "Continue refactoring the core module. Focus on the event dispatcher.",
       "resume": "a3f7b9c2d1e8f4a1",
       "timeout": 900
+    }
+  ]
+}
+```
+
+**With files — provide context to sub-agents:**
+
+```json
+{
+  "tasks": [
+    {
+      "name": "review-api",
+      "prompt": "Review the API routes for security issues.",
+      "files": ["src/routes.ts", { "path": "src/middleware.ts", "head": 50 }]
+    },
+    {
+      "name": "review-tests",
+      "prompt": "Check test coverage for the auth module.",
+      "files": [{ "path": "src/auth.ts", "tail": 30 }, "tests/auth.test.ts"]
     }
   ]
 }
@@ -411,6 +479,9 @@ All error conditions and their messages:
 | **Skills + noSkills conflict (suggestedSkills)** | `delegate_to_subagents`                       | `Profile "name" has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned.                                  |
 | **Skills + noSkills conflict (loadSkills)**      | `delegate_to_subagents`                       | `Profile "name" has both "loadSkills" and "noSkills" set. These are mutually exclusive — --no-skills disables skill discovery.`          | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned.                                  |
 | **Loop detected**                                | `delegate_to_subagents` (internal)            | `Loop detected: sub-agent is repeating the same tool calls`                                                                              | `looping_tool_count` consecutive tool calls exceeded the `looping_tool_similarity` threshold. The sub-agent is killed via `SIGTERM`.                 |
+| **File not found**                               | `delegate_to_subagents` (files)               | `[file not found: {path}]`                                                                                                               | A file specified in `files` does not exist. The task continues with a placeholder in the prompt.                                                     |
+| **File unreadable**                              | `delegate_to_subagents` (files)               | `[could not read file: {path}]`                                                                                                          | A file exists but cannot be read (permissions, encoding). The task continues with a placeholder.                                                    |
+| **File too large**                               | `delegate_to_subagents` (files)               | `[file too large: {path} ({size}KB, limit 1024KB)]`                                                                                      | A file exceeds the 1 MB size limit. The task continues with a placeholder.                                                                          |
 | **Tool restriction override guard**              | `delegate_to_subagents`                       | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.`                   | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
 
 ---

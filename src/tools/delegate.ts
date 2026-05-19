@@ -5,8 +5,9 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { loadSkills as discoverSkills } from "@earendil-works/pi-coding-agent";
 import {
   applyExcludeTools,
@@ -35,12 +36,67 @@ import { getSummaryText, mapWithConcurrencyLimit } from "../utils";
 import { renderDelegateCall, renderDelegateResult } from "./delegate-render";
 import type { SubagentProfile } from "../profile-types";
 import type {
+  FileSpec,
   SessionRecord,
   SubAgentWindow,
   SubagentSessionData,
   WindowedSubagentDetails,
 } from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+/**
+ * Read a file and return its formatted contents for prompt injection.
+ * Returns `[file not found: <path>]` if the file doesn't exist or can't be read.
+ * Line numbers are 1-indexed and inclusive.
+ */
+function readFileContents(spec: FileSpec, cwd: string): string {
+  const path = typeof spec === "string" ? spec : spec.path;
+  const absolutePath = resolve(cwd, path);
+
+  if (!existsSync(absolutePath)) {
+    return `[file not found: ${path}]`;
+  }
+
+  // Check file size before reading
+  const MAX_FILE_BYTES = 1 * 1024 * 1024; // 1 MB
+  try {
+    const stat = statSync(absolutePath);
+    if (stat.size > MAX_FILE_BYTES) {
+      return `[file too large: ${path} (${Math.round(stat.size / 1024)}KB, limit ${MAX_FILE_BYTES / 1024}KB)]`;
+    }
+  } catch {
+    return `[could not read file: ${path}]`;
+  }
+
+  let contents: string;
+  try {
+    contents = readFileSync(absolutePath, "utf-8");
+  } catch {
+    return `[could not read file: ${path}]`;
+  }
+
+  let lines = contents.split("\n");
+
+  // Strip trailing empty line from newline-terminated files (before slicing)
+  if (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines = lines.slice(0, -1);
+  }
+
+  // Apply line slicing based on spec type
+  if (typeof spec !== "string") {
+    if ("tail" in spec) {
+      lines = spec.tail > 0 ? lines.slice(-spec.tail) : [];
+    } else if ("head" in spec) {
+      lines = spec.head > 0 ? lines.slice(0, spec.head) : [];
+    } else {
+      const start = spec.start ?? 1;
+      const end = spec.end ?? lines.length;
+      lines = lines.slice(start - 1, end);
+    }
+  }
+
+  return `=== ${path} ===\n${lines.join("\n")}`;
+}
 
 /**
  * Register the delegate_to_subagents tool.
@@ -68,6 +124,10 @@ export function registerDelegateTool(
       "sub-agent is only killed after it goes idle past the timeout (configurable via settings).",
       "Each task supports an optional `resume` parameter referencing a previous session",
       "ID. The resumed agent receives the prior session's transcript as context.",
+      "Each task supports an optional `files` parameter — an array of file paths or file spec",
+      "objects to read and prepend to the prompt. Accepts strings, { path, start?, end? }",
+      "for line ranges, { path, tail: N } for the last N lines, or { path, head: N } for",
+      "the first N lines. Missing, unreadable, or oversized files produce a descriptive placeholder instead of failing.",
     ].join(" "),
     parameters: DelegateParams,
     promptSnippet: "Use when the user wants multiple independent tasks done in parallel",
@@ -85,6 +145,7 @@ export function registerDelegateTool(
       "Timeouts auto-extend while the sub-agent is actively producing output.\n",
       "Use the `resume` parameter to continue work from a previous sub-agent session.\n",
       "You can only resume sessions that are completed or errored (not running).\n",
+      "Use the `files` parameter to provide file context to sub-agents without embedding large file contents directly in the prompt string.\n",
     ],
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -302,6 +363,13 @@ export function registerDelegateTool(
               const previousData = formatRunsForResume(record.runs);
               effectivePrompt = `Previously:\n\n${previousData}\n\nInstructions:\n\n${task.prompt}`;
             }
+          }
+
+          // Prepend file contents if specified
+          if (task.files && task.files.length > 0) {
+            const fileCwd = task.cwd ?? ctx.cwd;
+            const fileBlocks = task.files.map((spec) => readFileContents(spec, fileCwd));
+            effectivePrompt = `${fileBlocks.join("\n\n")}\n\n${effectivePrompt}`;
           }
 
           const effectiveTask = { ...task, prompt: effectivePrompt };

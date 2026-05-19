@@ -27,6 +27,7 @@ vi.mock("typebox", () => ({
     Number: vi.fn(() => ({})),
     Optional: vi.fn((fn: unknown) => fn),
     Array: vi.fn(() => ({})),
+    Union: vi.fn(() => ({})),
   },
 }));
 

@@ -381,18 +381,21 @@ export function registerDelegateTool(
           let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
           const startIdleTimer = () => {
-            idleTimer = setTimeout(() => {
-              if (Date.now() - win.startedAt >= taskTimeout * 1000) {
-                taskAbortController.abort();
-              } else {
-                // Reschedule for the remaining time to ensure timeout is enforced
-                // even if no activity occurs to restart the idle timer.
-                const remaining = Math.max(taskTimeout * 1000 - (Date.now() - win.startedAt), 1);
-                idleTimer = setTimeout(() => {
+            idleTimer = setTimeout(
+              () => {
+                if (Date.now() - win.startedAt >= taskTimeout * 1000) {
                   taskAbortController.abort();
-                }, remaining);
-              }
-            }, extendDebounce * 1000 || 1);
+                } else {
+                  // Reschedule for the remaining time to ensure timeout is enforced
+                  // even if no activity occurs to restart the idle timer.
+                  const remaining = Math.max(taskTimeout * 1000 - (Date.now() - win.startedAt), 1);
+                  idleTimer = setTimeout(() => {
+                    taskAbortController.abort();
+                  }, remaining);
+                }
+              },
+              extendDebounce * 1000 || 1,
+            );
           };
 
           // Start the idle timer immediately

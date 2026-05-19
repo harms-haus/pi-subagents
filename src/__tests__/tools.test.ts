@@ -2019,9 +2019,7 @@ describe("tools", () => {
     });
 
     it("should handle multiple files", async () => {
-      mockReadFileSync
-        .mockReturnValueOnce("content-a\n")
-        .mockReturnValueOnce("content-b\n");
+      mockReadFileSync.mockReturnValueOnce("content-a\n").mockReturnValueOnce("content-b\n");
 
       const executeFn = await getDelegateExecute();
 

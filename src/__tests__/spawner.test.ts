@@ -27,7 +27,6 @@ vi.mock("../settings", () => ({
   loadCommandPreviewWidth: vi.fn().mockResolvedValue(160),
   loadExtendTimeoutDebounce: vi.fn().mockResolvedValue(30),
   loadLoopingToolCount: vi.fn().mockResolvedValue(5),
-  loadLoopingToolSimilarity: vi.fn().mockResolvedValue(0.95),
 }));
 
 // Mock node:fs (used by profiles.ts)
@@ -1445,7 +1444,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1469,7 +1467,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1484,7 +1481,7 @@ describe("spawner", () => {
       expect(mockWindow.recentToolCalls?.length).toBe(3);
     });
 
-    it("should detect loop with highly similar tool calls", async () => {
+    it("should detect loop with identical tool calls", async () => {
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
@@ -1492,22 +1489,21 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.9,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // These differ by only 1 char in the command string, producing similarity > 0.90
+      // All three calls are identical
       await emitToolCall("bash", { command: "cat /src/index.ts" });
-      await emitToolCall("bash", { command: "cat /src/index.tx" });
-      await emitToolCall("bash", { command: "cat /src/index.tt" });
+      await emitToolCall("bash", { command: "cat /src/index.ts" });
+      await emitToolCall("bash", { command: "cat /src/index.ts" });
 
       mockProcess.emit("close", 0);
       const result = await promise;
       expect(result.loopDetected).toBe(true);
     });
 
-    it("should not detect loop when similarity is below threshold", async () => {
+    it("should not detect loop when tool calls differ", async () => {
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
@@ -1515,7 +1511,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1538,7 +1533,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         // No loopingToolCount — uses default of 5
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1561,7 +1555,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         // No loopingToolCount — uses default of 5
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1585,7 +1578,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 0,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1609,7 +1601,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1635,7 +1626,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1660,7 +1650,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1686,7 +1675,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1719,7 +1707,6 @@ describe("spawner", () => {
         onUpdate: onUpdateSpy,
         session: mockSession,
         loopingToolCount: 3,
-        loopingToolSimilarity: 0.95,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));

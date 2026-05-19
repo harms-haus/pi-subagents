@@ -18,41 +18,6 @@ import type { Message } from "@earendil-works/pi-ai";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-/**
- * Compute Dice coefficient (bigram similarity) between two strings.
- * Returns a value between 0 (completely different) and 1 (identical).
- */
-function bigramSimilarity(a: string, b: string): number {
-  if (a === b) {
-    return 1;
-  }
-  if (a.length < 2 || b.length < 2) {
-    return 0;
-  }
-
-  const bigramsA = new Map<string, number>();
-  for (let i = 0; i < a.length - 1; i++) {
-    const bigram = a.substring(i, i + 2);
-    bigramsA.set(bigram, (bigramsA.get(bigram) ?? 0) + 1);
-  }
-
-  let intersection = 0;
-  for (let i = 0; i < b.length - 1; i++) {
-    const bigram = b.substring(i, i + 2);
-    const count = bigramsA.get(bigram);
-    if (count) {
-      intersection++;
-      if (count === 1) {
-        bigramsA.delete(bigram);
-      } else {
-        bigramsA.set(bigram, count - 1);
-      }
-    }
-  }
-
-  return (2 * intersection) / (a.length - 1 + b.length - 1);
-}
-
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface RunSubAgentOptions {
@@ -64,7 +29,6 @@ export interface RunSubAgentOptions {
   session: SubagentSessionData;
   profile?: SubagentProfile;
   loopingToolCount?: number;
-  loopingToolSimilarity?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -110,7 +74,6 @@ function handleStdoutLine(
   cwd: string,
   widthBudget: number,
   loopingToolCount: number,
-  loopingToolSimilarity: number,
 ): { loopDetected: boolean } {
   if (!line.trim()) {
     return { loopDetected: false };
@@ -266,21 +229,21 @@ function handleStdoutLine(
 
   onUpdate();
 
-  // Check for loop: all of the last `loopingToolCount` calls must be pairwise similar
+  // Check for loop: all of the last `loopingToolCount` calls must be identical
   if (
     loopingToolCount > 0 &&
     win.recentToolCalls &&
     win.recentToolCalls.length >= loopingToolCount
   ) {
     const recent = win.recentToolCalls.slice(-loopingToolCount);
-    let allSimilar = true;
+    let allIdentical = true;
     for (let i = 1; i < recent.length; i++) {
-      if (bigramSimilarity(recent[0], recent[i]) < loopingToolSimilarity) {
-        allSimilar = false;
+      if (recent[0] !== recent[i]) {
+        allIdentical = false;
         break;
       }
     }
-    if (allSimilar) {
+    if (allIdentical) {
       return { loopDetected: true };
     }
   }
@@ -372,7 +335,6 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
   const lineBudget = await loadCommandPreviewWidth(task.cwd);
 
   const effectiveLoopingToolCount = options.loopingToolCount ?? 5;
-  const effectiveLoopingToolSimilarity = options.loopingToolSimilarity ?? 0.95;
 
   const invocation = getPiInvocation();
   const args = [...invocation.args, "--mode", "json", "-p", "--no-session"];
@@ -424,7 +386,6 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
         resolvedCwd,
         lineBudget,
         effectiveLoopingToolCount,
-        effectiveLoopingToolSimilarity,
       );
       if (result.loopDetected) {
         loopDetectedFlag = true;

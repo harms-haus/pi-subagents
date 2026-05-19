@@ -20,7 +20,6 @@ export interface SubagentSettings {
   maxLinesPerWindow?: number;
   commandPreviewWidth?: number;
   extend_timeout_debounce?: number;
-  looping_tool_similarity?: number;
   looping_tool_count?: number;
   [key: string]: unknown;
 }
@@ -133,29 +132,6 @@ export async function loadExtendTimeoutDebounce(cwd?: string): Promise<number> {
     return 30;
   }
   return Math.max(0, Math.min(value, 300));
-}
-
-/**
- * Load looping_tool_similarity from settings files.
- * Project-local settings override global settings. Defaults to 0.95.
- */
-export async function loadLoopingToolSimilarity(cwd?: string): Promise<number> {
-  const globalSettings = await readSettingsFile(getGlobalSettingsPath());
-  const globalSubagents: SubagentSettings = globalSettings.subagents ?? {};
-  let value = globalSubagents.looping_tool_similarity ?? 0.95;
-
-  if (cwd) {
-    const projectSettings = await readSettingsFile(getProjectSettingsPath(cwd));
-    const projectSubagents: SubagentSettings = projectSettings.subagents ?? {};
-    if (projectSubagents.looping_tool_similarity !== undefined) {
-      value = projectSubagents.looping_tool_similarity;
-    }
-  }
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 0.95;
-  }
-  return Math.max(0, Math.min(value, 1));
 }
 
 /**

@@ -22,7 +22,6 @@ import { DelegateParams } from "../schemas";
 import {
   loadExtendTimeoutDebounce,
   loadLoopingToolCount,
-  loadLoopingToolSimilarity,
   loadMaxLinesPerWindow,
 } from "../settings";
 import { runSubAgent } from "../spawner";
@@ -149,14 +148,11 @@ export function registerDelegateTool(
     ],
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const [maxLines, extendDebounce, loopingToolCount, loopingToolSimilarity] = await Promise.all(
-        [
-          loadMaxLinesPerWindow(ctx.cwd),
-          loadExtendTimeoutDebounce(ctx.cwd),
-          loadLoopingToolCount(ctx.cwd),
-          loadLoopingToolSimilarity(ctx.cwd),
-        ],
-      );
+      const [maxLines, extendDebounce, loopingToolCount] = await Promise.all([
+        loadMaxLinesPerWindow(ctx.cwd),
+        loadExtendTimeoutDebounce(ctx.cwd),
+        loadLoopingToolCount(ctx.cwd),
+      ]);
 
       // Load profiles from settings (global + project-local)
       const profiles = await loadProfiles(ctx.cwd);
@@ -378,30 +374,36 @@ export function registerDelegateTool(
           const taskTimeout = Math.max(1, task.timeout ?? DEFAULT_TIMEOUT);
           const taskAbortController = new AbortController();
 
-          // Two-timer approach for timeout extension:
-          // Timer 1 (originalTimeout): Fires at taskTimeout. Does NOT abort — just starts the idle timer.
-          // Timer 2 (idleTimer): Fires after extendDebounce seconds of no activity. This IS the abort.
-          let originalTimeoutElapsed = false;
+          // Idle-timer approach for timeout extension:
+          // The idle timer starts immediately and resets on every activity.
+          // When it fires (after extendDebounce seconds of no activity), it checks
+          // whether total elapsed time >= taskTimeout. Only then does it abort.
           let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
-          const taskAbortTimeout = setTimeout(() => {
-            originalTimeoutElapsed = true;
+          const startIdleTimer = () => {
             idleTimer = setTimeout(() => {
-              taskAbortController.abort();
-            }, extendDebounce * 1000);
-          }, taskTimeout * 1000);
+              if (Date.now() - win.startedAt >= taskTimeout * 1000) {
+                taskAbortController.abort();
+              } else {
+                // Reschedule for the remaining time to ensure timeout is enforced
+                // even if no activity occurs to restart the idle timer.
+                const remaining = Math.max(taskTimeout * 1000 - (Date.now() - win.startedAt), 1);
+                idleTimer = setTimeout(() => {
+                  taskAbortController.abort();
+                }, remaining);
+              }
+            }, extendDebounce * 1000 || 1);
+          };
+
+          // Start the idle timer immediately
+          startIdleTimer();
 
           // Reset idle timer on activity (called by wrappedEmitUpdate)
           const resetIdleTimer = () => {
-            if (!originalTimeoutElapsed) {
-              return;
-            }
             if (idleTimer) {
               clearTimeout(idleTimer);
             }
-            idleTimer = setTimeout(() => {
-              taskAbortController.abort();
-            }, extendDebounce * 1000);
+            startIdleTimer();
           };
 
           // Forward parent signal to task controller
@@ -433,11 +435,9 @@ export function registerDelegateTool(
               session,
               profile: skillResolvedProfile,
               loopingToolCount,
-              loopingToolSimilarity,
             });
             loopDetected = result.loopDetected;
           } finally {
-            clearTimeout(taskAbortTimeout);
             if (idleTimer) {
               clearTimeout(idleTimer);
             }
@@ -463,7 +463,8 @@ export function registerDelegateTool(
           if (!loopDetected && taskAbortController.signal.aborted && !signal?.aborted) {
             win.status = "error";
             session.status = "error";
-            win.errorMessage = `Timed out after ${taskTimeout}s. Consider resuming with a longer timeout.`;
+            const elapsedSeconds = Math.round((Date.now() - win.startedAt) / 1000);
+            win.errorMessage = `Timed out after ${elapsedSeconds}s. Consider resuming with a longer timeout.`;
             session.errorMessage = win.errorMessage;
             win.exitCode = 1;
             session.exitCode = 1;

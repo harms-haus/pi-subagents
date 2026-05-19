@@ -45,7 +45,6 @@ vi.mock("../settings", () => ({
   loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
   loadExtendTimeoutDebounce: vi.fn().mockResolvedValue(30),
   loadLoopingToolCount: vi.fn().mockResolvedValue(5),
-  loadLoopingToolSimilarity: vi.fn().mockResolvedValue(0.95),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────

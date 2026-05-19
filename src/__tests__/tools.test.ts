@@ -79,7 +79,6 @@ vi.mock("../settings", () => ({
   loadMaxLinesPerWindow: vi.fn().mockResolvedValue(15),
   loadExtendTimeoutDebounce: vi.fn().mockResolvedValue(30),
   loadLoopingToolCount: vi.fn().mockResolvedValue(5),
-  loadLoopingToolSimilarity: vi.fn().mockResolvedValue(0.95),
 }));
 
 const { mockExistsSync, mockReadFileSync, mockStatSync } = vi.hoisted(() => ({
@@ -736,12 +735,13 @@ describe("tools", () => {
         const text = (result.content[0] as { text: string }).text;
         expect(text).toContain("error");
         expect(text).toContain("Timed out");
+        expect(text).toMatch(/after \d+s/);
 
         // Window details should show the timeout error
         const details = result.details as WindowedSubagentDetails;
         expect(details.windows[0].status).toBe("error");
         expect(details.windows[0].errorMessage).toContain("Timed out");
-        expect(details.windows[0].errorMessage).toContain("1s");
+        expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
 
         vi.useRealTimers();
       });
@@ -1597,7 +1597,7 @@ describe("tools", () => {
         const details = result.details as WindowedSubagentDetails;
         expect(details.windows[0].status).toBe("error");
         expect(details.windows[0].errorMessage).toContain("Timed out");
-        expect(details.windows[0].errorMessage).toContain("1s");
+        expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
       } finally {
         vi.useRealTimers();
       }
@@ -1689,7 +1689,7 @@ describe("tools", () => {
         const details = result.details as WindowedSubagentDetails;
         expect(details.windows[0].status).toBe("error");
         expect(details.windows[0].errorMessage).toContain("Timed out");
-        expect(details.windows[0].errorMessage).toContain("1s");
+        expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
       } finally {
         vi.useRealTimers();
       }
@@ -1747,6 +1747,7 @@ describe("tools", () => {
         const details = result.details as WindowedSubagentDetails;
         expect(details.windows[0].status).toBe("error");
         expect(details.windows[0].errorMessage).toContain("Timed out");
+        expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
       } finally {
         vi.useRealTimers();
       }
@@ -1802,9 +1803,8 @@ describe("tools", () => {
       const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
 
       // Override settings mocks
-      const { loadLoopingToolCount, loadLoopingToolSimilarity } = await import("../settings");
+      const { loadLoopingToolCount } = await import("../settings");
       vi.mocked(loadLoopingToolCount).mockResolvedValueOnce(3);
-      vi.mocked(loadLoopingToolSimilarity).mockResolvedValueOnce(0.8);
 
       registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
 
@@ -1831,7 +1831,8 @@ describe("tools", () => {
       expect(runSubAgent).toHaveBeenCalledTimes(1);
       const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
       expect(callArgs.loopingToolCount).toBe(3);
-      expect(callArgs.loopingToolSimilarity).toBe(0.8);
+      // loopingToolCount is passed through to runSubAgent
+      expect(callArgs.loopingToolCount).toBe(3);
     });
   });
 

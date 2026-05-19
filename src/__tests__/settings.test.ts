@@ -7,7 +7,6 @@ import {
   loadCommandPreviewWidth,
   loadExtendTimeoutDebounce,
   loadLoopingToolCount,
-  loadLoopingToolSimilarity,
   loadMaxLinesPerWindow,
 } from "../settings";
 
@@ -257,16 +256,6 @@ describe("readSettingsFile error handling", () => {
     expect(console.warn).toHaveBeenCalled();
   });
 
-  it("should return default loopingToolSimilarity when settings file has malformed JSON", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
-
-    const result = await loadLoopingToolSimilarity();
-
-    expect(result).toBe(0.95);
-    expect(console.warn).toHaveBeenCalled();
-  });
-
   it("should return default loopingToolCount when settings file has malformed JSON", async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
@@ -401,121 +390,6 @@ describe("loadExtendTimeoutDebounce", () => {
     const result = await loadExtendTimeoutDebounce();
 
     expect(result).toBe(30);
-  });
-});
-
-describe("loadLoopingToolSimilarity", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it("should return default 0.95 when no config is present", async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
-    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
-
-    const result = await loadLoopingToolSimilarity();
-
-    expect(result).toBe(0.95);
-  });
-
-  it("should return configured value from global settings", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue(
-      JSON.stringify({
-        subagents: {
-          looping_tool_similarity: 0.8,
-        },
-      }),
-    );
-
-    const result = await loadLoopingToolSimilarity();
-
-    expect(result).toBe(0.8);
-  });
-
-  it("should prefer project config over global", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile)
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            looping_tool_similarity: 0.8,
-          },
-        }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            looping_tool_similarity: 0.99,
-          },
-        }),
-      );
-
-    const result = await loadLoopingToolSimilarity("/project/path");
-
-    expect(result).toBe(0.99);
-  });
-
-  it("should return global config value when project has no config", async () => {
-    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
-    vi.mocked(readFile)
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          subagents: {
-            looping_tool_similarity: 0.8,
-          },
-        }),
-      )
-      .mockRejectedValueOnce(new Error("Project file not found"));
-
-    const result = await loadLoopingToolSimilarity("/project/path");
-
-    expect(result).toBe(0.8);
-  });
-
-  it("should clamp value to max 1", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue(
-      JSON.stringify({
-        subagents: {
-          looping_tool_similarity: 2.0,
-        },
-      }),
-    );
-
-    const result = await loadLoopingToolSimilarity();
-
-    expect(result).toBe(1);
-  });
-
-  it("should clamp value to min 0", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue(
-      JSON.stringify({
-        subagents: {
-          looping_tool_similarity: -0.5,
-        },
-      }),
-    );
-
-    const result = await loadLoopingToolSimilarity();
-
-    expect(result).toBe(0);
-  });
-
-  it("should return default for non-number value", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFile).mockResolvedValue(
-      JSON.stringify({
-        subagents: {
-          looping_tool_similarity: "not a number",
-        },
-      }),
-    );
-
-    const result = await loadLoopingToolSimilarity();
-
-    expect(result).toBe(0.95);
   });
 });
 

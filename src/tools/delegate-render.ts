@@ -59,6 +59,17 @@ export function colorizeToolLine(line: string, theme: Theme): string {
     );
   }
 
+  // Pattern 3.5: Combined inline ls/find result summaries (→ ls → <path> → <summary>)
+  const inlineResultMatch = line.match(/^(→ (?:ls|find) → .*? → )(\d+)(\s.*)$/);
+  if (inlineResultMatch) {
+    const [, prefix, count, rest] = inlineResultMatch;
+    if (count === "0") {
+      // Zero-count results: color entire line muted (nothing found)
+      return theme.fg("muted", line);
+    }
+    return theme.fg("muted", prefix) + theme.fg("toolDiffAdded", count) + theme.fg("muted", rest);
+  }
+
   // Pattern 4: ls/find result summaries (indented lines with entry counts)
   const resultSummaryMatch = line.match(/^(\s{2})(\d+)(\s.*)$/);
   if (resultSummaryMatch) {

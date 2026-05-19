@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { formatToolCall, formatToolResult } from "../format-tool-call";
+import { formatToolCall, formatToolResult, formatToolResultInline } from "../format-tool-call";
 
 const cwd = "/home/user/projects/my-app";
 
@@ -618,6 +618,75 @@ describe("formatToolResult", () => {
     });
     it("returns null for bash", () => {
       expect(formatToolResult("bash", "command output")).toBeNull();
+    });
+  });
+});
+
+describe("formatToolResultInline", () => {
+  describe("ls", () => {
+    it("shows files and dirs counts without leading spaces", () => {
+      expect(formatToolResultInline("ls", "file1.ts\nfile2.ts\ndir1/\n")).toBe("2 files, 1 dir");
+    });
+    it("shows only files when no dirs", () => {
+      expect(formatToolResultInline("ls", "file1\nfile2\nfile3")).toBe("3 files");
+    });
+    it("shows only dirs when no files", () => {
+      expect(formatToolResultInline("ls", "dir1/\ndir2/")).toBe("2 dirs");
+    });
+    it("shows singular for 1 file", () => {
+      expect(formatToolResultInline("ls", "readme.md")).toBe("1 file");
+    });
+    it("shows singular for 1 dir", () => {
+      expect(formatToolResultInline("ls", "src/")).toBe("1 dir");
+    });
+    it("shows singular for 1 file and 1 dir", () => {
+      expect(formatToolResultInline("ls", "readme.md\nsrc/")).toBe("1 file, 1 dir");
+    });
+    it("handles empty directory message", () => {
+      expect(formatToolResultInline("ls", "(empty directory)")).toBe("(empty)");
+    });
+    it("handles empty string", () => {
+      expect(formatToolResultInline("ls", "")).toBe("(empty)");
+    });
+    it("filters out truncation notice lines", () => {
+      expect(formatToolResultInline("ls", "file1\nfile2\n\n[500 entries limit reached]")).toBe(
+        "2 files",
+      );
+    });
+    it("shows truncation indicator when entryLimitReached", () => {
+      expect(formatToolResultInline("ls", "file1\nfile2", { entryLimitReached: 500 })).toBe("2 files+");
+    });
+  });
+  describe("find", () => {
+    it("shows match count without leading spaces", () => {
+      expect(formatToolResultInline("find", "src/a.ts\nsrc/b.ts\nsrc/c.ts")).toBe("3 matches");
+    });
+    it("shows singular for 1 match", () => {
+      expect(formatToolResultInline("find", "src/a.ts")).toBe("1 match");
+    });
+    it("handles no matches message", () => {
+      expect(formatToolResultInline("find", "No files found matching pattern")).toBe("0 matches");
+    });
+    it("handles empty string", () => {
+      expect(formatToolResultInline("find", "")).toBe("0 matches");
+    });
+    it("filters out truncation notice lines", () => {
+      expect(formatToolResultInline("find", "a.ts\nb.ts\n\n[1000 results limit reached]")).toBe(
+        "2 matches",
+      );
+    });
+    it("shows truncation indicator when resultLimitReached", () => {
+      expect(formatToolResultInline("find", "a.ts\nb.ts", { resultLimitReached: 1000 })).toBe(
+        "2 matches+",
+      );
+    });
+  });
+  describe("other tools", () => {
+    it("returns null for unknown tool", () => {
+      expect(formatToolResultInline("read", "file contents")).toBeNull();
+    });
+    it("returns null for bash", () => {
+      expect(formatToolResultInline("bash", "command output")).toBeNull();
     });
   });
 });

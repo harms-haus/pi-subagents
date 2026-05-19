@@ -1985,6 +1985,20 @@ describe("spawner", () => {
   });
 
   describe("turn_end ls/find result handling", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    async function emitToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+      const jsonEvent = JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", name: toolName, arguments: args }],
+        },
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     async function emitTurnEnd(
       toolResults: Array<{
         toolName: string;
@@ -2002,9 +2016,9 @@ describe("spawner", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    it("should append ls result summary", async () => {
+    it("should append inline ls summary to existing ls tool call line", async () => {
       const promise = runSubAgent({
-        task: { name: "test-task", prompt: "test prompt" },
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
         maxLines: 100,
         onUpdate: onUpdateSpy,
@@ -2013,6 +2027,9 @@ describe("spawner", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
+      // First emit the tool call (message_end with toolCall)
+      await emitToolCall("ls", { path: "." });
+      // Then emit the turn_end with the result
       await emitTurnEnd([
         {
           toolName: "ls",
@@ -2021,19 +2038,26 @@ describe("spawner", () => {
         },
       ]);
 
-      const summaryLine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("files"),
+      // The ls tool line should now have the inline summary appended
+      const lsLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("ls →"),
       );
-      expect(summaryLine?.text).toBe("  2 files, 1 dir");
-      expect(summaryLine?.kind).toBe("tool");
+      expect(lsLine?.text).toBe("→ ls → . → 2 files, 1 dir");
+      expect(lsLine?.kind).toBe("tool");
+
+      // No separate summary line should have been added
+      const summaryLines = mockWindow.lines.filter(
+        (l) => l.kind === "tool" && l.text === "  2 files, 1 dir",
+      );
+      expect(summaryLines).toHaveLength(0);
 
       mockProcess.emit("close", 0);
       await promise;
     });
 
-    it("should append find result summary", async () => {
+    it("should append inline find summary to existing find tool call line", async () => {
       const promise = runSubAgent({
-        task: { name: "test-task", prompt: "test prompt" },
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
         maxLines: 100,
         onUpdate: onUpdateSpy,
@@ -2042,6 +2066,7 @@ describe("spawner", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
+      await emitToolCall("find", { pattern: "*.ts" });
       await emitTurnEnd([
         {
           toolName: "find",
@@ -2050,11 +2075,11 @@ describe("spawner", () => {
         },
       ]);
 
-      const summaryLine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("matches"),
+      const findLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("find →"),
       );
-      expect(summaryLine?.text).toBe("  3 matches");
-      expect(summaryLine?.kind).toBe("tool");
+      expect(findLine?.text).toBe("→ find → *.ts → 3 matches");
+      expect(findLine?.kind).toBe("tool");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -2114,9 +2139,9 @@ describe("spawner", () => {
       await promise;
     });
 
-    it("should handle multiple tool results in single turn_end", async () => {
+    it("should handle multiple tool results matching multiple tool lines", async () => {
       const promise = runSubAgent({
-        task: { name: "test-task", prompt: "test prompt" },
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
         maxLines: 100,
         onUpdate: onUpdateSpy,
@@ -2125,6 +2150,11 @@ describe("spawner", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
+      // Emit two tool calls
+      await emitToolCall("ls", { path: "." });
+      await emitToolCall("find", { pattern: "*.ts" });
+
+      // Emit turn_end with both results
       await emitTurnEnd([
         {
           toolName: "ls",
@@ -2138,16 +2168,175 @@ describe("spawner", () => {
         },
       ]);
 
-      const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("files"));
+      // Both tool lines should have inline summaries appended
+      const lsLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("ls →"),
+      );
       const findLine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("matches"),
+        (l) => l.kind === "tool" && l.text.includes("find →"),
       );
 
-      expect(lsLine?.text).toBe("  3 files");
-      expect(lsLine?.kind).toBe("tool");
+      expect(lsLine?.text).toBe("→ ls → . → 3 files");
+      expect(findLine?.text).toBe("→ find → *.ts → 2 matches");
 
-      expect(findLine?.text).toBe("  2 matches");
-      expect(findLine?.kind).toBe("tool");
+      // No separate summary lines
+      const summaryLines = mockWindow.lines.filter(
+        (l) => l.kind === "tool" && l.text.startsWith("  "),
+      );
+      expect(summaryLines).toHaveLength(0);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should append separate inline summaries for two ls calls in same turn", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit two ls tool calls with different paths
+      await emitToolCall("ls", { path: "src" });
+      await emitToolCall("ls", { path: "test" });
+
+      // Emit turn_end with two ls results
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "a.ts\nb.ts" }],
+          isError: false,
+        },
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "spec1.ts\nspec2.ts\nspec3.ts" }],
+          isError: false,
+        },
+      ]);
+
+      // Each ls tool line should have its own inline summary
+      const lsLines = mockWindow.lines.filter(
+        (l) => l.kind === "tool" && l.text.includes("ls →"),
+      );
+      expect(lsLines).toHaveLength(2);
+      expect(lsLines[0].text).toBe("→ ls → src → 2 files");
+      expect(lsLines[1].text).toBe("→ ls → test → 3 files");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should fall back to separate line when no matching tool line exists", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Emit turn_end WITHOUT a prior tool call
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "file1.ts\nfile2.ts" }],
+          isError: false,
+        },
+      ]);
+
+      // Should fall back to appending a separate line with tool name
+      const summaryLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("files"),
+      );
+      expect(summaryLine?.text).toBe("  ls: 2 files");
+      expect(summaryLine?.kind).toBe("tool");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should also update win.allMessages when appending inline summary", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await emitToolCall("ls", { path: "src" });
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "a.ts\nb.ts" }],
+          isError: false,
+        },
+      ]);
+
+      const lsAllMsg = mockWindow.allMessages.find(
+        (l) => l.kind === "tool" && l.text.includes("ls →"),
+      );
+      expect(lsAllMsg?.text).toBe("→ ls → src → 2 files");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should not misattribute result to already-inlined line from previous turn", async () => {
+      // Regression test for cross-turn misattribution bug:
+      // Turn A: tool call `→ ls → src/` → result inlines to `→ ls → src/ → 2 files, 1 dir`
+      // Turn B: tool call `→ ls → tests/` → result scan should NOT match Turn A's inlined line
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // --- Turn A ---
+      await emitToolCall("ls", { path: "src" });
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "a.ts\nb.ts\ndir1/" }],
+          isError: false,
+        },
+      ]);
+
+      // Verify Turn A result is inlined correctly
+      const turnALine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("ls →"),
+      );
+      expect(turnALine?.text).toBe("→ ls → src → 2 files, 1 dir");
+
+      // --- Turn B ---
+      await emitToolCall("ls", { path: "tests" });
+      await emitTurnEnd([
+        {
+          toolName: "ls",
+          content: [{ type: "text", text: "spec1.ts\nspec2.ts\nspec3.ts" }],
+          isError: false,
+        },
+      ]);
+
+      // Turn A's line should NOT have been modified by Turn B's result
+      const lsLines = mockWindow.lines.filter(
+        (l) => l.kind === "tool" && l.text.includes("ls →"),
+      );
+      expect(lsLines).toHaveLength(2);
+      expect(lsLines[0].text).toBe("→ ls → src → 2 files, 1 dir");
+      expect(lsLines[1].text).toBe("→ ls → tests → 3 files");
 
       mockProcess.emit("close", 0);
       await promise;

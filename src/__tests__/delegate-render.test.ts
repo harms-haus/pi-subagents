@@ -981,5 +981,197 @@ describe("delegate_to_subagents render functions", () => {
       const colorNames = fgCalls.map((c: [string, string]) => c[0]);
       expect(colorNames).not.toContain("toolDiffAdded");
     });
+
+    // ── Pattern 3.5: Combined inline ls/find result tests ─────────
+
+    it("colorizes combined inline ls result", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "→ ls → . → 2 files, 1 dir";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // Prefix (→ ls → . → ) should get muted color
+      expect(fgCalls).toContainEqual(["muted", "→ ls → . → "]);
+      // Count should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "2"]);
+      // Rest of the summary should get muted color
+      expect(fgCalls).toContainEqual(["muted", " files, 1 dir"]);
+    });
+
+    it("colorizes combined inline find result", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "→ find → *.ts in src → 5 matches";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // Prefix (→ find → *.ts in src → ) should get muted color
+      expect(fgCalls).toContainEqual(["muted", "→ find → *.ts in src → "]);
+      // Count should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "5"]);
+      // Rest of the summary should get muted color
+      expect(fgCalls).toContainEqual(["muted", " matches"]);
+    });
+
+    it("colorizes combined inline ls result with single file", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "→ ls → src → 1 file";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // Prefix should get muted color
+      expect(fgCalls).toContainEqual(["muted", "→ ls → src → "]);
+      // Count should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "1"]);
+      // Rest of the summary should get muted color
+      expect(fgCalls).toContainEqual(["muted", " file"]);
+    });
+
+    it("combined inline empty result falls to default muted", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "→ ls → . → (empty)";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // The entire line should be in a single muted call (no count to colorize)
+      expect(fgCalls).toContainEqual(["muted", "→ ls → . → (empty)"]);
+      // Should NOT use toolDiffAdded since there's no numeric count
+      const colorNames = fgCalls.map((c: [string, string]) => c[0]);
+      expect(colorNames).not.toContain("toolDiffAdded");
+    });
+
+    it("zero-count inline result falls through to full muted (not green)", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "→ find → *.xyz → 0 matches";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // The entire line should be in a single muted call (zero = nothing found)
+      expect(fgCalls).toContainEqual(["muted", "→ find → *.xyz → 0 matches"]);
+      // Should NOT use toolDiffAdded for zero count
+      const colorNames = fgCalls.map((c: [string, string]) => c[0]);
+      expect(colorNames).not.toContain("toolDiffAdded");
+    });
+
+    it("colorizes combined inline with truncation indicator", () => {
+      const markerTheme = makeMarkerTheme();
+      const toolLine = "→ ls → src → 15 files, 3 dirs+";
+      const details = makeDetails({
+        windows: [
+          makeWindow({
+            name: "test-task",
+            status: "running",
+            lines: [{ text: toolLine, kind: "tool" }],
+          }),
+        ],
+        globalStatus: "running",
+        sessionIds: ["session-abc123"],
+      });
+
+      renderResult(
+        { content: [{ type: "text", text: "..." }], details },
+        { isPartial: false, expanded: false },
+        markerTheme,
+        null as unknown as any,
+      );
+
+      const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
+
+      // Prefix should get muted color
+      expect(fgCalls).toContainEqual(["muted", "→ ls → src → "]);
+      // Count should get toolDiffAdded color
+      expect(fgCalls).toContainEqual(["toolDiffAdded", "15"]);
+      // Rest of the summary including truncation indicator should get muted color
+      expect(fgCalls).toContainEqual(["muted", " files, 3 dirs+"]);
+    });
   });
 });

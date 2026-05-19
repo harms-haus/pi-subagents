@@ -7,7 +7,7 @@
 
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { formatToolCall, formatToolResult } from "./format-tool-call";
+import { formatToolCall, formatToolResultInline } from "./format-tool-call";
 import { profileToArgs } from "./profiles";
 import { loadCommandPreviewWidth } from "./settings";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
@@ -137,6 +137,7 @@ function handleStdoutLine(
     };
     const toolResults = turnEvent.toolResults;
     if (Array.isArray(toolResults)) {
+      const usedIndices = new Set<number>();
       for (const result of toolResults) {
         if ((result.toolName === "ls" || result.toolName === "find") && !result.isError) {
           const textParts: string[] = [];
@@ -147,9 +148,37 @@ function handleStdoutLine(
           }
           const textContent = textParts.join("");
           if (textContent) {
-            const summary = formatToolResult(result.toolName, textContent, result.details);
-            if (summary) {
-              appendLineToWindow(win, summary, maxLines, "tool");
+            const inlineSummary = formatToolResultInline(
+              result.toolName,
+              textContent,
+              result.details,
+            );
+            if (inlineSummary) {
+              const marker = `→ ${result.toolName} →`;
+              // Find the first unused tool line matching this tool name
+              // that has NOT already received an inline result from a previous turn.
+              // A bare tool call line ("→ ls → src") has no " → " after the path,
+              // while an already-inlined line ("→ ls → src → 2 files") does.
+              let found = false;
+              for (let i = 0; i < win.lines.length; i++) {
+                if (
+                  !usedIndices.has(i) &&
+                  win.lines[i].kind === "tool" &&
+                  win.lines[i].text.includes(marker) &&
+                  !win.lines[i].text
+                    .slice(win.lines[i].text.indexOf(marker) + marker.length)
+                    .includes(" → ")
+                ) {
+                  usedIndices.add(i);
+                  // Mutate the text directly — same object ref is in allMessages
+                  win.lines[i].text = `${win.lines[i].text} → ${inlineSummary}`;
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                appendLineToWindow(win, `  ${result.toolName}: ${inlineSummary}`, maxLines, "tool");
+              }
             }
           }
         }

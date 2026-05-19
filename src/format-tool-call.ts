@@ -244,9 +244,10 @@ export function countNonEmptyLines(text: string): number {
   return count;
 }
 
-function formatLsResultText(text: string, details?: { entryLimitReached?: number }): string {
+function formatLsResultText(text: string, details?: { entryLimitReached?: number }, inline?: boolean): string {
+  const prefix = inline ? "" : "  ";
   if (!text || text === "(empty directory)" || text === "(empty directory)\n") {
-    return "  (empty)";
+    return `${prefix}(empty)`;
   }
   let dirs = 0;
   let files = 0;
@@ -262,22 +263,23 @@ function formatLsResultText(text: string, details?: { entryLimitReached?: number
     }
   }
   if (dirs === 0 && files === 0) {
-    return "  (empty)";
+    return `${prefix}(empty)`;
   }
   const parts: string[] = [];
   if (files > 0) parts.push(`${files} file${files !== 1 ? "s" : ""}`);
   if (dirs > 0) parts.push(`${dirs} dir${dirs !== 1 ? "s" : ""}`);
   const truncationIndicator = details?.entryLimitReached ? "+" : "";
-  return `  ${parts.join(", ")}${truncationIndicator}`;
+  return `${prefix}${parts.join(", ")}${truncationIndicator}`;
 }
 
-function formatFindResultText(text: string, details?: { resultLimitReached?: number }): string {
+function formatFindResultText(text: string, details?: { resultLimitReached?: number }, inline?: boolean): string {
+  const prefix = inline ? "" : "  ";
   if (
     !text ||
     text === "No files found matching pattern" ||
     text === "No files found matching pattern\n"
   ) {
-    return "  0 matches";
+    return `${prefix}0 matches`;
   }
   let count = 0;
   let lineStart = 0;
@@ -290,7 +292,7 @@ function formatFindResultText(text: string, details?: { resultLimitReached?: num
     }
   }
   const truncationIndicator = details?.resultLimitReached ? "+" : "";
-  return `  ${count} match${count !== 1 ? "es" : ""}${truncationIndicator}`;
+  return `${prefix}${count} match${count !== 1 ? "es" : ""}${truncationIndicator}`;
 }
 
 export function formatToolResult(
@@ -303,6 +305,24 @@ export function formatToolResult(
   }
   if (toolName === "find") {
     return formatFindResultText(resultText, details);
+  }
+  return null;
+}
+
+/**
+ * Like formatToolResult but returns the summary WITHOUT leading spaces.
+ * Returns null for unsupported tool names.
+ */
+export function formatToolResultInline(
+  toolName: string,
+  resultText: string,
+  details?: Record<string, unknown>,
+): string | null {
+  if (toolName === "ls") {
+    return formatLsResultText(resultText, details, true);
+  }
+  if (toolName === "find") {
+    return formatFindResultText(resultText, details, true);
   }
   return null;
 }

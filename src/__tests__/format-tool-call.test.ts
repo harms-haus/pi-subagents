@@ -654,7 +654,9 @@ describe("formatToolResultInline", () => {
       );
     });
     it("shows truncation indicator when entryLimitReached", () => {
-      expect(formatToolResultInline("ls", "file1\nfile2", { entryLimitReached: 500 })).toBe("2 files+");
+      expect(formatToolResultInline("ls", "file1\nfile2", { entryLimitReached: 500 })).toBe(
+        "2 files+",
+      );
     });
   });
   describe("find", () => {

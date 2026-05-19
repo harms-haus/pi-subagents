@@ -244,7 +244,11 @@ export function countNonEmptyLines(text: string): number {
   return count;
 }
 
-function formatLsResultText(text: string, details?: { entryLimitReached?: number }, inline?: boolean): string {
+function formatLsResultText(
+  text: string,
+  details?: { entryLimitReached?: number },
+  inline?: boolean,
+): string {
   const prefix = inline ? "" : "  ";
   if (!text || text === "(empty directory)" || text === "(empty directory)\n") {
     return `${prefix}(empty)`;
@@ -272,7 +276,11 @@ function formatLsResultText(text: string, details?: { entryLimitReached?: number
   return `${prefix}${parts.join(", ")}${truncationIndicator}`;
 }
 
-function formatFindResultText(text: string, details?: { resultLimitReached?: number }, inline?: boolean): string {
+function formatFindResultText(
+  text: string,
+  details?: { resultLimitReached?: number },
+  inline?: boolean,
+): string {
   const prefix = inline ? "" : "  ";
   if (
     !text ||

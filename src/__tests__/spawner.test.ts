@@ -2039,9 +2039,7 @@ describe("spawner", () => {
       ]);
 
       // The ls tool line should now have the inline summary appended
-      const lsLine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("ls →"),
-      );
+      const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(lsLine?.text).toBe("→ ls → . → 2 files, 1 dir");
       expect(lsLine?.kind).toBe("tool");
 
@@ -2075,9 +2073,7 @@ describe("spawner", () => {
         },
       ]);
 
-      const findLine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("find →"),
-      );
+      const findLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("find →"));
       expect(findLine?.text).toBe("→ find → *.ts → 3 matches");
       expect(findLine?.kind).toBe("tool");
 
@@ -2169,12 +2165,8 @@ describe("spawner", () => {
       ]);
 
       // Both tool lines should have inline summaries appended
-      const lsLine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("ls →"),
-      );
-      const findLine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("find →"),
-      );
+      const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
+      const findLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("find →"));
 
       expect(lsLine?.text).toBe("→ ls → . → 3 files");
       expect(findLine?.text).toBe("→ find → *.ts → 2 matches");
@@ -2219,9 +2211,7 @@ describe("spawner", () => {
       ]);
 
       // Each ls tool line should have its own inline summary
-      const lsLines = mockWindow.lines.filter(
-        (l) => l.kind === "tool" && l.text.includes("ls →"),
-      );
+      const lsLines = mockWindow.lines.filter((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(lsLines).toHaveLength(2);
       expect(lsLines[0].text).toBe("→ ls → src → 2 files");
       expect(lsLines[1].text).toBe("→ ls → test → 3 files");
@@ -2315,9 +2305,7 @@ describe("spawner", () => {
       ]);
 
       // Verify Turn A result is inlined correctly
-      const turnALine = mockWindow.lines.find(
-        (l) => l.kind === "tool" && l.text.includes("ls →"),
-      );
+      const turnALine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(turnALine?.text).toBe("→ ls → src → 2 files, 1 dir");
 
       // --- Turn B ---
@@ -2331,9 +2319,7 @@ describe("spawner", () => {
       ]);
 
       // Turn A's line should NOT have been modified by Turn B's result
-      const lsLines = mockWindow.lines.filter(
-        (l) => l.kind === "tool" && l.text.includes("ls →"),
-      );
+      const lsLines = mockWindow.lines.filter((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(lsLines).toHaveLength(2);
       expect(lsLines[0].text).toBe("→ ls → src → 2 files, 1 dir");
       expect(lsLines[1].text).toBe("→ ls → tests → 3 files");

@@ -72,6 +72,7 @@ export function makeWindow(overrides: Partial<SubAgentWindow> = {}): SubAgentWin
     startedAt: Date.now(),
     timeout: 600,
     toolCount: 0,
+    fileCount: 0,
     ...overrides,
   };
 }

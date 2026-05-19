@@ -76,6 +76,7 @@ describe("spawner", () => {
       startedAt: Date.now(),
       timeout: 600,
       toolCount: 0,
+      fileCount: 0,
     };
 
     mockSession = {

@@ -186,6 +186,11 @@ export function renderDelegateResult(
     // Tool count
     headerParts.push(`${win.toolCount} tools`);
 
+    // File count
+    if (win.fileCount > 0) {
+      headerParts.push(`${win.fileCount} files`);
+    }
+
     // Todo segment - only show if todos are active and not all complete
     if (win.todoTotal !== undefined && win.todoTotal > 0 && win.todoCompleted !== win.todoTotal) {
       headerParts.push(`[${win.todoCompleted ?? 0}/${win.todoTotal}]`);

@@ -469,6 +469,7 @@ describe("delegate_to_subagents render functions", () => {
             model: "claude-sonnet-4-20250514",
             thinkingLevel: "high",
             toolCount: 7,
+            fileCount: 4,
             todoTotal: 5,
             todoCompleted: 2,
             startedAt: fixedStart,
@@ -498,6 +499,7 @@ describe("delegate_to_subagents render functions", () => {
       expect(allFgText).toContain("high");
       // Tool count
       expect(allFgText).toContain("7 tools");
+      expect(allFgText).toContain("4 files");
       // Todo segment: [completed/total]
       expect(allFgText).toContain("2/5");
       // Time segment: elapsed/timeout
@@ -514,6 +516,7 @@ describe("delegate_to_subagents render functions", () => {
             startedAt: fixedStart,
             timeout: 300,
             toolCount: 0,
+            fileCount: 0,
           }),
         ],
         globalStatus: "running",

@@ -272,6 +272,7 @@ export function registerDelegateTool(
           toolCount: resolvedProfile?.noTools
             ? 0
             : (resolvedProfile?.tools?.length ?? allToolNames?.length ?? 0),
+          fileCount: t.files?.length ?? 0,
           recentToolCalls: [],
         };
       });

@@ -111,6 +111,8 @@ export interface SubAgentWindow extends SubagentState {
   todoCompleted?: number;
   /** Number of unique tools available to this sub-agent */
   toolCount: number;
+  /** Number of files passed to this sub-agent */
+  fileCount: number;
   /** Recent tool call signatures for loop detection (serialized name+args) */
   recentToolCalls?: string[];
 }

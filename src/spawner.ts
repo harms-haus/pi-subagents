@@ -342,7 +342,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
   // Inject profile-specific CLI arguments before the prompt
   let profileEnv: Record<string, string> = {};
   if (profile) {
-    const { args: profileArgs, env: envVars } = profileToArgs(profile);
+    const { args: profileArgs, env: envVars } = profileToArgs(profile, task.cwd);
     args.push(...profileArgs);
     profileEnv = envVars;
   }

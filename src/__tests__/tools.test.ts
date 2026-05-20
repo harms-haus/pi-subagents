@@ -36,6 +36,11 @@ vi.mock("typebox", () => ({
   },
 }));
 
+// Mock skill-discovery to prevent real filesystem/npm I/O
+vi.mock("../skill-discovery", () => ({
+  resolvePackageSkillPaths: vi.fn().mockResolvedValue([]),
+}));
+
 // Mock the spawner
 vi.mock("../spawner", () => ({
   runSubAgent: vi.fn().mockResolvedValue({ loopDetected: false }),
@@ -46,7 +51,7 @@ vi.mock("../profiles", () => ({
   loadProfiles: vi.fn().mockResolvedValue({}),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
-  resolveProfileSkills: vi.fn((profile: unknown) => profile),
+  resolveProfileSkills: vi.fn(async (profile: unknown) => profile),
   validateProfileTools: (
     profile: { tools?: string[]; excludeTools?: string[] },
     profileName?: string,
@@ -1222,7 +1227,7 @@ describe("tools", () => {
       // Reset skill mocks to defaults and clear call history
       vi.mocked(resolveProfileSkills).mockClear();
       vi.mocked(resolveProfileSkills).mockImplementation(
-        (profile: unknown) => profile as Record<string, unknown>,
+        async (profile: unknown) => profile as Record<string, unknown>,
       );
       vi.mocked(validateProfileSkills).mockClear();
       vi.mocked(validateProfileSkills).mockImplementation(() => {});
@@ -1250,7 +1255,7 @@ describe("tools", () => {
         suggestedSkills: ["my-skill"],
       });
 
-      vi.mocked(resolveProfileSkills).mockImplementation((profile: unknown) => {
+      vi.mocked(resolveProfileSkills).mockImplementation(async (profile: unknown) => {
         const p = profile as Record<string, unknown>;
         return {
           ...p,
@@ -1290,7 +1295,7 @@ describe("tools", () => {
         suggestedSkills: ["missing-skill"],
       });
 
-      vi.mocked(resolveProfileSkills).mockImplementation(() => {
+      vi.mocked(resolveProfileSkills).mockImplementation(async () => {
         throw new Error('Skill "missing-skill" not found');
       });
 
@@ -1387,11 +1392,11 @@ describe("tools", () => {
         .mockReturnValueOnce({ suggestedSkills: ["skill-b"] });
 
       vi.mocked(resolveProfileSkills)
-        .mockImplementationOnce((profile: unknown) => ({
+        .mockImplementationOnce(async (profile: unknown) => ({
           ...(profile as Record<string, unknown>),
           suggestedSkills: ["/a/SKILL.md"],
         }))
-        .mockImplementationOnce((profile: unknown) => ({
+        .mockImplementationOnce(async (profile: unknown) => ({
           ...(profile as Record<string, unknown>),
           suggestedSkills: ["/b/SKILL.md"],
         }));
@@ -1445,10 +1450,10 @@ describe("tools", () => {
         .mockReturnValueOnce({ suggestedSkills: ["good-skill"] });
 
       vi.mocked(resolveProfileSkills)
-        .mockImplementationOnce(() => {
+        .mockImplementationOnce(async () => {
           throw new Error('Skill "bad-skill" not found');
         })
-        .mockImplementationOnce((profile: unknown) => ({
+        .mockImplementationOnce(async (profile: unknown) => ({
           ...(profile as Record<string, unknown>),
           suggestedSkills: ["/good/SKILL.md"],
         }));
@@ -2170,6 +2175,141 @@ describe("tools", () => {
       const promptIdx = prompt.indexOf("do the thing");
       expect(fileIdx).toBeLessThan(resumeIdx);
       expect(resumeIdx).toBeLessThan(promptIdx);
+    });
+  });
+
+  describe("delegate_to_subagents - file path security", () => {
+    let mockPi: ExtensionAPI;
+    let sessionStore: Map<string, SessionRecord>;
+
+    const getDelegateExecute = async () => {
+      const mockRegisterSession = vi.fn();
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set<string>());
+      registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
+      const toolRegistration = vi
+        .mocked(mockPi.registerTool)
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
+      expect(toolRegistration).toBeDefined();
+      return toolRegistration![0].execute;
+    };
+
+    beforeEach(() => {
+      sessionStore = new Map();
+      mockPi = createMockPi();
+      vi.mocked(runSubAgent).mockClear();
+      vi.mocked(runSubAgent).mockResolvedValue({ loopDetected: false });
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue("sensitive data\n");
+      mockStatSync.mockReturnValue({ size: 100 });
+    });
+
+    it("should deny access to files outside cwd via absolute path", async () => {
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              files: ["/etc/passwd"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: "/safe/project" } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("[access denied: path outside project directory: /etc/passwd]");
+      expect(prompt).not.toContain("sensitive data");
+    });
+
+    it("should deny access to files outside cwd via traversal", async () => {
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              files: ["../../etc/shadow"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: "/safe/project" } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("[access denied: path outside project directory");
+      expect(prompt).not.toContain("sensitive data");
+    });
+
+    it("should allow access to files within cwd", async () => {
+      mockReadFileSync.mockReturnValue("safe content\n");
+
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              files: ["src/foo.ts"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: "/safe/project" } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      expect(prompt).toContain("=== src/foo.ts ===");
+      expect(prompt).toContain("safe content");
+      expect(prompt).not.toContain("[access denied");
+    });
+
+    it("should deny path traversal that escapes the task.cwd", async () => {
+      const executeFn = await getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            {
+              name: "test-task",
+              prompt: "do the thing",
+              cwd: "/safe/subdir",
+              files: ["../../etc/passwd"],
+            },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: "/safe/project" } as any,
+      );
+
+      expect(runSubAgent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const prompt = callArgs.task.prompt;
+      // ../../etc/passwd resolves to /etc/passwd which is outside /safe/subdir
+      expect(prompt).toContain("[access denied: path outside project directory");
+      expect(prompt).not.toContain("sensitive data");
     });
   });
 });

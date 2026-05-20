@@ -25,12 +25,13 @@
 import { type Dirent, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import {
   parseFrontmatter,
   stripFrontmatter,
   loadSkills as discoverSkills,
 } from "@earendil-works/pi-coding-agent";
+import { resolvePackageSkillPaths } from "./skill-discovery";
 export { profileSummary, formatProfileDetail } from "./profile-formatting";
 import { serializeProfileToMarkdown } from "./profile-formatting";
 import type {
@@ -140,11 +141,11 @@ export function validateProfileSkills(profile: SubagentProfile, profileName?: st
  * suggestedSkills: names → file paths (for --skill CLI flags)
  * loadSkills: names → SKILL.md body → injected into appendSystemPrompt
  */
-export function resolveProfileSkills(
+export async function resolveProfileSkills(
   profile: SubagentProfile,
   cwd: string,
   skillMap?: Map<string, { filePath: string; name: string; description: string }>,
-): SubagentProfile {
+): Promise<SubagentProfile> {
   if (!profile.suggestedSkills?.length && !profile.loadSkills?.length) {
     return profile;
   }
@@ -154,7 +155,8 @@ export function resolveProfileSkills(
     result = { skills: [...skillMap.values()] };
   } else {
     const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
-    result = discoverSkills({ cwd, agentDir, skillPaths: [], includeDefaults: true });
+    const packageSkillPaths = await resolvePackageSkillPaths(cwd, agentDir);
+    result = discoverSkills({ cwd, agentDir, skillPaths: packageSkillPaths, includeDefaults: true });
   }
   const localSkillMap = skillMap ?? new Map(result.skills.map((s) => [s.name, s]));
   const available = result.skills.map((s) => s.name);
@@ -213,7 +215,7 @@ export function resolveProfileSkills(
 
 // ── Profile Loading from Markdown Files ──────────────────────────────
 
-function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
+function loadProfilesFromDir(dir: string, profiles: SubagentProfiles, scope: "global" | "project" = "global"): void {
   if (!existsSync(dir)) {
     return;
   }
@@ -258,7 +260,13 @@ function loadProfilesFromDir(dir: string, profiles: SubagentProfiles): void {
         profile.appendSystemPrompt = frontmatter.appendSystemPrompt;
       }
       if (typeof frontmatter.apiKey === "string") {
-        profile.apiKey = frontmatter.apiKey;
+        if (scope === "project") {
+          console.warn(
+            `Warning: Refusing to load apiKey from project-local profile "${name}" in ${filePath}. Move the profile to the global directory (~/.pi/agent/agent-profiles/) or use environment variables.`,
+          );
+        } else {
+          profile.apiKey = frontmatter.apiKey;
+        }
       }
 
       const trimmedBody = body.trim();
@@ -338,7 +346,7 @@ export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
   // Load project-local profiles (override globals)
   if (cwd) {
     const projectDir = getProjectProfilesDir(cwd);
-    loadProfilesFromDir(projectDir, profiles);
+    loadProfilesFromDir(projectDir, profiles, "project");
   }
 
   profilesCache = { cwd, profiles, timestamp: now };
@@ -380,7 +388,13 @@ function isDangerousFlag(arg: string): boolean {
  * Convert a SubagentProfile into invocation parameters for the pi subprocess.
  * Returns both CLI arguments and environment variables.
  */
-export function profileToArgs(profile: SubagentProfile): ProfileInvocation {
+function isWithinDir(filePath: string, dir: string): boolean {
+  const resolved = resolve(filePath);
+  const resolvedDir = resolve(dir);
+  return resolved === resolvedDir || resolved.startsWith(resolvedDir + sep);
+}
+
+export function profileToArgs(profile: SubagentProfile, cwd?: string, agentDir?: string): ProfileInvocation {
   const args: string[] = [];
   const envVars: Record<string, string> = {};
 
@@ -431,8 +445,16 @@ export function profileToArgs(profile: SubagentProfile): ProfileInvocation {
   }
 
   if (profile.suggestedSkills) {
+    const safeDirs: string[] = [];
+    if (cwd) safeDirs.push(resolve(cwd));
+    if (agentDir) safeDirs.push(resolve(agentDir));
     for (const skillPath of profile.suggestedSkills) {
       if (skillPath) {
+        if (safeDirs.length > 0 && !safeDirs.some((d) => isWithinDir(skillPath, d))) {
+          throw new Error(
+            `Refusing skill path outside allowed directories: ${skillPath}`,
+          );
+        }
         args.push("--skill", skillPath);
       }
     }

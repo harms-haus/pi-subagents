@@ -39,6 +39,10 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   loadSkills: vi.fn(() => ({ skills: [], diagnostics: [] })),
 }));
 
+vi.mock("../skill-discovery", () => ({
+  resolvePackageSkillPaths: vi.fn().mockResolvedValue([]),
+}));
+
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   loadSkills as discoverSkills,
@@ -869,13 +873,13 @@ describe("resolveProfileSkills", () => {
     vi.clearAllMocks();
   });
 
-  it("should return profile unchanged when no skills configured", () => {
+  it("should return profile unchanged when no skills configured", async () => {
     const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
-    const result = resolveProfileSkills(profile, "/fake/cwd");
+    const result = await resolveProfileSkills(profile, "/fake/cwd");
     expect(result).toEqual(profile);
   });
 
-  it("should resolve suggestedSkills names to file paths", () => {
+  it("should resolve suggestedSkills names to file paths", async () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
         {
@@ -909,12 +913,12 @@ describe("resolveProfileSkills", () => {
     });
 
     const profile: SubagentProfile = { suggestedSkills: ["skill-a", "skill-b"] };
-    const result = resolveProfileSkills(profile, "/fake/cwd");
+    const result = await resolveProfileSkills(profile, "/fake/cwd");
 
     expect(result.suggestedSkills).toEqual(["/skills/a/SKILL.md", "/skills/b/SKILL.md"]);
   });
 
-  it("should inject loadSkills content into appendSystemPrompt", () => {
+  it("should inject loadSkills content into appendSystemPrompt", async () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
         {
@@ -937,34 +941,34 @@ describe("resolveProfileSkills", () => {
     vi.mocked(stripFrontmatter).mockReturnValue("You are a coding expert.");
 
     const profile: SubagentProfile = { loadSkills: ["coding"] };
-    const result = resolveProfileSkills(profile, "/fake/cwd");
+    const result = await resolveProfileSkills(profile, "/fake/cwd");
 
     expect(result.appendSystemPrompt).toContain('<loaded_skill name="coding">');
     expect(result.appendSystemPrompt).toContain("You are a coding expert.");
     expect(result.appendSystemPrompt).toContain("</loaded_skill>");
   });
 
-  it("should throw when suggestedSkill name not found", () => {
+  it("should throw when suggestedSkill name not found", async () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [],
       diagnostics: [],
     });
 
     const profile: SubagentProfile = { suggestedSkills: ["unknown-skill"] };
-    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(/Unknown skills/);
+    await expect(resolveProfileSkills(profile, "/fake/cwd")).rejects.toThrow(/Unknown skills/);
   });
 
-  it("should throw when loadSkill name not found", () => {
+  it("should throw when loadSkill name not found", async () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [],
       diagnostics: [],
     });
 
     const profile: SubagentProfile = { loadSkills: ["unknown-skill"] };
-    expect(() => resolveProfileSkills(profile, "/fake/cwd")).toThrow(/Unknown skills/);
+    await expect(resolveProfileSkills(profile, "/fake/cwd")).rejects.toThrow(/Unknown skills/);
   });
 
-  it("should concatenate loadSkills content with existing appendSystemPrompt", () => {
+  it("should concatenate loadSkills content with existing appendSystemPrompt", async () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
         {
@@ -990,14 +994,14 @@ describe("resolveProfileSkills", () => {
       appendSystemPrompt: "Original prompt.",
       loadSkills: ["testing"],
     };
-    const result = resolveProfileSkills(profile, "/fake/cwd");
+    const result = await resolveProfileSkills(profile, "/fake/cwd");
 
     expect(result.appendSystemPrompt).toContain("Original prompt.");
     expect(result.appendSystemPrompt).toContain('<loaded_skill name="testing">');
     expect(result.appendSystemPrompt).toContain("Run all tests.");
   });
 
-  it("should skip loadSkills with empty body after stripping frontmatter", () => {
+  it("should skip loadSkills with empty body after stripping frontmatter", async () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
         {
@@ -1020,13 +1024,13 @@ describe("resolveProfileSkills", () => {
     vi.mocked(stripFrontmatter).mockReturnValue("");
 
     const profile: SubagentProfile = { loadSkills: ["empty-skill"] };
-    const result = resolveProfileSkills(profile, "/fake/cwd");
+    const result = await resolveProfileSkills(profile, "/fake/cwd");
 
     expect(result.appendSystemPrompt).toBeUndefined();
     expect(result.loadSkills).toBeUndefined();
   });
 
-  it("should set loadSkills to undefined after resolution", () => {
+  it("should set loadSkills to undefined after resolution", async () => {
     vi.mocked(discoverSkills).mockReturnValue({
       skills: [
         {
@@ -1049,7 +1053,7 @@ describe("resolveProfileSkills", () => {
     vi.mocked(stripFrontmatter).mockReturnValue("Do stuff.");
 
     const profile: SubagentProfile = { loadSkills: ["my-skill"] };
-    const result = resolveProfileSkills(profile, "/fake/cwd");
+    const result = await resolveProfileSkills(profile, "/fake/cwd");
 
     expect(result.loadSkills).toBeUndefined();
   });
@@ -1164,5 +1168,174 @@ describe("formatProfileDetail with skills", () => {
     expect(result).toContain("loadSkills");
     expect(result).toContain("coding");
     expect(result).toContain("testing");
+  });
+});
+
+// ── API Key Security Tests ──────────────────────────────────────────
+
+describe("apiKey security in loadProfilesFromDir", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should load apiKey from global-scoped profiles", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "api-key-profile.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(
+      ["---", "name: api-key-profile", "apiKey: sk-global-test-key", "---", ""].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "api-key-profile", apiKey: "sk-global-test-key" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["api-key-profile"]).toBeDefined();
+    expect(profiles["api-key-profile"].apiKey).toBe("sk-global-test-key");
+  });
+
+  it("should refuse apiKey from project-scoped profiles and emit warning", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    vi.mocked(existsSync).mockReturnValue(true);
+    // First call = global dir (empty), second call = project dir (has the profile)
+    vi.mocked(readdirSync)
+      .mockReturnValueOnce([] as unknown as ReturnType<typeof readdirSync>)
+      .mockReturnValueOnce([
+        { name: "project-key.md", isFile: () => true },
+      ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(
+      ["---", "name: project-key", "apiKey: sk-project-secret", "---", ""].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "project-key", apiKey: "sk-project-secret" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles("/fake/project");
+    expect(profiles["project-key"]).toBeDefined();
+    // apiKey should NOT be loaded from project-scoped profile
+    expect(profiles["project-key"].apiKey).toBeUndefined();
+
+    // Warning should have been emitted
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Refusing to load apiKey from project-local profile"),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it("should load global profile apiKey but refuse project-local override with apiKey", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    vi.mocked(existsSync).mockReturnValue(true);
+    // Global dir has shared profile with apiKey, project dir overrides it
+    vi.mocked(readdirSync)
+      .mockReturnValueOnce([
+        { name: "shared.md", isFile: () => true },
+      ] as unknown as ReturnType<typeof readdirSync>)
+      .mockReturnValueOnce([
+        { name: "shared.md", isFile: () => true },
+      ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync)
+      .mockReturnValueOnce(
+        ["---", "name: shared", "apiKey: sk-global-key", "model: gpt-4", "---", ""].join("\n"),
+      )
+      .mockReturnValueOnce(
+        ["---", "name: shared", "apiKey: sk-project-key", "model: gpt-4o", "---", ""].join("\n"),
+      );
+    vi.mocked(parseFrontmatter)
+      .mockReturnValueOnce({
+        frontmatter: { name: "shared", apiKey: "sk-global-key", model: "gpt-4" },
+        body: "",
+      })
+      .mockReturnValueOnce({
+        frontmatter: { name: "shared", apiKey: "sk-project-key", model: "gpt-4o" },
+        body: "",
+      });
+
+    const profiles = await loadProfiles("/fake/project");
+
+    // Project-local override should have the new model but NOT the apiKey
+    expect(profiles["shared"]).toBeDefined();
+    expect(profiles["shared"].model).toBe("gpt-4o");
+    expect(profiles["shared"].apiKey).toBeUndefined();
+
+    // Warning should have been emitted for the project-scoped apiKey
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Refusing to load apiKey from project-local profile"),
+    );
+
+    warnSpy.mockRestore();
+  });
+});
+
+// ── Skill Path Validation Tests ─────────────────────────────────────
+
+describe("profileToArgs skill path validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should throw when suggestedSkill path is outside safe directories", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["/etc/passwd"],
+    };
+    expect(() => profileToArgs(profile, "/safe/cwd", "/safe/agent")).toThrow(
+      /outside allowed directories/,
+    );
+  });
+
+  it("should allow skill paths within cwd", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["/safe/cwd/.pi/skills/my-skill/SKILL.md"],
+    };
+    const result = profileToArgs(profile, "/safe/cwd");
+    expect(result.args).toContain("--skill");
+    expect(result.args).toContain("/safe/cwd/.pi/skills/my-skill/SKILL.md");
+  });
+
+  it("should allow skill paths within agentDir", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["/safe/agent/skills/my-skill/SKILL.md"],
+    };
+    const result = profileToArgs(profile, "/some/cwd", "/safe/agent");
+    expect(result.args).toContain("--skill");
+    expect(result.args).toContain("/safe/agent/skills/my-skill/SKILL.md");
+  });
+
+  it("should skip validation when no cwd or agentDir provided", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["/any/path/SKILL.md"],
+    };
+    const result = profileToArgs(profile);
+    expect(result.args).toContain("--skill");
+    expect(result.args).toContain("/any/path/SKILL.md");
+  });
+
+  it("should throw when skill path uses traversal to escape cwd", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: ["/safe/cwd/../../../etc/shadow"],
+    };
+    expect(() => profileToArgs(profile, "/safe/cwd")).toThrow(
+      /outside allowed directories/,
+    );
+  });
+
+  it("should allow multiple skill paths all within cwd", () => {
+    const profile: SubagentProfile = {
+      suggestedSkills: [
+        "/project/.pi/skills/a/SKILL.md",
+        "/project/.pi/skills/b/SKILL.md",
+      ],
+    };
+    const result = profileToArgs(profile, "/project");
+    const skillArgs = result.args.filter((_, i) => result.args[i - 1] === "--skill");
+    expect(skillArgs).toHaveLength(2);
+    expect(skillArgs).toContain("/project/.pi/skills/a/SKILL.md");
+    expect(skillArgs).toContain("/project/.pi/skills/b/SKILL.md");
   });
 });

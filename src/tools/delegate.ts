@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { loadSkills as discoverSkills } from "@earendil-works/pi-coding-agent";
 import {
   applyExcludeTools,
@@ -24,6 +24,7 @@ import {
   loadLoopingToolCount,
   loadMaxLinesPerWindow,
 } from "../settings";
+import { resolvePackageSkillPaths } from "../skill-discovery";
 import { runSubAgent } from "../spawner";
 import {
   DEFAULT_TIMEOUT,
@@ -52,6 +53,15 @@ function readFileContents(spec: FileSpec, cwd: string): string {
   const path = typeof spec === "string" ? spec : spec.path;
   const absolutePath = resolve(cwd, path);
 
+  // Prevent path traversal outside cwd
+  const resolvedCwd = resolve(cwd);
+  if (
+    absolutePath !== resolvedCwd &&
+    !absolutePath.startsWith(resolvedCwd + sep)
+  ) {
+    return `[access denied: path outside project directory: ${path}]`;
+  }
+
   if (!existsSync(absolutePath)) {
     return `[file not found: ${path}]`;
   }
@@ -78,7 +88,7 @@ function readFileContents(spec: FileSpec, cwd: string): string {
 
   // Strip trailing empty line from newline-terminated files (before slicing)
   if (lines.length > 0 && lines[lines.length - 1] === "") {
-    lines = lines.slice(0, -1);
+    lines.pop();
   }
 
   // Apply line slicing based on spec type
@@ -193,10 +203,11 @@ export function registerDelegateTool(
       );
       if (needsSkillResolution) {
         const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+        const packageSkillPaths = await resolvePackageSkillPaths(ctx.cwd, agentDir);
         const discResult = discoverSkills({
           cwd: ctx.cwd,
           agentDir,
-          skillPaths: [],
+          skillPaths: packageSkillPaths,
           includeDefaults: true,
         });
         skillMap = new Map(discResult.skills.map((s) => [s.name, s]));
@@ -216,7 +227,7 @@ export function registerDelegateTool(
           try {
             skillResolvedProfiles.set(profile, {
               ok: true,
-              profile: resolveProfileSkills(profile, ctx.cwd, skillMap),
+              profile: await resolveProfileSkills(profile, ctx.cwd, skillMap),
             });
           } catch (skillError) {
             skillResolvedProfiles.set(profile, {

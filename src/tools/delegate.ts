@@ -55,10 +55,7 @@ function readFileContents(spec: FileSpec, cwd: string): string {
 
   // Prevent path traversal outside cwd
   const resolvedCwd = resolve(cwd);
-  if (
-    absolutePath !== resolvedCwd &&
-    !absolutePath.startsWith(resolvedCwd + sep)
-  ) {
+  if (absolutePath !== resolvedCwd && !absolutePath.startsWith(resolvedCwd + sep)) {
     return `[access denied: path outside project directory: ${path}]`;
   }
 

@@ -1234,12 +1234,12 @@ describe("apiKey security in loadProfilesFromDir", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     // Global dir has shared profile with apiKey, project dir overrides it
     vi.mocked(readdirSync)
-      .mockReturnValueOnce([
-        { name: "shared.md", isFile: () => true },
-      ] as unknown as ReturnType<typeof readdirSync>)
-      .mockReturnValueOnce([
-        { name: "shared.md", isFile: () => true },
-      ] as unknown as ReturnType<typeof readdirSync>);
+      .mockReturnValueOnce([{ name: "shared.md", isFile: () => true }] as unknown as ReturnType<
+        typeof readdirSync
+      >)
+      .mockReturnValueOnce([{ name: "shared.md", isFile: () => true }] as unknown as ReturnType<
+        typeof readdirSync
+      >);
     vi.mocked(readFileSync)
       .mockReturnValueOnce(
         ["---", "name: shared", "apiKey: sk-global-key", "model: gpt-4", "---", ""].join("\n"),
@@ -1320,17 +1320,12 @@ describe("profileToArgs skill path validation", () => {
     const profile: SubagentProfile = {
       suggestedSkills: ["/safe/cwd/../../../etc/shadow"],
     };
-    expect(() => profileToArgs(profile, "/safe/cwd")).toThrow(
-      /outside allowed directories/,
-    );
+    expect(() => profileToArgs(profile, "/safe/cwd")).toThrow(/outside allowed directories/);
   });
 
   it("should allow multiple skill paths all within cwd", () => {
     const profile: SubagentProfile = {
-      suggestedSkills: [
-        "/project/.pi/skills/a/SKILL.md",
-        "/project/.pi/skills/b/SKILL.md",
-      ],
+      suggestedSkills: ["/project/.pi/skills/a/SKILL.md", "/project/.pi/skills/b/SKILL.md"],
     };
     const result = profileToArgs(profile, "/project");
     const skillArgs = result.args.filter((_, i) => result.args[i - 1] === "--skill");

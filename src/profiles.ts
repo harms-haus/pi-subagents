@@ -156,7 +156,12 @@ export async function resolveProfileSkills(
   } else {
     const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
     const packageSkillPaths = await resolvePackageSkillPaths(cwd, agentDir);
-    result = discoverSkills({ cwd, agentDir, skillPaths: packageSkillPaths, includeDefaults: true });
+    result = discoverSkills({
+      cwd,
+      agentDir,
+      skillPaths: packageSkillPaths,
+      includeDefaults: true,
+    });
   }
   const localSkillMap = skillMap ?? new Map(result.skills.map((s) => [s.name, s]));
   const available = result.skills.map((s) => s.name);
@@ -215,7 +220,11 @@ export async function resolveProfileSkills(
 
 // ── Profile Loading from Markdown Files ──────────────────────────────
 
-function loadProfilesFromDir(dir: string, profiles: SubagentProfiles, scope: "global" | "project" = "global"): void {
+function loadProfilesFromDir(
+  dir: string,
+  profiles: SubagentProfiles,
+  scope: "global" | "project" = "global",
+): void {
   if (!existsSync(dir)) {
     return;
   }
@@ -394,7 +403,11 @@ function isWithinDir(filePath: string, dir: string): boolean {
   return resolved === resolvedDir || resolved.startsWith(resolvedDir + sep);
 }
 
-export function profileToArgs(profile: SubagentProfile, cwd?: string, agentDir?: string): ProfileInvocation {
+export function profileToArgs(
+  profile: SubagentProfile,
+  cwd?: string,
+  agentDir?: string,
+): ProfileInvocation {
   const args: string[] = [];
   const envVars: Record<string, string> = {};
 
@@ -451,9 +464,7 @@ export function profileToArgs(profile: SubagentProfile, cwd?: string, agentDir?:
     for (const skillPath of profile.suggestedSkills) {
       if (skillPath) {
         if (safeDirs.length > 0 && !safeDirs.some((d) => isWithinDir(skillPath, d))) {
-          throw new Error(
-            `Refusing skill path outside allowed directories: ${skillPath}`,
-          );
+          throw new Error(`Refusing skill path outside allowed directories: ${skillPath}`);
         }
         args.push("--skill", skillPath);
       }

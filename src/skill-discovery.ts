@@ -11,7 +11,11 @@ export function invalidatePackageSkillCache(): void {
 
 export async function resolvePackageSkillPaths(cwd: string, agentDir?: string): Promise<string[]> {
   const now = Date.now();
-  if (packageSkillCache && packageSkillCache.cwd === cwd && now - packageSkillCache.timestamp < CACHE_TTL) {
+  if (
+    packageSkillCache &&
+    packageSkillCache.cwd === cwd &&
+    now - packageSkillCache.timestamp < CACHE_TTL
+  ) {
     return packageSkillCache.paths;
   }
 
@@ -23,9 +27,7 @@ export async function resolvePackageSkillPaths(cwd: string, agentDir?: string): 
     settingsManager,
   });
   const resolvedPaths = await packageManager.resolve();
-  const paths = resolvedPaths.skills
-    .filter((s) => s.enabled)
-    .map((s) => s.path);
+  const paths = resolvedPaths.skills.filter((s) => s.enabled).map((s) => s.path);
 
   packageSkillCache = { cwd, paths, timestamp: now };
   return paths;

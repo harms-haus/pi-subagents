@@ -1203,7 +1203,7 @@ describe("apiKey security in loadProfilesFromDir", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     // First call = global dir (empty), second call = project dir (has the profile)
     vi.mocked(readdirSync)
-      .mockReturnValueOnce([] as unknown as ReturnType<typeof readdirSync>)
+      .mockReturnValueOnce([] as ReturnType<typeof readdirSync>)
       .mockReturnValueOnce([
         { name: "project-key.md", isFile: () => true },
       ] as unknown as ReturnType<typeof readdirSync>);

@@ -29,6 +29,7 @@ export interface RunSubAgentOptions {
   session: SubagentSessionData;
   profile?: SubagentProfile;
   loopingToolCount?: number;
+  agentDir?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -342,7 +343,7 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
   // Inject profile-specific CLI arguments before the prompt
   let profileEnv: Record<string, string> = {};
   if (profile) {
-    const { args: profileArgs, env: envVars } = profileToArgs(profile, task.cwd);
+    const { args: profileArgs, env: envVars } = profileToArgs(profile, task.cwd, options.agentDir);
     args.push(...profileArgs);
     profileEnv = envVars;
   }

@@ -195,11 +195,11 @@ export function registerDelegateTool(
       let skillMap:
         | Map<string, { filePath: string; name: string; description: string }>
         | undefined;
+      const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
       const needsSkillResolution = resolvedProfiles.some(
         ({ profile }) => profile && (profile.suggestedSkills?.length || profile.loadSkills?.length),
       );
       if (needsSkillResolution) {
-        const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
         const packageSkillPaths = await resolvePackageSkillPaths(ctx.cwd, agentDir);
         const discResult = discoverSkills({
           cwd: ctx.cwd,
@@ -447,6 +447,7 @@ export function registerDelegateTool(
               session,
               profile: skillResolvedProfile,
               loopingToolCount,
+              agentDir,
             });
             loopDetected = result.loopDetected;
           } finally {

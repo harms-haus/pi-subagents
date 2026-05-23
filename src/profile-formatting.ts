@@ -3,7 +3,7 @@ import type { SubagentProfile } from "./profile-types";
 /** Quote a string value for safe YAML output */
 function yamlQuote(value: string): string {
   // Quote if contains YAML-special characters
-  if (/:|#|'|"|\n|^\s|\s$|^[&*?|>!%@`{\[~,]|^-(\s|$)/.test(value)) {
+  if (/:|#|'|"|\n|^\s|\s$|^[&*?|>!%@`{[~,]|^-(\s|$)/.test(value)) {
     const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     return '"' + escaped + '"';
   }

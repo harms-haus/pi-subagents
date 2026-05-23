@@ -317,9 +317,7 @@ describe("index.ts — default export", () => {
 
       // Add a 33rd session — the running-old session should NOT be evicted
       // even though it has the oldest startedAt; a non-running session should be evicted instead
-      capturedRegisterSession(
-        makeSession({ sessionId: "overflow-new", startedAt: 33000 }),
-      );
+      capturedRegisterSession(makeSession({ sessionId: "overflow-new", startedAt: 33000 }));
 
       expect(capturedSessionStore!.size).toBe(32);
       expect(capturedSessionStore!.has("running-old")).toBe(true);

@@ -102,9 +102,7 @@ describe("delegate-features", () => {
     registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
     const toolRegistration = vi
       .mocked(mockPi.registerTool)
-      .mock.calls.find(
-        (call: [{ name: string }]) => call[0].name === "delegate_to_subagents",
-      );
+      .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
     expect(toolRegistration).toBeDefined();
     return toolRegistration![0].execute;
   };

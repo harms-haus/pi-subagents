@@ -1098,7 +1098,11 @@ describe("profile round-trip: serializeProfileToMarkdown → parse → verify fi
     ] as unknown as ReturnType<typeof readdirSync>);
     vi.mocked(readFileSync).mockReturnValue(md);
     vi.mocked(parseFrontmatter).mockReturnValue({
-      frontmatter: { name: "excl-profile", model: "anthropic/claude-sonnet-4", excludeTools: "write,bash" },
+      frontmatter: {
+        name: "excl-profile",
+        model: "anthropic/claude-sonnet-4",
+        excludeTools: "write,bash",
+      },
       body: "",
     });
 
@@ -1165,7 +1169,7 @@ describe("loadProfiles with unreadable file", () => {
     ] as unknown as ReturnType<typeof readdirSync>);
 
     vi.mocked(readFileSync)
-      .mockReturnValueOnce('---\nname: good\nmodel: openai/gpt-4o\n---\n')
+      .mockReturnValueOnce("---\nname: good\nmodel: openai/gpt-4o\n---\n")
       .mockImplementationOnce(() => {
         throw new Error("EACCES: permission denied");
       });

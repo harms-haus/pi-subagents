@@ -111,25 +111,26 @@ export async function loadCommandPreviewWidth(cwd?: string): Promise<number> {
   // Read settings files to check for an explicitly configured value
   const globalSettings = await readSettingsFile(getGlobalSettingsPath());
   const globalSubagents = globalSettings.subagents ?? {};
-  let configuredValue: unknown =
-    (globalSubagents as Record<string, unknown>)['commandPreviewWidth'];
+  let configuredValue: unknown = (globalSubagents as Record<string, unknown>)[
+    "commandPreviewWidth"
+  ];
 
   if (cwd) {
     const projectSettings = await readSettingsFile(getProjectSettingsPath(cwd));
     const projectSubagents = projectSettings.subagents ?? {};
-    const projectValue = (projectSubagents as Record<string, unknown>)['commandPreviewWidth'];
+    const projectValue = (projectSubagents as Record<string, unknown>)["commandPreviewWidth"];
     if (projectValue !== undefined) {
       configuredValue = projectValue;
     }
   }
 
   // If the user explicitly configured a value, use it (clamped)
-  if (typeof configuredValue === 'number' && Number.isFinite(configuredValue)) {
+  if (typeof configuredValue === "number" && Number.isFinite(configuredValue)) {
     return Math.max(configuredValue, 20);
   }
 
   // No explicit setting: fall back to TTY width if available
-  if (typeof process.stdout.columns === 'number') {
+  if (typeof process.stdout.columns === "number") {
     return Math.max(process.stdout.columns - 4, 20);
   }
 

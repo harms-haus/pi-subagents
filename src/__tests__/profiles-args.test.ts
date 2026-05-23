@@ -7,12 +7,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubagentProfile } from "../profiles";
-import {
-  applyExcludeTools,
-  formatProfileDetail,
-  profileSummary,
-  profileToArgs,
-} from "../profiles";
+import { applyExcludeTools, formatProfileDetail, profileSummary, profileToArgs } from "../profiles";
 
 // Mock filesystem functions
 vi.mock("node:fs", () => ({
@@ -38,8 +33,6 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 vi.mock("../skill-discovery", () => ({
   resolvePackageSkillPaths: vi.fn().mockResolvedValue([]),
 }));
-
-
 
 describe("profileToArgs", () => {
   beforeEach(() => {

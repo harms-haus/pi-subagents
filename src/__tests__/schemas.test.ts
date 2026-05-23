@@ -170,10 +170,7 @@ describe("DelegateParams — invalid params", () => {
 
   it("rejects when a single task in the array is invalid", () => {
     const params = {
-      tasks: [
-        { name: "valid", prompt: "ok" },
-        { prompt: "missing name" },
-      ],
+      tasks: [{ name: "valid", prompt: "ok" }, { prompt: "missing name" }],
     };
 
     expect(Value.Check(DelegateParams, params)).toBe(false);

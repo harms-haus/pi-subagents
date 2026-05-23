@@ -65,7 +65,7 @@ export function extractTextParts(msg: { content?: unknown }): string[] {
           part != null &&
           typeof part === "object" &&
           (part as { type?: string }).type === "text" &&
-          typeof (part as { text?: unknown }).text === "string"
+          typeof (part as { text?: unknown }).text === "string",
       )
       .map((part) => part.text);
   }

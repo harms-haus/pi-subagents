@@ -101,9 +101,7 @@ describe("delegate-advanced", () => {
 
     const toolRegistration = vi
       .mocked(mockPi.registerTool)
-      .mock.calls.find(
-        (call: [{ name: string }]) => call[0].name === "delegate_to_subagents",
-      );
+      .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
     expect(toolRegistration).toBeDefined();
 
     const executeFn = toolRegistration?.[0].execute;
@@ -428,16 +426,12 @@ describe("delegate-advanced", () => {
     it("should reject resume when session is still running", async () => {
       const runningSessionId = "running-session-id";
       const mockRegisterSession = vi.fn();
-      const mockGetActiveSessionIds = vi
-        .fn()
-        .mockReturnValue(new Set([runningSessionId]));
+      const mockGetActiveSessionIds = vi.fn().mockReturnValue(new Set([runningSessionId]));
       registerDelegateTool(mockPi, sessionStore, mockRegisterSession, mockGetActiveSessionIds);
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "delegate_to_subagents",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "delegate_to_subagents");
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) throw new Error("Tool not registered");
 
@@ -490,9 +484,7 @@ describe("delegate-advanced", () => {
       await executeFn(
         "tool-call-id",
         {
-          tasks: [
-            { name: "test-task", prompt: "new instructions", resume: previousSessionId },
-          ],
+          tasks: [{ name: "test-task", prompt: "new instructions", resume: previousSessionId }],
         },
         undefined,
         vi.fn(),
@@ -524,18 +516,14 @@ describe("delegate-advanced", () => {
       const result = await executeFn(
         "tool-call-id",
         {
-          tasks: [
-            { name: "test-task", prompt: "new instructions", resume: previousSessionId },
-          ],
+          tasks: [{ name: "test-task", prompt: "new instructions", resume: previousSessionId }],
         },
         undefined,
         vi.fn(),
         { cwd: process.cwd() } as any,
       );
 
-      expect((result.details as Record<string, unknown>).sessionIds).toContain(
-        previousSessionId,
-      );
+      expect((result.details as Record<string, unknown>).sessionIds).toContain(previousSessionId);
     });
   });
 
@@ -580,9 +568,7 @@ describe("delegate-advanced", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) throw new Error("Tool not registered");
 
@@ -633,9 +619,7 @@ describe("delegate-advanced", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_session",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) throw new Error("Tool not registered");
 
@@ -677,9 +661,7 @@ describe("delegate-advanced", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_session",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) throw new Error("Tool not registered");
 

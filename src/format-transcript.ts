@@ -60,7 +60,9 @@ function formatMessage(msg: Message, options: TranscriptOptions): string[] {
   } else if (msg.role === "assistant") {
     const text = getTextContent(msg);
     if (text) parts.push(`${options.assistantPrefix}${text}`);
-    parts.push(...formatToolCalls(msg.content, options.toolCallPrefix, options.toolCallPreviewLength));
+    parts.push(
+      ...formatToolCalls(msg.content, options.toolCallPrefix, options.toolCallPreviewLength),
+    );
   } else if (msg.role === "toolResult") {
     const text = getTextContent(msg);
     if (text) {
@@ -114,9 +116,7 @@ export const RESUME_OPTIONS: TranscriptOptions = {
   toolCallPreviewLength: TOOL_CALL_PREVIEW_LENGTH,
   partSeparator: "\n\n",
   runHeader: (i, total, run) =>
-    total > 1
-      ? `--- Run ${i + 1} (${run.status}, ${run.messages.length} messages) ---`
-      : undefined,
+    total > 1 ? `--- Run ${i + 1} (${run.status}, ${run.messages.length} messages) ---` : undefined,
 };
 
 /**

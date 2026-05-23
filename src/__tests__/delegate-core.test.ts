@@ -120,9 +120,7 @@ describe("delegate-core", () => {
 
       const registration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        )?.[0];
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output")?.[0];
       expect(registration).toBeDefined();
       expect(registration!.description.length).toBeGreaterThan(0);
       expect(registration!.parameters).toBeDefined();
@@ -215,9 +213,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       expect(toolRegistration).toBeDefined();
 
       const executeFn = toolRegistration?.[0].execute;
@@ -242,9 +238,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       expect(toolRegistration).toBeDefined();
 
       const executeFn = toolRegistration?.[0].execute;
@@ -276,9 +270,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) {
         throw new Error("Tool not registered");
@@ -291,9 +283,7 @@ describe("delegate-core", () => {
         { cwd: process.cwd() } as any,
       );
 
-      expect((result.content[0] as { text: string }).text).toBe(
-        "(no text output from sub-agent)",
-      );
+      expect((result.content[0] as { text: string }).text).toBe("(no text output from sub-agent)");
     });
   });
 
@@ -330,9 +320,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_session",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) {
         throw new Error("Tool not registered");
@@ -355,9 +343,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_session",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
 
       const executeFn = toolRegistration?.[0].execute;
       if (!executeFn) {
@@ -380,9 +366,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       const renderCall = toolRegistration?.[0].renderCall;
       if (!renderCall) {
         throw new Error("Tool not registered");
@@ -400,9 +384,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       const renderCall = toolRegistration?.[0].renderCall;
       if (!renderCall) {
         throw new Error("Tool not registered");
@@ -420,9 +402,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_session",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_session");
       const renderCall = toolRegistration?.[0].renderCall;
       if (!renderCall) {
         throw new Error("Tool not registered");
@@ -444,9 +424,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       const renderResult = toolRegistration?.[0].renderResult;
       if (!renderResult) {
         throw new Error("Tool not registered");
@@ -459,12 +437,7 @@ describe("delegate-core", () => {
         details: {},
       };
 
-      renderResult(
-        result as any,
-        { expanded: false, isPartial: false },
-        mockTheme,
-        null as any,
-      );
+      renderResult(result as any, { expanded: false, isPartial: false }, mockTheme, null as any);
 
       expect(mockTheme.fg).toHaveBeenCalledWith("toolOutput", "Test output content");
     });
@@ -474,9 +447,7 @@ describe("delegate-core", () => {
 
       const toolRegistration = vi
         .mocked(mockPi.registerTool)
-        .mock.calls.find(
-          (call: [{ name: string }]) => call[0].name === "get_subagent_output",
-        );
+        .mock.calls.find((call: [{ name: string }]) => call[0].name === "get_subagent_output");
       const renderResult = toolRegistration?.[0].renderResult;
       if (!renderResult) {
         throw new Error("Tool not registered");
@@ -490,12 +461,7 @@ describe("delegate-core", () => {
         details: {},
       };
 
-      renderResult(
-        result as any,
-        { expanded: false, isPartial: false },
-        mockTheme,
-        null as any,
-      );
+      renderResult(result as any, { expanded: false, isPartial: false }, mockTheme, null as any);
 
       expect(mockTheme.fg).toHaveBeenCalledWith("toolOutput", "(no output)");
     });

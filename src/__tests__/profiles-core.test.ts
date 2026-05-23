@@ -1,5 +1,10 @@
 /**
- * Tests for src/profiles.ts
+ * Tests for src/profiles.ts — Core profile functionality:
+ * resolveProfile, profileSummary, formatProfileDetail, getProfilesDir,
+ * validateProfileTools, applyExcludeTools, validateProfileSkills,
+ * resolveProfileSkills, loadProfilesFromDir parsing, loadProfiles cache,
+ * loadProfiles project-local profiles, apiKey security,
+ * profileToArgs skill path validation
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +22,7 @@ import {
   validateProfileSkills,
   validateProfileTools,
 } from "../profiles";
+import { serializeProfileToMarkdown } from "../profile-formatting";
 
 // Mock filesystem functions
 vi.mock("node:fs", () => ({
@@ -49,174 +55,6 @@ import {
   parseFrontmatter,
   stripFrontmatter,
 } from "@earendil-works/pi-coding-agent";
-
-describe("profileToArgs", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("should include --provider flag when provider is set", () => {
-    const profile: SubagentProfile = { provider: "anthropic" };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--provider");
-    expect(result.args).toContain("anthropic");
-  });
-
-  it("should include --model flag when model is set", () => {
-    const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--model");
-    expect(result.args).toContain("anthropic/claude-sonnet-4");
-  });
-
-  it("should include --system-prompt flag when systemPrompt is set", () => {
-    const profile: SubagentProfile = { systemPrompt: "You are a helpful assistant." };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--system-prompt");
-    expect(result.args).toContain("You are a helpful assistant.");
-  });
-
-  it("should include --thinking flag when thinkingLevel is set", () => {
-    const profile: SubagentProfile = { thinkingLevel: "high" };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--thinking");
-    expect(result.args).toContain("high");
-  });
-
-  it("should include --tool flag for each tool in tools array", () => {
-    const profile: SubagentProfile = { tools: ["read", "bash", "grep"] };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--tools");
-    expect(result.args).toContain("read,bash,grep");
-  });
-
-  it("should include --extension flag for each extension", () => {
-    const profile: SubagentProfile = { extensions: ["/path/to/ext1.js", "/path/to/ext2.js"] };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--extension");
-    expect(result.args).toContain("/path/to/ext1.js");
-    expect(result.args).toContain("--extension");
-    expect(result.args).toContain("/path/to/ext2.js");
-  });
-
-  it("should set PI_API_KEY environment variable, not include in args", () => {
-    const profile: SubagentProfile = { apiKey: "sk-secret-key-123" };
-    const result = profileToArgs(profile);
-
-    expect(result.args).not.toContain("--api-key");
-    expect(result.args).not.toContain("sk-secret-key-123");
-    expect(result.env.PI_API_KEY).toBe("sk-secret-key-123");
-  });
-
-  it("should append valid extraArgs to args", () => {
-    const profile: SubagentProfile = { extraArgs: ["--verbose", "--timeout", "30"] };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--verbose");
-    expect(result.args).toContain("--timeout");
-    expect(result.args).toContain("30");
-  });
-
-  it("should throw error when extraArgs contains null byte", () => {
-    const profile: SubagentProfile = { extraArgs: ["test\0arg"] };
-
-    expect(() => profileToArgs(profile)).toThrow("Invalid extraArg: contains null byte");
-  });
-
-  it("should throw error when extraArgs contains shell operators", () => {
-    const profile: SubagentProfile = { extraArgs: ["test && rm -rf /"] };
-
-    expect(() => profileToArgs(profile)).toThrow("Refusing extraArg: potentially unsafe argument");
-  });
-
-  it("should throw error when extraArgs contains command separators", () => {
-    const profile: SubagentProfile = { extraArgs: ["test; ls"] };
-
-    expect(() => profileToArgs(profile)).toThrow("Refusing extraArg: potentially unsafe argument");
-  });
-
-  it("should return empty args and env for empty profile", () => {
-    const profile: SubagentProfile = {};
-    const result = profileToArgs(profile);
-
-    expect(result.args).toEqual([]);
-    expect(result.env).toEqual({});
-  });
-
-  it("should include all fields when profile has all fields set", () => {
-    const profile: SubagentProfile = {
-      provider: "anthropic",
-      model: "anthropic/claude-sonnet-4",
-      systemPrompt: "Custom system prompt",
-      thinkingLevel: "medium",
-      tools: ["read", "bash"],
-      extensions: ["/ext.js"],
-      noTools: false,
-      noExtensions: false,
-      noSkills: false,
-      noContextFiles: false,
-      extraArgs: ["--verbose"],
-    };
-
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--provider");
-    expect(result.args).toContain("anthropic");
-    expect(result.args).toContain("--model");
-    expect(result.args).toContain("anthropic/claude-sonnet-4");
-    expect(result.args).toContain("--system-prompt");
-    expect(result.args).toContain("Custom system prompt");
-    expect(result.args).toContain("--thinking");
-    expect(result.args).toContain("medium");
-    expect(result.args).toContain("--tools");
-    expect(result.args).toContain("read,bash");
-    expect(result.args).toContain("--extension");
-    expect(result.args).toContain("/ext.js");
-    expect(result.args).toContain("--verbose");
-  });
-
-  it("should include --no-tools flag when noTools is true", () => {
-    const profile: SubagentProfile = { noTools: true };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--no-tools");
-  });
-
-  it("should include --no-extensions flag when noExtensions is true", () => {
-    const profile: SubagentProfile = { noExtensions: true };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--no-extensions");
-  });
-
-  it("should include --no-skills flag when noSkills is true", () => {
-    const profile: SubagentProfile = { noSkills: true };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--no-skills");
-  });
-
-  it("should include --no-context-files flag when noContextFiles is true", () => {
-    const profile: SubagentProfile = { noContextFiles: true };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--no-context-files");
-  });
-
-  it("should include --append-system-prompt flag when appendSystemPrompt is set", () => {
-    const profile: SubagentProfile = { appendSystemPrompt: "Additional instructions" };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--append-system-prompt");
-    expect(result.args).toContain("Additional instructions");
-  });
-});
 
 describe("resolveProfile", () => {
   it("should return profile when profile name exists", () => {
@@ -526,295 +364,6 @@ describe("applyExcludeTools", () => {
   });
 });
 
-describe("profileToArgs extraArgs tool-override security", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("should throw when extraArgs contains --tools and tools is set", () => {
-    const profile: SubagentProfile = {
-      tools: ["read", "bash"],
-      extraArgs: ["--tools", "write,delete"],
-    };
-    expect(() => profileToArgs(profile)).toThrow(
-      /Refusing extraArg "--tools" which would override profile tool restrictions/,
-    );
-  });
-
-  it("should throw when extraArgs contains --tools and excludeTools is set", () => {
-    const profile: SubagentProfile = { excludeTools: ["bash"], extraArgs: ["--tools", "all"] };
-    expect(() => profileToArgs(profile)).toThrow(
-      /Refusing extraArg "--tools" which would override profile tool restrictions/,
-    );
-  });
-
-  it("should throw when extraArgs contains --no-tools and tools is set", () => {
-    const profile: SubagentProfile = { tools: ["read"], extraArgs: ["--no-tools"] };
-    expect(() => profileToArgs(profile)).toThrow(
-      /Refusing extraArg "--no-tools" which would override profile tool restrictions/,
-    );
-  });
-
-  it("should throw when extraArgs contains -t and tools is set", () => {
-    const profile: SubagentProfile = { tools: ["read"], extraArgs: ["-t", "all"] };
-    expect(() => profileToArgs(profile)).toThrow(
-      /Refusing extraArg "-t" which would override profile tool restrictions/,
-    );
-  });
-
-  it("should throw when extraArgs contains -nt and excludeTools is set", () => {
-    const profile: SubagentProfile = { excludeTools: ["bash"], extraArgs: ["-nt"] };
-    expect(() => profileToArgs(profile)).toThrow(
-      /Refusing extraArg "-nt" which would override profile tool restrictions/,
-    );
-  });
-
-  it("should throw when extraArgs contains --tools and noTools is true", () => {
-    const profile: SubagentProfile = { noTools: true, extraArgs: ["--tools", "bash"] };
-    expect(() => profileToArgs(profile)).toThrow(/Refusing extraArg/);
-  });
-
-  it("should throw when extraArgs contains --no-tools and noTools is true", () => {
-    const profile: SubagentProfile = { noTools: true, extraArgs: ["--no-tools"] };
-    expect(() => profileToArgs(profile)).toThrow(/Refusing extraArg/);
-  });
-
-  it("should throw when extraArgs contains --tools=value equals-sign form and tools is set", () => {
-    const profile: SubagentProfile = { tools: ["read", "bash"], extraArgs: ["--tools=bash,write"] };
-    expect(() => profileToArgs(profile)).toThrow(
-      /Refusing extraArg "--tools=bash,write" which would override profile tool restrictions/,
-    );
-  });
-
-  it("should throw when extraArgs contains --no-tools=value equals-sign form and noTools is true", () => {
-    const profile: SubagentProfile = { noTools: true, extraArgs: ["--no-tools=read"] };
-    expect(() => profileToArgs(profile)).toThrow(
-      /Refusing extraArg "--no-tools=read" which would override profile tool restrictions/,
-    );
-  });
-
-  it("should allow --tools in extraArgs when no tool restrictions are active", () => {
-    const profile: SubagentProfile = { extraArgs: ["--tools", "read,bash"] };
-    const result = profileToArgs(profile);
-    expect(result.args).toContain("--tools");
-    expect(result.args).toContain("read,bash");
-  });
-
-  it("should allow extraArgs without tool flags when tools is set", () => {
-    const profile: SubagentProfile = { tools: ["read"], extraArgs: ["--verbose"] };
-    const result = profileToArgs(profile);
-    expect(result.args).toContain("--tools");
-    expect(result.args).toContain("read");
-    expect(result.args).toContain("--verbose");
-  });
-});
-
-describe("profileToArgs with excludeTools", () => {
-  it("should NOT add --tools when only excludeTools is set (unresolved)", () => {
-    const profile: SubagentProfile = { excludeTools: ["bash"] };
-    const result = profileToArgs(profile);
-    expect(result.args).not.toContain("--tools");
-  });
-
-  it("should pass computed tools as --tools after applyExcludeTools", () => {
-    const profile: SubagentProfile = { excludeTools: ["bash", "write"] };
-    const resolved = applyExcludeTools(profile, ["read", "bash", "write", "grep"]);
-    const result = profileToArgs(resolved);
-    expect(result.args).toContain("--tools");
-    expect(result.args).toContain("read,grep");
-  });
-});
-
-describe("profileSummary with excludeTools", () => {
-  it("should show excludeTools in summary", () => {
-    const profile: SubagentProfile = { excludeTools: ["bash", "write"] };
-    const result = profileSummary("test-profile", profile);
-    expect(result).toContain("excludeTools=[bash,write]");
-  });
-});
-
-describe("formatProfileDetail with excludeTools", () => {
-  it("should show excludeTools in detail view", () => {
-    const profile: SubagentProfile = { excludeTools: ["bash", "write"] };
-    const result = formatProfileDetail("test-profile", profile);
-    expect(result).toContain("excludeTools:      [bash, write]");
-  });
-});
-
-describe("loadProfilesFromDir (excludeTools parsing)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    invalidateProfilesCache();
-  });
-
-  it("should parse excludeTools from comma-separated string", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdirSync).mockReturnValue([
-      { name: "string-exclude.md", isFile: () => true },
-    ] as unknown as ReturnType<typeof readdirSync>);
-    vi.mocked(readFileSync).mockReturnValue(
-      ["---", "name: string-exclude", "excludeTools: bash,write", "---", ""].join("\n"),
-    );
-    vi.mocked(parseFrontmatter).mockReturnValue({
-      frontmatter: { name: "string-exclude", excludeTools: "bash,write" },
-      body: "",
-    });
-
-    const profiles = await loadProfiles();
-    expect(profiles["string-exclude"]).toBeDefined();
-    expect(profiles["string-exclude"].excludeTools).toEqual(["bash", "write"]);
-  });
-
-  it("should parse excludeTools from YAML array", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdirSync).mockReturnValue([
-      { name: "array-exclude.md", isFile: () => true },
-    ] as unknown as ReturnType<typeof readdirSync>);
-    vi.mocked(readFileSync).mockReturnValue(
-      ["---", "name: array-exclude", "excludeTools:", "  - bash", "  - write", "---", ""].join(
-        "\n",
-      ),
-    );
-    vi.mocked(parseFrontmatter).mockReturnValue({
-      frontmatter: { name: "array-exclude", excludeTools: ["bash", "write"] },
-      body: "",
-    });
-
-    const profiles = await loadProfiles();
-    expect(profiles["array-exclude"]).toBeDefined();
-    expect(profiles["array-exclude"].excludeTools).toEqual(["bash", "write"]);
-  });
-});
-
-describe("loadProfiles cache", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    invalidateProfilesCache();
-  });
-
-  it("should return cached profiles on second call within TTL (cache hit)", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdirSync).mockReturnValue([]);
-
-    // First call populates the cache
-    const result1 = await loadProfiles();
-    // loadProfiles calls loadProfilesFromDir twice: global dir + project dir (no cwd)
-    // With no cwd, only the global dir is loaded
-    const firstCallCount = vi.mocked(readdirSync).mock.calls.length;
-    expect(firstCallCount).toBeGreaterThanOrEqual(1);
-
-    // Second call within TTL should hit the cache — readdirSync should NOT be called again
-    const result2 = await loadProfiles();
-    expect(vi.mocked(readdirSync).mock.calls.length).toBe(firstCallCount); // same count as first call
-    expect(result2).toBe(result1); // same object reference
-  });
-});
-
-describe("loadProfiles - project-local profile overriding", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    invalidateProfilesCache();
-  });
-
-  it("should load global and project-local profiles, with project-local overriding same name", async () => {
-    // We need existsSync to return true for both global and project dirs
-    vi.mocked(existsSync).mockReturnValue(true);
-
-    // readdirSync is called once for global dir, once for project dir
-    const globalEntries = [
-      { name: "global-only.md", isFile: () => true },
-      { name: "shared.md", isFile: () => true },
-    ];
-    const projectEntries = [
-      { name: "shared.md", isFile: () => true },
-      { name: "project-only.md", isFile: () => true },
-    ];
-    vi.mocked(readdirSync)
-      .mockReturnValueOnce(globalEntries as unknown as ReturnType<typeof readdirSync>)
-      .mockReturnValueOnce(projectEntries as unknown as ReturnType<typeof readdirSync>);
-
-    // readFileSync is called for each .md file (global-only, shared [global], shared [project], project-only)
-    vi.mocked(readFileSync)
-      .mockReturnValueOnce("---\nname: global-only\nprovider: openai\nmodel: gpt-4\n---\n")
-      .mockReturnValueOnce("---\nname: shared\nprovider: anthropic\nmodel: claude-3\n---\n")
-      .mockReturnValueOnce("---\nname: shared\nprovider: openai\nmodel: gpt-4o\n---\n")
-      .mockReturnValueOnce("---\nname: project-only\nprovider: dashscope\nmodel: qwen-max\n---\n");
-
-    // parseFrontmatter is called for each file
-    vi.mocked(parseFrontmatter)
-      .mockReturnValueOnce({
-        frontmatter: { name: "global-only", provider: "openai", model: "gpt-4" },
-        body: "",
-      })
-      .mockReturnValueOnce({
-        frontmatter: { name: "shared", provider: "anthropic", model: "claude-3" },
-        body: "",
-      })
-      .mockReturnValueOnce({
-        frontmatter: { name: "shared", provider: "openai", model: "gpt-4o" },
-        body: "",
-      })
-      .mockReturnValueOnce({
-        frontmatter: { name: "project-only", provider: "dashscope", model: "qwen-max" },
-        body: "",
-      });
-
-    const profiles = await loadProfiles("/fake/project");
-
-    // Global-only profile should be present
-    expect(profiles["global-only"]).toBeDefined();
-    expect(profiles["global-only"].provider).toBe("openai");
-    expect(profiles["global-only"].model).toBe("gpt-4");
-
-    // Project-only profile should be present
-    expect(profiles["project-only"]).toBeDefined();
-    expect(profiles["project-only"].provider).toBe("dashscope");
-    expect(profiles["project-only"].model).toBe("qwen-max");
-
-    // "shared" should be overridden by project-local version
-    expect(profiles["shared"]).toBeDefined();
-    expect(profiles["shared"].provider).toBe("openai"); // project-local override, not "anthropic"
-    expect(profiles["shared"].model).toBe("gpt-4o"); // project-local override, not "claude-3"
-
-    // Should have exactly 3 profiles
-    expect(Object.keys(profiles)).toHaveLength(3);
-  });
-});
-
-// ── suggestedSkills / loadSkills Tests ──────────────────────────────
-
-describe("profileToArgs with suggestedSkills", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("should include --skill flag for each resolved suggestedSkill path", () => {
-    const profile: SubagentProfile = {
-      suggestedSkills: ["/path/to/a/SKILL.md", "/path/to/b/SKILL.md"],
-    };
-    const result = profileToArgs(profile);
-
-    expect(result.args).toContain("--skill");
-    expect(result.args).toContain("/path/to/a/SKILL.md");
-    expect(result.args).toContain("--skill");
-    expect(result.args).toContain("/path/to/b/SKILL.md");
-  });
-
-  it("should not include --skill when no suggestedSkills", () => {
-    const profile: SubagentProfile = { model: "anthropic/claude-sonnet-4" };
-    const result = profileToArgs(profile);
-
-    expect(result.args).not.toContain("--skill");
-  });
-
-  it("should not include --skill when suggestedSkills is empty array", () => {
-    const profile: SubagentProfile = { suggestedSkills: [] };
-    const result = profileToArgs(profile);
-
-    expect(result.args).not.toContain("--skill");
-  });
-});
-
 describe("validateProfileSkills", () => {
   it("should throw when suggestedSkills and noSkills are both set", () => {
     const profile: SubagentProfile = {
@@ -1059,6 +608,146 @@ describe("resolveProfileSkills", () => {
   });
 });
 
+describe("loadProfilesFromDir (excludeTools parsing)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should parse excludeTools from comma-separated string", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "string-exclude.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(
+      ["---", "name: string-exclude", "excludeTools: bash,write", "---", ""].join("\n"),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "string-exclude", excludeTools: "bash,write" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["string-exclude"]).toBeDefined();
+    expect(profiles["string-exclude"].excludeTools).toEqual(["bash", "write"]);
+  });
+
+  it("should parse excludeTools from YAML array", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "array-exclude.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(
+      ["---", "name: array-exclude", "excludeTools:", "  - bash", "  - write", "---", ""].join(
+        "\n",
+      ),
+    );
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "array-exclude", excludeTools: ["bash", "write"] },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    expect(profiles["array-exclude"]).toBeDefined();
+    expect(profiles["array-exclude"].excludeTools).toEqual(["bash", "write"]);
+  });
+});
+
+describe("loadProfiles cache", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should return cached profiles on second call within TTL (cache hit)", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([]);
+
+    // First call populates the cache
+    const result1 = await loadProfiles();
+    // loadProfiles calls loadProfilesFromDir twice: global dir + project dir (no cwd)
+    // With no cwd, only the global dir is loaded
+    const firstCallCount = vi.mocked(readdirSync).mock.calls.length;
+    expect(firstCallCount).toBeGreaterThanOrEqual(1);
+
+    // Second call within TTL should hit the cache — readdirSync should NOT be called again
+    const result2 = await loadProfiles();
+    expect(vi.mocked(readdirSync).mock.calls.length).toBe(firstCallCount); // same count as first call
+    expect(result2).toBe(result1); // same object reference
+  });
+});
+
+describe("loadProfiles - project-local profile overriding", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should load global and project-local profiles, with project-local overriding same name", async () => {
+    // We need existsSync to return true for both global and project dirs
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    // readdirSync is called once for global dir, once for project dir
+    const globalEntries = [
+      { name: "global-only.md", isFile: () => true },
+      { name: "shared.md", isFile: () => true },
+    ];
+    const projectEntries = [
+      { name: "shared.md", isFile: () => true },
+      { name: "project-only.md", isFile: () => true },
+    ];
+    vi.mocked(readdirSync)
+      .mockReturnValueOnce(globalEntries as unknown as ReturnType<typeof readdirSync>)
+      .mockReturnValueOnce(projectEntries as unknown as ReturnType<typeof readdirSync>);
+
+    // readFileSync is called for each .md file (global-only, shared [global], shared [project], project-only)
+    vi.mocked(readFileSync)
+      .mockReturnValueOnce("---\nname: global-only\nprovider: openai\nmodel: gpt-4\n---\n")
+      .mockReturnValueOnce("---\nname: shared\nprovider: anthropic\nmodel: claude-3\n---\n")
+      .mockReturnValueOnce("---\nname: shared\nprovider: openai\nmodel: gpt-4o\n---\n")
+      .mockReturnValueOnce("---\nname: project-only\nprovider: dashscope\nmodel: qwen-max\n---\n");
+
+    // parseFrontmatter is called for each file
+    vi.mocked(parseFrontmatter)
+      .mockReturnValueOnce({
+        frontmatter: { name: "global-only", provider: "openai", model: "gpt-4" },
+        body: "",
+      })
+      .mockReturnValueOnce({
+        frontmatter: { name: "shared", provider: "anthropic", model: "claude-3" },
+        body: "",
+      })
+      .mockReturnValueOnce({
+        frontmatter: { name: "shared", provider: "openai", model: "gpt-4o" },
+        body: "",
+      })
+      .mockReturnValueOnce({
+        frontmatter: { name: "project-only", provider: "dashscope", model: "qwen-max" },
+        body: "",
+      });
+
+    const profiles = await loadProfiles("/fake/project");
+
+    // Global-only profile should be present
+    expect(profiles["global-only"]).toBeDefined();
+    expect(profiles["global-only"].provider).toBe("openai");
+    expect(profiles["global-only"].model).toBe("gpt-4");
+
+    // Project-only profile should be present
+    expect(profiles["project-only"]).toBeDefined();
+    expect(profiles["project-only"].provider).toBe("dashscope");
+    expect(profiles["project-only"].model).toBe("qwen-max");
+
+    // "shared" should be overridden by project-local version
+    expect(profiles["shared"]).toBeDefined();
+    expect(profiles["shared"].provider).toBe("openai"); // project-local override, not "anthropic"
+    expect(profiles["shared"].model).toBe("gpt-4o"); // project-local override, not "claude-3"
+
+    // Should have exactly 3 profiles
+    expect(Object.keys(profiles)).toHaveLength(3);
+  });
+});
+
 describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1128,46 +817,6 @@ describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
     expect(profiles["both-skills"]).toBeDefined();
     expect(profiles["both-skills"].suggestedSkills).toEqual(["coding"]);
     expect(profiles["both-skills"].loadSkills).toEqual(["testing"]);
-  });
-});
-
-describe("profileSummary with skills", () => {
-  it("should show suggestedSkills in profileSummary", () => {
-    const profile: SubagentProfile = {
-      suggestedSkills: ["coding", "testing"],
-    };
-    const result = profileSummary("test-profile", profile);
-    expect(result).toContain("suggestedSkills=[coding,testing]");
-  });
-
-  it("should show loadSkills in profileSummary", () => {
-    const profile: SubagentProfile = {
-      loadSkills: ["workflow-gen"],
-    };
-    const result = profileSummary("test-profile", profile);
-    expect(result).toContain("loadSkills=[workflow-gen]");
-  });
-});
-
-describe("formatProfileDetail with skills", () => {
-  it("should show suggestedSkills in formatProfileDetail", () => {
-    const profile: SubagentProfile = {
-      suggestedSkills: ["/path/to/coding/SKILL.md", "/path/to/testing/SKILL.md"],
-    };
-    const result = formatProfileDetail("test-profile", profile);
-    expect(result).toContain("suggestedSkills");
-    expect(result).toContain("/path/to/coding/SKILL.md");
-    expect(result).toContain("/path/to/testing/SKILL.md");
-  });
-
-  it("should show loadSkills in formatProfileDetail", () => {
-    const profile: SubagentProfile = {
-      loadSkills: ["coding", "testing"],
-    };
-    const result = formatProfileDetail("test-profile", profile);
-    expect(result).toContain("loadSkills");
-    expect(result).toContain("coding");
-    expect(result).toContain("testing");
   });
 });
 
@@ -1332,5 +981,215 @@ describe("profileToArgs skill path validation", () => {
     expect(skillArgs).toHaveLength(2);
     expect(skillArgs).toContain("/project/.pi/skills/a/SKILL.md");
     expect(skillArgs).toContain("/project/.pi/skills/b/SKILL.md");
+  });
+});
+
+// ── Profile Round-Trip Tests ──────────────────────────────────────────
+
+describe("profile round-trip: serializeProfileToMarkdown → parse → verify fields", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should survive round-trip for a profile with all field types", async () => {
+    const original: SubagentProfile = {
+      provider: "anthropic",
+      model: "anthropic/claude-sonnet-4",
+      thinkingLevel: "high",
+      systemPrompt: "You are an expert coder.",
+      appendSystemPrompt: "Be thorough.",
+      noTools: false,
+      tools: ["read", "bash", "grep"],
+      noExtensions: false,
+      extensions: ["/ext/custom.js"],
+      noSkills: false,
+      noContextFiles: true,
+      extraArgs: ["--verbose"],
+      suggestedSkills: ["coding", "testing"],
+    };
+
+    const md = serializeProfileToMarkdown("round-trip-profile", original);
+
+    // Parse the markdown through loadProfiles
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "round-trip-profile.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(md);
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: {
+        name: "round-trip-profile",
+        provider: "anthropic",
+        model: "anthropic/claude-sonnet-4",
+        thinkingLevel: "high",
+        appendSystemPrompt: "Be thorough.",
+        noTools: false,
+        tools: "read,bash,grep",
+        noExtensions: false,
+        extensions: "/ext/custom.js",
+        noSkills: false,
+        noContextFiles: true,
+        extraArgs: "--verbose",
+        suggestedSkills: "coding,testing",
+      },
+      body: "You are an expert coder.",
+    });
+
+    const profiles = await loadProfiles();
+    const parsed = profiles["round-trip-profile"];
+
+    expect(parsed).toBeDefined();
+    expect(parsed.provider).toBe("anthropic");
+    expect(parsed.model).toBe("anthropic/claude-sonnet-4");
+    expect(parsed.thinkingLevel).toBe("high");
+    expect(parsed.systemPrompt).toBe("You are an expert coder.");
+    expect(parsed.appendSystemPrompt).toBe("Be thorough.");
+    expect(parsed.tools).toEqual(["read", "bash", "grep"]);
+    expect(parsed.extensions).toEqual(["/ext/custom.js"]);
+    expect(parsed.noContextFiles).toBe(true);
+    expect(parsed.extraArgs).toEqual(["--verbose"]);
+    expect(parsed.suggestedSkills).toEqual(["coding", "testing"]);
+    // noTools=false should not be set (falsy booleans are omitted)
+    expect(parsed.noTools).toBeUndefined();
+    // noExtensions=false should not be set
+    expect(parsed.noExtensions).toBeUndefined();
+    // noSkills=false should not be set
+    expect(parsed.noSkills).toBeUndefined();
+  });
+
+  it("should survive round-trip for a minimal profile with only model", async () => {
+    const original: SubagentProfile = {
+      model: "openai/gpt-4o",
+    };
+
+    const md = serializeProfileToMarkdown("minimal", original);
+
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "minimal.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(md);
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "minimal", model: "openai/gpt-4o" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    const parsed = profiles["minimal"];
+
+    expect(parsed).toBeDefined();
+    expect(parsed.model).toBe("openai/gpt-4o");
+    expect(parsed.systemPrompt).toBeUndefined();
+    expect(parsed.tools).toBeUndefined();
+  });
+
+  it("should survive round-trip for a profile with excludeTools", async () => {
+    const original: SubagentProfile = {
+      model: "anthropic/claude-sonnet-4",
+      excludeTools: ["write", "bash"],
+    };
+
+    const md = serializeProfileToMarkdown("excl-profile", original);
+
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "excl-profile.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+    vi.mocked(readFileSync).mockReturnValue(md);
+    vi.mocked(parseFrontmatter).mockReturnValue({
+      frontmatter: { name: "excl-profile", model: "anthropic/claude-sonnet-4", excludeTools: "write,bash" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+    const parsed = profiles["excl-profile"];
+
+    expect(parsed).toBeDefined();
+    expect(parsed.model).toBe("anthropic/claude-sonnet-4");
+    expect(parsed.excludeTools).toEqual(["write", "bash"]);
+  });
+});
+
+// ── loadProfiles Cache Expiration Tests ───────────────────────────────
+
+describe("loadProfiles cache expiration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should re-read profiles after TTL expires", async () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readdirSync).mockReturnValue([]);
+
+      // First call populates the cache
+      await loadProfiles();
+      const firstCallCount = vi.mocked(readdirSync).mock.calls.length;
+      expect(firstCallCount).toBeGreaterThanOrEqual(1);
+
+      // Second call within TTL should hit the cache
+      await loadProfiles();
+      expect(vi.mocked(readdirSync).mock.calls.length).toBe(firstCallCount);
+
+      // Advance past the TTL (5000ms)
+      vi.advanceTimersByTime(5001);
+
+      // Third call after TTL should re-read from disk
+      await loadProfiles();
+      expect(vi.mocked(readdirSync).mock.calls.length).toBeGreaterThan(firstCallCount);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ── loadProfiles Unreadable File Tests ────────────────────────────────
+
+describe("loadProfiles with unreadable file", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateProfilesCache();
+  });
+
+  it("should gracefully degrade when a profile file cannot be read", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([
+      { name: "good.md", isFile: () => true },
+      { name: "bad.md", isFile: () => true },
+    ] as unknown as ReturnType<typeof readdirSync>);
+
+    vi.mocked(readFileSync)
+      .mockReturnValueOnce('---\nname: good\nmodel: openai/gpt-4o\n---\n')
+      .mockImplementationOnce(() => {
+        throw new Error("EACCES: permission denied");
+      });
+
+    vi.mocked(parseFrontmatter).mockReturnValueOnce({
+      frontmatter: { name: "good", model: "openai/gpt-4o" },
+      body: "",
+    });
+
+    const profiles = await loadProfiles();
+
+    // Good profile should still be loaded
+    expect(profiles["good"]).toBeDefined();
+    expect(profiles["good"].model).toBe("openai/gpt-4o");
+
+    // Bad profile should not be present (graceful degradation)
+    expect(profiles["bad"]).toBeUndefined();
+
+    // A warning should have been emitted
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to load profile"),
+      expect.any(String),
+    );
+
+    warnSpy.mockRestore();
   });
 });

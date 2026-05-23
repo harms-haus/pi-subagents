@@ -303,6 +303,31 @@ describe("index.ts — default export", () => {
       }
     });
 
+    it("should not evict a session that has a running task", () => {
+      // Fill to 32 sessions; the first one is marked as running
+      capturedRegisterSession(
+        makeSession({ sessionId: "running-old", startedAt: 100, status: "running" }),
+      );
+      for (let i = 1; i < 32; i++) {
+        capturedRegisterSession(
+          makeSession({ sessionId: `fill-${i}`, startedAt: 1000 + i * 1000, status: "completed" }),
+        );
+      }
+      expect(capturedSessionStore!.size).toBe(32);
+
+      // Add a 33rd session — the running-old session should NOT be evicted
+      // even though it has the oldest startedAt; a non-running session should be evicted instead
+      capturedRegisterSession(
+        makeSession({ sessionId: "overflow-new", startedAt: 33000 }),
+      );
+
+      expect(capturedSessionStore!.size).toBe(32);
+      expect(capturedSessionStore!.has("running-old")).toBe(true);
+      expect(capturedSessionStore!.has("overflow-new")).toBe(true);
+      // The oldest non-running session (fill-1) should have been evicted instead
+      expect(capturedSessionStore!.has("fill-1")).toBe(false);
+    });
+
     it("should not evict any session when store is below the limit", () => {
       for (let i = 0; i < 31; i++) {
         capturedRegisterSession(makeSession({ sessionId: `under-${i}`, startedAt: i * 1000 }));
@@ -380,6 +405,38 @@ describe("index.ts — default export", () => {
 
     it("should return empty set when store is empty", () => {
       const active = capturedGetActiveSessionIds();
+      expect(active.size).toBe(0);
+    });
+  });
+
+  // ── getActiveSessionIds — multi-run sessions ────────────────────────
+
+  describe("getActiveSessionIds — multi-run sessions", () => {
+    it("should include session when middle run is running", () => {
+      capturedRegisterSession(
+        makeSession({ sessionId: "multi-1", status: "completed", startedAt: 1000 }),
+      );
+      capturedRegisterSession(
+        makeSession({ sessionId: "multi-1", status: "running", startedAt: 2000 }),
+      );
+      capturedRegisterSession(
+        makeSession({ sessionId: "multi-1", status: "completed", startedAt: 3000 }),
+      );
+
+      const active = capturedGetActiveSessionIds();
+      expect(active.has("multi-1")).toBe(true);
+    });
+
+    it("should exclude session when all 10 runs are completed", () => {
+      const sessionId = "all-done";
+      for (let i = 0; i < 10; i++) {
+        capturedRegisterSession(
+          makeSession({ sessionId, status: "completed", startedAt: i * 1000 }),
+        );
+      }
+
+      const active = capturedGetActiveSessionIds();
+      expect(active.has(sessionId)).toBe(false);
       expect(active.size).toBe(0);
     });
   });

@@ -196,9 +196,6 @@ function handleStdoutLine(
             const editIndices = toolArgs.indices as number[] | undefined;
             if (editAction === "complete" && editIndices) {
               win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
-            } else if (editAction === "add" && toolArgs.todos) {
-              win.todoTotal =
-                (win.todoTotal ?? 0) + ((toolArgs.todos as unknown[] | undefined)?.length ?? 0);
             } else if (editAction === "abandon" && editIndices) {
               win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
             }

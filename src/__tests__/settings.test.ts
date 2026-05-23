@@ -11,15 +11,10 @@ import {
 } from "../settings";
 
 // Mock filesystem functions
-vi.mock("node:fs", () => ({
-  existsSync: vi.fn(),
-}));
-
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
 }));
 
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 describe("loadMaxLinesPerWindow", () => {
@@ -28,7 +23,6 @@ describe("loadMaxLinesPerWindow", () => {
   });
 
   it("should return default 15 when no config is present", async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
 
     const result = await loadMaxLinesPerWindow();
@@ -37,7 +31,6 @@ describe("loadMaxLinesPerWindow", () => {
   });
 
   it("should return configured value from settings", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -52,7 +45,6 @@ describe("loadMaxLinesPerWindow", () => {
   });
 
   it("should return project config value when both global and project config exist", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile)
       .mockResolvedValueOnce(
         JSON.stringify({
@@ -75,7 +67,6 @@ describe("loadMaxLinesPerWindow", () => {
   });
 
   it("should return global config value when only global config exists", async () => {
-    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
     vi.mocked(readFile)
       .mockResolvedValueOnce(
         JSON.stringify({
@@ -126,7 +117,6 @@ describe("loadCommandPreviewWidth", () => {
       writable: true,
       configurable: true,
     });
-    vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
 
     const result = await loadCommandPreviewWidth();
@@ -140,7 +130,6 @@ describe("loadCommandPreviewWidth", () => {
       writable: true,
       configurable: true,
     });
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -160,7 +149,6 @@ describe("loadCommandPreviewWidth", () => {
       writable: true,
       configurable: true,
     });
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile)
       .mockResolvedValueOnce(
         JSON.stringify({
@@ -182,6 +170,25 @@ describe("loadCommandPreviewWidth", () => {
     expect(result).toBe(120);
   });
 
+  it("user setting takes priority over TTY width", async () => {
+    Object.defineProperty(process.stdout, "columns", {
+      value: 80,
+      writable: true,
+      configurable: true,
+    });
+    vi.mocked(readFile).mockResolvedValue(
+      JSON.stringify({
+        subagents: {
+          commandPreviewWidth: 200,
+        },
+      }),
+    );
+
+    const result = await loadCommandPreviewWidth();
+
+    expect(result).toBe(200);
+  });
+
   it("clamps to min 20 when terminal is very narrow", async () => {
     Object.defineProperty(process.stdout, "columns", {
       value: 15,
@@ -200,7 +207,6 @@ describe("loadCommandPreviewWidth", () => {
       writable: true,
       configurable: true,
     });
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -222,7 +228,6 @@ describe("readSettingsFile error handling", () => {
   });
 
   it("should return default maxLinesPerWindow when settings file has malformed JSON", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
 
     const result = await loadMaxLinesPerWindow();
@@ -237,7 +242,6 @@ describe("readSettingsFile error handling", () => {
       writable: true,
       configurable: true,
     });
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue("not json at all");
 
     const result = await loadCommandPreviewWidth();
@@ -247,7 +251,6 @@ describe("readSettingsFile error handling", () => {
   });
 
   it("should return default extendTimeoutDebounce when settings file has malformed JSON", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
 
     const result = await loadExtendTimeoutDebounce();
@@ -257,7 +260,6 @@ describe("readSettingsFile error handling", () => {
   });
 
   it("should return default loopingToolCount when settings file has malformed JSON", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue("{ invalid json !!!");
 
     const result = await loadLoopingToolCount();
@@ -273,7 +275,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should return default 30 when no config is present", async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
 
     const result = await loadExtendTimeoutDebounce();
@@ -282,7 +283,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should return configured value from global settings", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -297,7 +297,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should prefer project config over global", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile)
       .mockResolvedValueOnce(
         JSON.stringify({
@@ -320,7 +319,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should return global config value when project has no config", async () => {
-    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
     vi.mocked(readFile)
       .mockResolvedValueOnce(
         JSON.stringify({
@@ -337,7 +335,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should clamp value to max 300", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -352,7 +349,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should clamp value to min 0", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -367,7 +363,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should return default for non-number value", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -382,7 +377,6 @@ describe("loadExtendTimeoutDebounce", () => {
   });
 
   it("should return default for NaN value", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     // JSON.parse of 1e999 evaluates to Infinity in V8, which is not finite
     // This tests the !Number.isFinite(value) code path (same as NaN)
     vi.mocked(readFile).mockResolvedValue('{"subagents":{"extend_timeout_debounce":1e999}}');
@@ -399,7 +393,6 @@ describe("loadLoopingToolCount", () => {
   });
 
   it("should return default 5 when no config is present", async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
 
     const result = await loadLoopingToolCount();
@@ -408,7 +401,6 @@ describe("loadLoopingToolCount", () => {
   });
 
   it("should return configured value from global settings", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -423,7 +415,6 @@ describe("loadLoopingToolCount", () => {
   });
 
   it("should prefer project config over global", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile)
       .mockResolvedValueOnce(
         JSON.stringify({
@@ -446,7 +437,6 @@ describe("loadLoopingToolCount", () => {
   });
 
   it("should return global config value when project has no config", async () => {
-    vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
     vi.mocked(readFile)
       .mockResolvedValueOnce(
         JSON.stringify({
@@ -463,7 +453,6 @@ describe("loadLoopingToolCount", () => {
   });
 
   it("should clamp value to max 50", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -478,7 +467,6 @@ describe("loadLoopingToolCount", () => {
   });
 
   it("should clamp value to min 0", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {
@@ -493,7 +481,6 @@ describe("loadLoopingToolCount", () => {
   });
 
   it("should return default for non-number value", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFile).mockResolvedValue(
       JSON.stringify({
         subagents: {

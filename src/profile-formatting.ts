@@ -1,5 +1,15 @@
 import type { SubagentProfile } from "./profile-types";
 
+/** Quote a string value for safe YAML output */
+function yamlQuote(value: string): string {
+  // Quote if contains YAML-special characters
+  if (/:|#|'|"|\n|^\s|\s$|^[&*?|>!%@`{\[~,]|^-(\s|$)/.test(value)) {
+    const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return '"' + escaped + '"';
+  }
+  return value;
+}
+
 /**
  * Get a human-readable summary of a profile for display in the TUI.
  */
@@ -39,22 +49,22 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
 
 export function serializeProfileToMarkdown(name: string, profile: SubagentProfile): string {
   const fmLines: string[] = ["---"];
-  fmLines.push(`name: ${name}`);
+  fmLines.push(`name: ${yamlQuote(name)}`);
 
   if (profile.provider !== undefined) {
-    fmLines.push(`provider: ${profile.provider}`);
+    fmLines.push(`provider: ${yamlQuote(profile.provider)}`);
   }
   if (profile.model !== undefined) {
-    fmLines.push(`model: ${profile.model}`);
+    fmLines.push(`model: ${yamlQuote(profile.model)}`);
   }
   if (profile.thinkingLevel !== undefined) {
-    fmLines.push(`thinkingLevel: ${profile.thinkingLevel}`);
+    fmLines.push(`thinkingLevel: ${yamlQuote(profile.thinkingLevel)}`);
   }
   if (profile.appendSystemPrompt !== undefined) {
-    fmLines.push(`appendSystemPrompt: ${profile.appendSystemPrompt}`);
+    fmLines.push(`appendSystemPrompt: ${yamlQuote(profile.appendSystemPrompt)}`);
   }
   if (profile.apiKey !== undefined) {
-    fmLines.push(`apiKey: ${profile.apiKey}`);
+    fmLines.push(`apiKey: ${yamlQuote(profile.apiKey)}`);
   }
 
   if (profile.noTools !== undefined) {
@@ -71,22 +81,22 @@ export function serializeProfileToMarkdown(name: string, profile: SubagentProfil
   }
 
   if (profile.tools && profile.tools.length > 0) {
-    fmLines.push(`tools: ${profile.tools.join(",")}`);
+    fmLines.push(`tools: ${yamlQuote(profile.tools.join(","))}`);
   }
   if (profile.excludeTools && profile.excludeTools.length > 0) {
-    fmLines.push(`excludeTools: ${profile.excludeTools.join(",")}`);
+    fmLines.push(`excludeTools: ${yamlQuote(profile.excludeTools.join(","))}`);
   }
   if (profile.extensions && profile.extensions.length > 0) {
-    fmLines.push(`extensions: ${profile.extensions.join(",")}`);
+    fmLines.push(`extensions: ${yamlQuote(profile.extensions.join(","))}`);
   }
   if (profile.extraArgs && profile.extraArgs.length > 0) {
-    fmLines.push(`extraArgs: ${profile.extraArgs.join(",")}`);
+    fmLines.push(`extraArgs: ${yamlQuote(profile.extraArgs.join(","))}`);
   }
   if (profile.suggestedSkills && profile.suggestedSkills.length > 0) {
-    fmLines.push(`suggestedSkills: ${profile.suggestedSkills.join(",")}`);
+    fmLines.push(`suggestedSkills: ${yamlQuote(profile.suggestedSkills.join(","))}`);
   }
   if (profile.loadSkills && profile.loadSkills.length > 0) {
-    fmLines.push(`loadSkills: ${profile.loadSkills.join(",")}`);
+    fmLines.push(`loadSkills: ${yamlQuote(profile.loadSkills.join(","))}`);
   }
 
   fmLines.push("---");

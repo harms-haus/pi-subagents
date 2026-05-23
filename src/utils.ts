@@ -51,20 +51,34 @@ export function appendLineToWindow(
 // ── Session Helpers ──────────────────────────────────────────────────
 
 /**
- * Extract all text content parts from a message.
+ * Extract text parts from a message's content, regardless of role.
+ * Handles string content, array-of-parts content, and gracefully returns
+ * an empty array for anything else.
+ */
+export function extractTextParts(msg: { content?: unknown }): string[] {
+  if (!msg.content) return [];
+  if (typeof msg.content === "string") return [msg.content];
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter(
+        (part): part is { type: "text"; text: string } =>
+          part != null &&
+          typeof part === "object" &&
+          (part as { type?: string }).type === "text" &&
+          typeof (part as { text?: unknown }).text === "string"
+      )
+      .map((part) => part.text);
+  }
+  return [];
+}
+
+/**
+ * Extract all text content parts from an assistant message.
  * Returns an array of text strings from the message content.
  */
 export function getTextParts(msg: Message): string[] {
-  if (msg.role !== "assistant" || !msg.content) {
-    return [];
-  }
-  const parts: string[] = [];
-  for (const part of msg.content) {
-    if (part.type === "text") {
-      parts.push(part.text);
-    }
-  }
-  return parts;
+  if (msg.role !== "assistant") return [];
+  return extractTextParts(msg);
 }
 
 /**

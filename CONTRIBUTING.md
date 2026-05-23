@@ -105,11 +105,17 @@ bun run test:watch
 | `index.test.ts`              | Tests session store: `registerSession` (creation, resume, eviction, capping), `getActiveSessionIds`, shutdown handler |
 | `types-helpers.test.ts`      | Tests `syncState` helper function |
 | `schemas.test.ts`            | `TaskSchema` and `DelegateParams` validation — required fields, optional fields, type mismatches, array constraints |
-| `profiles.test.ts`           | `profileToArgs` CLI generation, `extraArgs` safety validation (null bytes, shell operators), `resolveProfile`, `profileSummary`, `formatProfileDetail` (API key masking), `getProfilesDir` |
+| `profiles-core.test.ts`           | `resolveProfile`, `profileSummary`, `formatProfileDetail` (API key masking), `getProfilesDir`, `validateProfileTools`, `applyExcludeTools`, `validateProfileSkills`, `resolveProfileSkills`, `loadProfiles` (cache, project-local, parsing), `apiKey` security |
+| `profiles-args.test.ts`           | `profileToArgs` CLI generation, `extraArgs` tool-override security, `excludeTools` and `suggestedSkills` in `profileToArgs`, `profileSummary`/`formatProfileDetail` with `excludeTools` and skills |
 | `profile-command.test.ts`    | Tests `/profile` command handler: list, show, create, edit, delete, bare name, completions |
 | `profile-editor.test.ts`     | Tests `editProfileInteractive` wizard with mocked UI (all paths) |
-| `spawner.test.ts`            | `runSubAgent` lifecycle (spawn, stdout/stderr, JSON events, abort signals), profile CRUD (`saveProfile`/`deleteProfile`), `serializeProfileToMarkdown`, `handleStderrData` |
-| `tools.test.ts`              | Tool registration (`registerDelegateTool`, `registerRetrievalTools`, `registerProfileCommand`), session store operations, retrieval tool execution (valid/invalid sessions, multi-run), delegate timeout via `AbortSignal`, resume validation (non-existent, still-running), resume prompt formatting, session ID reuse, `countWindowStatuses` |
+| `spawner-core.test.ts`            | `runSubAgent` lifecycle (spawn, stdout/stderr, JSON events, abort signals), profile CRUD (`saveProfile`/`deleteProfile`), `serializeProfileToMarkdown` |
+| `spawner-output.test.ts`          | Output processing, message eviction, `turn_end` ls/find result handling, `handleStderrData` |
+| `spawner-tool-display.test.ts`    | Path shortening in tool calls, bash command `&&` splitting, `formatToolCall` defaults, todo tool renderers, tool count tracking |
+| `spawner-loop.test.ts`            | Loop detection (consecutive similar tool calls) |
+| `delegate-core.test.ts`           | Tool registration (`registerDelegateTool`, `registerRetrievalTools`, `registerProfileCommand`), retrieval tool execution (valid/invalid sessions, multi-run), rendering functions |
+| `delegate-advanced.test.ts`       | Delegate timeout (`AbortSignal`), timeout extension, resume validation (non-existent, still-running), resume prompt formatting, multi-run output/session, abort signal forwarding, loop detection |
+| `delegate-features.test.ts`       | `excludeTools` resolution, unknown profile handling, skill resolution, `files` parameter, file path security |
 | `delegate-render.test.ts`    | Tests `renderCall` and `renderResult` for delegate tool (TUI rendering) |
 | `retrieval-tools.test.ts`    | Tests retrieval tools: `list_subagent_profiles`, `createTruncatingRenderResult`, toolResult extraction |
 | `format-tool-call.test.ts`   | `formatToolCall` branches (edit, write, grep, bash, read, etc.), path shortening, bash command formatting |

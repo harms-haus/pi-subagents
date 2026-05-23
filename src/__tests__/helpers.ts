@@ -144,3 +144,65 @@ export function createMockTheme(): Theme {
     bold: vi.fn((text: string) => text),
   } as unknown as Theme;
 }
+
+// ─── emitToolCall ──────────────────────────────────────────────────
+// Used in: spawner-tool-display.test.ts, spawner-output.test.ts, spawner-loop.test.ts
+
+/**
+ * Emit a synthetic tool-call JSON event on a mock process's stdout.
+ * The data handler processes the event synchronously, so no await is needed
+ * for window/session state to update.
+ */
+export function emitToolCall(
+  proc: { stdout: EventEmitter },
+  toolName: string,
+  args: Record<string, unknown>,
+): void {
+  const jsonEvent = JSON.stringify({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      content: [{ type: "toolCall", name: toolName, arguments: args }],
+    },
+  });
+  proc.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+}
+
+// ─── Async Test Helpers ────────────────────────────────────────────
+
+/**
+ * Wait for a mock function to have been called at least `callCount` times.
+ * Uses polling with setTimeout(0) for responsive event-driven waiting.
+ */
+export async function waitForCalls(
+  mockFn: { mock: { calls: unknown[] } },
+  callCount: number,
+  timeout = 2000,
+): Promise<void> {
+  const start = Date.now();
+  while (mockFn.mock.calls.length < callCount) {
+    if (Date.now() - start > timeout) {
+      throw new Error(
+        `Timeout waiting for mock to be called ${callCount} times (was called ${mockFn.mock.calls.length} times)`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+/**
+ * Wait for a specific condition to become true.
+ */
+export async function waitForCondition(
+  condition: () => boolean,
+  timeout = 2000,
+  description = "condition",
+): Promise<void> {
+  const start = Date.now();
+  while (!condition()) {
+    if (Date.now() - start > timeout) {
+      throw new Error(`Timeout (${timeout}ms) waiting for ${description}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}

@@ -83,7 +83,7 @@ The Markdown body (everything after the closing `---`) becomes the sub-agent's `
 | **Global**        | `~/.pi/agent/agent-profiles/`                    | `~/.pi/agent/agent-profiles/code-reviewer.md`    |
 | **Project-local** | `.pi/agent-profiles/` (relative to project root) | `my-project/.pi/agent-profiles/code-reviewer.md` |
 
-The global directory respects the `PI_CODING_AGENT_DIR` environment variable. If set, the base path is `$PI_CODING_AGENT_DIR` instead of `~/.pi/agent`.
+The global directory respects the `PI_AGENT_DIR` environment variable. If set, the base path is `$PI_AGENT_DIR` instead of `~/.pi/agent`.
 
 ### Override Behavior
 

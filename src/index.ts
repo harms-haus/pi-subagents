@@ -49,6 +49,8 @@ export default function (pi: ExtensionAPI) {
         let oldestKey: string | null = null;
         let oldestTime = Infinity;
         for (const [key, val] of sessionStore) {
+          // Skip sessions with running tasks — don't evict active sessions
+          if (val.runs.some(r => r.status === "running")) continue;
           const firstRun = val.runs[0];
           if (firstRun && firstRun.startedAt < oldestTime) {
             oldestTime = firstRun.startedAt;

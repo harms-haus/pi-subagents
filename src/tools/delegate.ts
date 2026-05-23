@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { loadSkills as discoverSkills } from "@earendil-works/pi-coding-agent";
@@ -49,7 +49,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
  * Returns `[file not found: <path>]` if the file doesn't exist or can't be read.
  * Line numbers are 1-indexed and inclusive.
  */
-function readFileContents(spec: FileSpec, cwd: string): string {
+async function readFileContents(spec: FileSpec, cwd: string): Promise<string> {
   const path = typeof spec === "string" ? spec : spec.path;
   const absolutePath = resolve(cwd, path);
 
@@ -59,24 +59,21 @@ function readFileContents(spec: FileSpec, cwd: string): string {
     return `[access denied: path outside project directory: ${path}]`;
   }
 
-  if (!existsSync(absolutePath)) {
-    return `[file not found: ${path}]`;
-  }
-
   // Check file size before reading
   const MAX_FILE_BYTES = 1 * 1024 * 1024; // 1 MB
+  let fileStat;
   try {
-    const stat = statSync(absolutePath);
-    if (stat.size > MAX_FILE_BYTES) {
-      return `[file too large: ${path} (${Math.round(stat.size / 1024)}KB, limit ${MAX_FILE_BYTES / 1024}KB)]`;
+    fileStat = await stat(absolutePath);
+    if (fileStat.size > MAX_FILE_BYTES) {
+      return `[file too large: ${path} (${Math.round(fileStat.size / 1024)}KB, limit ${MAX_FILE_BYTES / 1024}KB)]`;
     }
   } catch {
-    return `[could not read file: ${path}]`;
+    return `[file not found: ${path}]`;
   }
 
   let contents: string;
   try {
-    contents = readFileSync(absolutePath, "utf-8");
+    contents = await readFile(absolutePath, "utf-8");
   } catch {
     return `[could not read file: ${path}]`;
   }
@@ -373,7 +370,9 @@ export function registerDelegateTool(
           // Prepend file contents if specified
           if (task.files && task.files.length > 0) {
             const fileCwd = task.cwd ?? ctx.cwd;
-            const fileBlocks = task.files.map((spec) => readFileContents(spec, fileCwd));
+            const fileBlocks = await Promise.all(
+              task.files.map((spec) => readFileContents(spec, fileCwd)),
+            );
             effectivePrompt = `${fileBlocks.join("\n\n")}\n\n${effectivePrompt}`;
           }
 

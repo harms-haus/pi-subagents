@@ -1,22 +1,18 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { TtlCache } from "./cache";
 
-let packageSkillCache: { cwd: string; paths: string[]; timestamp: number } | null = null;
-const CACHE_TTL = 5000; // 5 seconds
+const skillCache = new TtlCache<string[]>(5000);
 
 export function invalidatePackageSkillCache(): void {
-  packageSkillCache = null;
+  skillCache.invalidate();
 }
 
 export async function resolvePackageSkillPaths(cwd: string, agentDir?: string): Promise<string[]> {
-  const now = Date.now();
-  if (
-    packageSkillCache &&
-    packageSkillCache.cwd === cwd &&
-    now - packageSkillCache.timestamp < CACHE_TTL
-  ) {
-    return packageSkillCache.paths;
+  const cached = skillCache.get(cwd);
+  if (cached) {
+    return cached;
   }
 
   const resolvedAgentDir = agentDir ?? join(homedir(), ".pi", "agent");
@@ -29,6 +25,6 @@ export async function resolvePackageSkillPaths(cwd: string, agentDir?: string): 
   const resolvedPaths = await packageManager.resolve();
   const paths = resolvedPaths.skills.filter((s) => s.enabled).map((s) => s.path);
 
-  packageSkillCache = { cwd, paths, timestamp: now };
+  skillCache.set(cwd, paths);
   return paths;
 }

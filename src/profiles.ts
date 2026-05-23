@@ -33,6 +33,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { resolvePackageSkillPaths } from "./skill-discovery";
 export { profileSummary, formatProfileDetail } from "./profile-formatting";
+import { TtlCache } from "./cache";
 import { serializeProfileToMarkdown } from "./profile-formatting";
 import type {
   SubagentProfile,
@@ -52,15 +53,10 @@ export type {
 
 // ── Profile Cache ─────────────────────────────────────────────────────
 
-let profilesCache: {
-  cwd: string | undefined;
-  profiles: SubagentProfiles;
-  timestamp: number;
-} | null = null;
-const CACHE_TTL = 5000; // 5 seconds
+const profilesCache = new TtlCache<{ [name: string]: SubagentProfile }>(5000);
 
 export function invalidateProfilesCache(): void {
-  profilesCache = null;
+  profilesCache.invalidate();
 }
 
 // ── Helpers for array/string frontmatter fields ──────────────────────
@@ -81,7 +77,7 @@ function parseStringOrArray(value: unknown): string[] | undefined {
 // ── Profile Directory Paths ──────────────────────────────────────────
 
 function getGlobalProfilesDir(): string {
-  const agentDir = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
   return join(agentDir, "agent-profiles");
 }
 
@@ -341,9 +337,9 @@ function loadProfilesFromDir(
  * Project-local profiles override global profiles.
  */
 export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
-  const now = Date.now();
-  if (profilesCache && profilesCache.cwd === cwd && now - profilesCache.timestamp < CACHE_TTL) {
-    return profilesCache.profiles;
+  const cached = profilesCache.get(cwd ?? "");
+  if (cached) {
+    return cached;
   }
 
   const profiles: SubagentProfiles = {};
@@ -358,7 +354,7 @@ export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
     loadProfilesFromDir(projectDir, profiles, "project");
   }
 
-  profilesCache = { cwd, profiles, timestamp: now };
+  profilesCache.set(cwd ?? "", profiles);
   return profiles;
 }
 

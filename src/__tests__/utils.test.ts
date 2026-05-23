@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import type { SubAgentWindow } from "../types";
+import { makeWindow } from "./helpers";
 import {
   collapseCdDot,
   formatBashCommand,
@@ -48,18 +49,7 @@ describe("stripAnsi", () => {
 
 describe("appendLineToWindow", () => {
   it("should add lines within maxLines limit", () => {
-    const win: SubAgentWindow = {
-      sessionId: "test",
-      status: "running",
-      exitCode: null,
-      name: "test-window",
-      lines: [],
-      allMessages: [],
-      startedAt: Date.now(),
-      timeout: 600,
-      toolCount: 0,
-      fileCount: 0,
-    };
+    const win = makeWindow();
 
     appendLineToWindow(win, "line 1", 10);
     appendLineToWindow(win, "line 2", 10);
@@ -73,18 +63,7 @@ describe("appendLineToWindow", () => {
   });
 
   it("should evict oldest lines when exceeding maxLines", () => {
-    const win: SubAgentWindow = {
-      sessionId: "test",
-      status: "running",
-      exitCode: null,
-      name: "test-window",
-      lines: [],
-      allMessages: [],
-      startedAt: Date.now(),
-      timeout: 600,
-      toolCount: 0,
-      fileCount: 0,
-    };
+    const win = makeWindow();
 
     for (let i = 1; i <= 15; i++) {
       appendLineToWindow(win, `line ${i}`, 10);
@@ -98,18 +77,7 @@ describe("appendLineToWindow", () => {
   });
 
   it("should track allMessages even when lines buffer is bounded", () => {
-    const win: SubAgentWindow = {
-      sessionId: "test",
-      status: "running",
-      exitCode: null,
-      name: "test-window",
-      lines: [],
-      allMessages: [],
-      startedAt: Date.now(),
-      timeout: 600,
-      toolCount: 0,
-      fileCount: 0,
-    };
+    const win = makeWindow();
 
     for (let i = 1; i <= 20; i++) {
       appendLineToWindow(win, `line ${i}`, 5);
@@ -123,18 +91,7 @@ describe("appendLineToWindow", () => {
   });
 
   it("should drop whitespace-only lines", () => {
-    const win: SubAgentWindow = {
-      sessionId: "test",
-      status: "running",
-      exitCode: null,
-      name: "test-window",
-      lines: [],
-      allMessages: [],
-      startedAt: Date.now(),
-      timeout: 600,
-      toolCount: 0,
-      fileCount: 0,
-    };
+    const win = makeWindow();
 
     appendLineToWindow(win, "   ", 10);
     appendLineToWindow(win, "\t", 10);
@@ -147,18 +104,7 @@ describe("appendLineToWindow", () => {
   });
 
   it("should trim trailing whitespace from lines", () => {
-    const win: SubAgentWindow = {
-      sessionId: "test",
-      status: "running",
-      exitCode: null,
-      name: "test-window",
-      lines: [],
-      allMessages: [],
-      startedAt: Date.now(),
-      timeout: 600,
-      toolCount: 0,
-      fileCount: 0,
-    };
+    const win = makeWindow();
 
     appendLineToWindow(win, "hello   ", 10);
     appendLineToWindow(win, "world\t\t", 10);
@@ -168,18 +114,7 @@ describe("appendLineToWindow", () => {
   });
 
   it("should remove ANSI codes before storing", () => {
-    const win: SubAgentWindow = {
-      sessionId: "test",
-      status: "running",
-      exitCode: null,
-      name: "test-window",
-      lines: [],
-      allMessages: [],
-      startedAt: Date.now(),
-      timeout: 600,
-      toolCount: 0,
-      fileCount: 0,
-    };
+    const win = makeWindow();
 
     appendLineToWindow(win, "\u001b[31merror\u001b[0m message", 10);
 
@@ -187,18 +122,7 @@ describe("appendLineToWindow", () => {
   });
 
   it("should handle tool kind parameter", () => {
-    const win: SubAgentWindow = {
-      sessionId: "test",
-      status: "running",
-      exitCode: null,
-      name: "test-window",
-      lines: [],
-      allMessages: [],
-      startedAt: Date.now(),
-      timeout: 600,
-      toolCount: 0,
-      fileCount: 0,
-    };
+    const win = makeWindow();
 
     appendLineToWindow(win, "tool output", 10, "tool");
 
@@ -354,96 +278,19 @@ describe("getLastAssistantText", () => {
 describe("getSummaryText", () => {
   it("should show running count when all running", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "running",
-        exitCode: null,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "running",
-        exitCode: null,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "3",
-        status: "running",
-        exitCode: null,
-        name: "test3",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", name: "test1" }),
+      makeWindow({ sessionId: "2", name: "test2" }),
+      makeWindow({ sessionId: "3", name: "test3" }),
     ];
     expect(getSummaryText(windows)).toBe("3 running");
   });
 
   it("should show all counts for mixed statuses", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "running",
-        exitCode: null,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "completed",
-        exitCode: 0,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "3",
-        status: "completed",
-        exitCode: 0,
-        name: "test3",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "4",
-        status: "error",
-        exitCode: 1,
-        name: "test4",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", name: "test1" }),
+      makeWindow({ sessionId: "2", status: "completed", exitCode: 0, name: "test2" }),
+      makeWindow({ sessionId: "3", status: "completed", exitCode: 0, name: "test3" }),
+      makeWindow({ sessionId: "4", status: "error", exitCode: 1, name: "test4" }),
     ];
     expect(getSummaryText(windows)).toBe("1 running, 2 done, 1 error");
   });
@@ -454,78 +301,23 @@ describe("getSummaryText", () => {
 
   it("should pluralize errors when more than one", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "error",
-        exitCode: 1,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "error",
-        exitCode: 1,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", status: "error", exitCode: 1, name: "test1" }),
+      makeWindow({ sessionId: "2", status: "error", exitCode: 1, name: "test2" }),
     ];
     expect(getSummaryText(windows)).toBe("2 errors");
   });
 
   it("should not pluralize single error", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "error",
-        exitCode: 1,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", status: "error", exitCode: 1, name: "test1" }),
     ];
     expect(getSummaryText(windows)).toBe("1 error");
   });
 
   it("should show only done when all completed", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "completed",
-        exitCode: 0,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "completed",
-        exitCode: 0,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", status: "completed", exitCode: 0, name: "test1" }),
+      makeWindow({ sessionId: "2", status: "completed", exitCode: 0, name: "test2" }),
     ];
     expect(getSummaryText(windows)).toBe("2 done");
   });
@@ -534,180 +326,37 @@ describe("getSummaryText", () => {
 describe("countWindowStatuses", () => {
   it("should count all running windows", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "running",
-        exitCode: null,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "running",
-        exitCode: null,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "3",
-        status: "running",
-        exitCode: null,
-        name: "test3",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", name: "test1" }),
+      makeWindow({ sessionId: "2", name: "test2" }),
+      makeWindow({ sessionId: "3", name: "test3" }),
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 3, completed: 0, error: 0 });
   });
 
   it("should count all completed windows", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "completed",
-        exitCode: 0,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "completed",
-        exitCode: 0,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", status: "completed", exitCode: 0, name: "test1" }),
+      makeWindow({ sessionId: "2", status: "completed", exitCode: 0, name: "test2" }),
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 0, completed: 2, error: 0 });
   });
 
   it("should count all error windows", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "error",
-        exitCode: 1,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "error",
-        exitCode: 1,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "3",
-        status: "error",
-        exitCode: 1,
-        name: "test3",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", status: "error", exitCode: 1, name: "test1" }),
+      makeWindow({ sessionId: "2", status: "error", exitCode: 1, name: "test2" }),
+      makeWindow({ sessionId: "3", status: "error", exitCode: 1, name: "test3" }),
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 0, completed: 0, error: 3 });
   });
 
   it("should count mixed statuses correctly", () => {
     const windows: SubAgentWindow[] = [
-      {
-        sessionId: "1",
-        status: "running",
-        exitCode: null,
-        name: "test1",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "2",
-        status: "completed",
-        exitCode: 0,
-        name: "test2",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "3",
-        status: "completed",
-        exitCode: 0,
-        name: "test3",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "4",
-        status: "error",
-        exitCode: 1,
-        name: "test4",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
-      {
-        sessionId: "5",
-        status: "running",
-        exitCode: null,
-        name: "test5",
-        lines: [],
-        allMessages: [],
-        startedAt: Date.now(),
-        timeout: 600,
-        toolCount: 0,
-        fileCount: 0,
-      },
+      makeWindow({ sessionId: "1", name: "test1" }),
+      makeWindow({ sessionId: "2", status: "completed", exitCode: 0, name: "test2" }),
+      makeWindow({ sessionId: "3", status: "completed", exitCode: 0, name: "test3" }),
+      makeWindow({ sessionId: "4", status: "error", exitCode: 1, name: "test4" }),
+      makeWindow({ sessionId: "5", name: "test5" }),
     ];
     expect(countWindowStatuses(windows)).toEqual({ running: 2, completed: 2, error: 1 });
   });
@@ -901,6 +550,36 @@ describe("formatBashCommand", () => {
 
   it("should keep all segments on one line when they fit together", () => {
     expect(formatBashCommand("a && b && c", 15)).toBe("a && b && c");
+  });
+
+  it("should truncate to just '...' when width budget is 3", () => {
+    // budget 3: slice(0, 0) + "..." = "..."
+    expect(formatBashCommand("some-command", 3)).toBe("...");
+  });
+
+  it("should truncate aggressively when width budget is 2", () => {
+    // budget 2: slice(0, -1) removes last char, then appends "..."
+    expect(formatBashCommand("some-command", 2)).toBe("some-comman...");
+  });
+
+  it("should truncate aggressively when width budget is 1", () => {
+    // budget 1: slice(0, -2) removes last 2 chars, then appends "..."
+    expect(formatBashCommand("some-command", 1)).toBe("some-comma...");
+  });
+
+  it("should truncate multi-segment command with very small width", () => {
+    // Budget 3: each single-char segment fits within budget 3, so they pass through
+    expect(formatBashCommand("a && b && c", 3)).toBe("a &&\n\u2502 b &&\n\u2502 c");
+  });
+
+  it("should return command unchanged when width exactly equals command length", () => {
+    const cmd = "exact-length"; // 12 chars
+    expect(formatBashCommand(cmd, cmd.length)).toBe(cmd);
+  });
+
+  it("should return multi-segment command unchanged when width exactly equals total length", () => {
+    const cmd = "a && b && c"; // 11 chars
+    expect(formatBashCommand(cmd, cmd.length)).toBe(cmd);
   });
 });
 

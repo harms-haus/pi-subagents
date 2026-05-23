@@ -10,6 +10,10 @@ import { relative } from "node:path";
 
 const HOME = homedir();
 
+const TRUNCATION_SUFFIX_LENGTH = 3;
+const BASH_PREFIX_WIDTH = 12;
+const BASH_CONT_PREFIX_WIDTH = 5;
+
 // ── Path Shortening ──────────────────────────────────────────────────────
 
 /**
@@ -151,7 +155,7 @@ export function formatBashCommand(
 
   if (segments.length === 1) {
     // Single segment, just truncate
-    return `${cmd.slice(0, firstLineBudget - 3)}...`;
+    return `${cmd.slice(0, firstLineBudget - TRUNCATION_SUFFIX_LENGTH)}...`;
   }
 
   const lines: string[] = [];
@@ -170,7 +174,7 @@ export function formatBashCommand(
         currentLine = `${isFirstLine ? "" : contPrefix}${seg}`;
       } else {
         // Segment too long even on its own line — truncate it
-        const truncated = `${seg.slice(0, budget - 3)}...`;
+        const truncated = `${seg.slice(0, budget - TRUNCATION_SUFFIX_LENGTH)}...`;
         // If there are more segments after this, we need " &&" suffix
         if (i < segments.length - 1) {
           lines.push(`${isFirstLine ? "" : contPrefix}${truncated} &&`);
@@ -195,7 +199,7 @@ export function formatBashCommand(
           currentLine = `${contPrefix}${seg}`;
         } else {
           // Segment too long on its own
-          const truncated = `${seg.slice(0, contLineBudget - 3)}...`;
+          const truncated = `${seg.slice(0, contLineBudget - TRUNCATION_SUFFIX_LENGTH)}...`;
           if (i < segments.length - 1) {
             lines.push(`${contPrefix}${truncated} &&`);
           } else {
@@ -244,6 +248,18 @@ export function countNonEmptyLines(text: string): number {
   return count;
 }
 
+function countOutputEntries(text: string): number {
+  let count = 0;
+  let lineStart = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i === text.length || text.charCodeAt(i) === 10) {
+      if (i > lineStart && text.charCodeAt(lineStart) !== 91) count++;
+      lineStart = i + 1;
+    }
+  }
+  return count;
+}
+
 function formatLsResultText(
   text: string,
   details?: { entryLimitReached?: number },
@@ -253,19 +269,19 @@ function formatLsResultText(
   if (!text || text === "(empty directory)" || text === "(empty directory)\n") {
     return `${prefix}(empty)`;
   }
+  // Count dirs among the output entries (lines starting without '[' and ending with '/')
   let dirs = 0;
-  let files = 0;
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
     if (i === text.length || text.charCodeAt(i) === 10) {
-      if (i > lineStart && text.charCodeAt(lineStart) !== 91) {
-        // skip empty and '[' lines
-        if (text.charCodeAt(i - 1) === 47) dirs++;
-        else files++; // 47 = '/', trailing slash = dir
+      if (i > lineStart && text.charCodeAt(lineStart) !== 91 && text.charCodeAt(i - 1) === 47) {
+        dirs++;
       }
       lineStart = i + 1;
     }
   }
+  const total = countOutputEntries(text);
+  const files = total - dirs;
   if (dirs === 0 && files === 0) {
     return `${prefix}(empty)`;
   }
@@ -289,16 +305,7 @@ function formatFindResultText(
   ) {
     return `${prefix}0 matches`;
   }
-  let count = 0;
-  let lineStart = 0;
-  for (let i = 0; i <= text.length; i++) {
-    if (i === text.length || text.charCodeAt(i) === 10) {
-      if (i > lineStart && text.charCodeAt(lineStart) !== 91) {
-        count++;
-      }
-      lineStart = i + 1;
-    }
-  }
+  const count = countOutputEntries(text);
   const truncationIndicator = details?.resultLimitReached ? "+" : "";
   return `${prefix}${count} match${count !== 1 ? "es" : ""}${truncationIndicator}`;
 }
@@ -389,7 +396,7 @@ export function formatToolCall(
         return `bash → cd .`;
       }
       cmd = shortenPathsInText(cmd, cwd);
-      return `bash → ${formatBashCommand(cmd, widthBudget - 12, widthBudget - 5)}`;
+      return `bash → ${formatBashCommand(cmd, widthBudget - BASH_PREFIX_WIDTH, widthBudget - BASH_CONT_PREFIX_WIDTH)}`;
     }
 
     case "read": {

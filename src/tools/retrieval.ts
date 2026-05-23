@@ -8,8 +8,9 @@ import { Container, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { loadProfiles, profileSummary } from "../profiles";
 import { loadMaxLinesPerWindow } from "../settings";
-import { getLastAssistantText, getTextParts } from "../utils";
-import type { SessionRecord, ToolCallPart } from "../types";
+import { getLastAssistantText } from "../utils";
+import { formatTranscript, RETRIEVAL_OPTIONS } from "../format-transcript";
+import type { SessionRecord } from "../types";
 import type { ExtensionAPI, Theme, AgentToolResult } from "@earendil-works/pi-coding-agent";
 
 // ── Rendering Helpers ───────────────────────────────────────────────────────
@@ -81,8 +82,9 @@ function createSessionRenderCall(toolName: string) {
 // ── Error Constants ─────────────────────────────────────────────────────────
 
 /** Error message when a session ID is not found in the session store. */
-const SESSION_NOT_FOUND_ERROR = (sessionId: string) =>
-  `Session "${sessionId}" not found. The session may have expired or the ID is incorrect.`;
+function sessionNotFoundMessage(sessionId: string): string {
+  return `Session "${sessionId}" not found. The session may have expired or the ID is incorrect.`;
+}
 
 /**
  * Register the retrieval tools: get_subagent_output, get_subagent_session, and list_subagent_profiles.
@@ -114,7 +116,7 @@ export function registerRetrievalTools(
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const record = sessionStore.get(params.sessionId);
       if (!record || record.runs.length === 0) {
-        throw new Error(SESSION_NOT_FOUND_ERROR(params.sessionId));
+        throw new Error(sessionNotFoundMessage(params.sessionId));
       }
 
       // Get the LATEST run's output
@@ -161,59 +163,16 @@ export function registerRetrievalTools(
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const record = sessionStore.get(params.sessionId);
       if (!record || record.runs.length === 0) {
-        throw new Error(SESSION_NOT_FOUND_ERROR(params.sessionId));
+        throw new Error(sessionNotFoundMessage(params.sessionId));
       }
 
-      const parts: string[] = [];
-
-      for (let runIndex = 0; runIndex < record.runs.length; runIndex++) {
-        const run = record.runs[runIndex];
-
-        // Add run separator if multiple runs
-        if (record.runs.length > 1) {
-          parts.push(`=== Run ${runIndex + 1}/${record.runs.length} (${run.status}) ===`);
-        }
-
-        for (const msg of run.messages) {
-          // Extract text parts using the helper
-          const textParts = getTextParts(msg);
-          for (const text of textParts) {
-            parts.push(text);
-          }
-
-          // Extract tool calls
-          if (msg.role === "assistant" && msg.content) {
-            for (const part of msg.content) {
-              if (part.type === "toolCall") {
-                const args = (part as ToolCallPart).arguments || {};
-                const preview = JSON.stringify(args).slice(0, 120);
-                parts.push(`→ ${(part as ToolCallPart).name}: ${preview}`);
-              }
-            }
-          } else if (msg.role === "toolResult" && msg.content) {
-            for (const part of msg.content) {
-              if (part.type === "text") {
-                const text = part.text;
-                if (text.length > 500) {
-                  parts.push(`[tool result]: ${text.slice(0, 500)}...`);
-                } else {
-                  parts.push(`[tool result]: ${text}`);
-                }
-              }
-            }
-          }
-        }
-
-        if (run.errorMessage) {
-          parts.push(`[Error: ${run.errorMessage}]`);
-        }
-      }
+      const transcript = formatTranscript(record.runs, RETRIEVAL_OPTIONS);
 
       // Get latest run info for details
       const latestRun = record.runs[record.runs.length - 1];
       const maxLines = await loadMaxLinesPerWindow(ctx?.cwd);
       return {
-        content: [{ type: "text", text: parts.join("\n---\n") || "(no messages in session)" }],
+        content: [{ type: "text", text: transcript || "(no messages in session)" }],
         details: {
           sessionId: params.sessionId,
           status: latestRun.status,

@@ -154,7 +154,7 @@ export function syncState(source: SubagentState, target: SubagentState): void {
  * Data is already JSON-compatible by construction (parsed from child process stdout).
  */
 export function serializeSessionData(session: SubagentSessionData): unknown {
-    return session;
+  return session;
 }
 
 /**
@@ -163,46 +163,47 @@ export function serializeSessionData(session: SubagentSessionData): unknown {
  * Stale "running" sessions (from crashes) are converted to "error" status.
  */
 export function deserializeSessionData(data: unknown): SubagentSessionData | null {
-    if (!data || typeof data !== "object") {
-        return null;
-    }
-    const d = data as Record<string, unknown>;
-    // Validate required fields
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  const d = data as Record<string, unknown>;
+  // Validate required fields
+  if (
+    typeof d.sessionId !== "string" ||
+    typeof d.taskName !== "string" ||
+    typeof d.prompt !== "string" ||
+    typeof d.status !== "string" ||
+    !Array.isArray(d.messages) ||
+    d.messages.length > 1000
+  ) {
+    return null;
+  }
+  // Validate message structure
+  for (const msg of d.messages) {
     if (
-        typeof d.sessionId !== "string" ||
-        typeof d.taskName !== "string" ||
-        typeof d.prompt !== "string" ||
-        typeof d.status !== "string" ||
-        !Array.isArray(d.messages) ||
-        d.messages.length > 1000
+      !msg ||
+      typeof msg !== "object" ||
+      !("role" in msg) ||
+      typeof (msg as Record<string, unknown>).role !== "string"
     ) {
-        return null;
+      return null;
     }
-    // Validate message structure
-    for (const msg of d.messages) {
-        if (
-            !msg ||
-            typeof msg !== "object" ||
-            !("role" in msg) ||
-            typeof (msg as Record<string, unknown>).role !== "string"
-        ) {
-            return null;
-        }
-    }
-    // Validate status value
-    if (d.status !== "running" && d.status !== "completed" && d.status !== "error") {
-        return null;
-    }
-    
-    const result = d as unknown as SubagentSessionData;
-    
-    // Stale "running" sessions from a crash should be marked as "error"
-    if (result.status === "running") {
-        result.status = "error";
-        result.errorMessage = result.errorMessage || "Session was interrupted (main agent session ended unexpectedly)";
-    }
-    
-    return result;
+  }
+  // Validate status value
+  if (d.status !== "running" && d.status !== "completed" && d.status !== "error") {
+    return null;
+  }
+
+  const result = d as unknown as SubagentSessionData;
+
+  // Stale "running" sessions from a crash should be marked as "error"
+  if (result.status === "running") {
+    result.status = "error";
+    result.errorMessage =
+      result.errorMessage || "Session was interrupted (main agent session ended unexpectedly)";
+  }
+
+  return result;
 }
 
 // Re-export from format-transcript to maintain backward compatibility

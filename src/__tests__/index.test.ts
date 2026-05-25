@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CUSTOM_ENTRY_TYPE } from "../types";
 import type { SessionRecord, SubagentSessionData } from "../types";
 import { createMockPi, makeSession } from "./helpers";
 
@@ -13,6 +14,7 @@ let capturedRegisterSession: (session: SubagentSessionData) => void;
 let capturedGetActiveSessionIds: () => Set<string>;
 let capturedSessionStore: Map<string, SessionRecord> | null = null;
 let capturedShutdownHandler: (() => Promise<void>) | null = null;
+let capturedSessionStartHandler: ((event: any, ctx: any) => void) | null = null;
 
 vi.mock("../tools/delegate", () => ({
   registerDelegateTool: vi.fn(
@@ -46,6 +48,7 @@ describe("index.ts — default export", () => {
     vi.clearAllMocks();
     capturedSessionStore = null;
     capturedShutdownHandler = null;
+    capturedSessionStartHandler = null;
 
     mockPi = createMockPi();
 
@@ -53,11 +56,15 @@ describe("index.ts — default export", () => {
     const mod = await import("../index");
     mod.default(mockPi);
 
-    // Capture the session_shutdown handler
+    // Capture the session_shutdown and session_start handlers
     const onCalls = vi.mocked(mockPi.on).mock.calls as [string, any][];
     const shutdownCall = onCalls.find(([event]) => event === "session_shutdown");
     if (shutdownCall) {
       capturedShutdownHandler = shutdownCall[1] as () => Promise<void>;
+    }
+    const startCall = onCalls.find(([event]) => event === "session_start");
+    if (startCall) {
+      capturedSessionStartHandler = startCall[1] as (event: any, ctx: any) => void;
     }
   });
 
@@ -470,6 +477,175 @@ describe("index.ts — default export", () => {
       const { registerRetrievalTools } = await import("../tools/retrieval");
       const retrievalCall = vi.mocked(registerRetrievalTools).mock.calls[0];
       expect(retrievalCall[1]).toBe(capturedSessionStore);
+    });
+  });
+
+  // ── session_start handler — session reconstruction ──────────────
+
+  describe("session_start handler — session reconstruction", () => {
+    /** Helper: invoke the captured session_start handler with mock event + context */
+    function fireSessionStart(
+      reason: string,
+      entries: unknown[],
+    ): void {
+      const event = { reason };
+      const ctx = {
+        sessionManager: {
+          getEntries: vi.fn().mockReturnValue(entries),
+        },
+      };
+      capturedSessionStartHandler!(event, ctx);
+    }
+
+    /** Helper: create a custom entry that looks like a persisted subagent session */
+    function makeCustomEntry(
+        data: unknown,
+        customType: string = CUSTOM_ENTRY_TYPE,
+    ): { type: string; customType: string; data: unknown } {
+      return { type: "custom", customType, data };
+    }
+
+    it("should reconstruct sessionStore from custom entries on session_start", () => {
+      const sessionData = {
+        sessionId: "reconstructed-1",
+        taskName: "test-task",
+        prompt: "do something",
+        status: "completed",
+        messages: [],
+        exitCode: 0,
+        startedAt: 5000,
+      };
+
+      fireSessionStart("resume", [makeCustomEntry(sessionData)]);
+
+      expect(capturedSessionStore!.has("reconstructed-1")).toBe(true);
+      const record = capturedSessionStore!.get("reconstructed-1")!;
+      expect(record.runs).toHaveLength(1);
+      expect(record.runs[0].taskName).toBe("test-task");
+      expect(record.runs[0].status).toBe("completed");
+    });
+
+    it("should handle multiple runs for the same sessionId", () => {
+      const run1 = {
+        sessionId: "multi-reconstruct",
+        taskName: "first-run",
+        prompt: "prompt 1",
+        status: "completed",
+        messages: [],
+        exitCode: 0,
+        startedAt: 1000,
+      };
+      const run2 = {
+        sessionId: "multi-reconstruct",
+        taskName: "second-run",
+        prompt: "prompt 2",
+        status: "completed",
+        messages: [],
+        exitCode: 0,
+        startedAt: 2000,
+      };
+
+      fireSessionStart("resume", [
+        makeCustomEntry(run1),
+        makeCustomEntry(run2),
+      ]);
+
+      const record = capturedSessionStore!.get("multi-reconstruct")!;
+      expect(record.runs).toHaveLength(2);
+      expect(record.runs[0].taskName).toBe("first-run");
+      expect(record.runs[1].taskName).toBe("second-run");
+    });
+
+    it("should skip entries with different customType", () => {
+      const validData = {
+        sessionId: "valid-session",
+        taskName: "valid",
+        prompt: "p",
+        status: "completed",
+        messages: [],
+        exitCode: 0,
+        startedAt: 1000,
+      };
+      const otherData = {
+        sessionId: "other-session",
+        taskName: "other",
+        prompt: "p",
+        status: "completed",
+        messages: [],
+        exitCode: 0,
+        startedAt: 2000,
+      };
+
+      fireSessionStart("resume", [
+        makeCustomEntry(validData),
+        makeCustomEntry(otherData, "other-extension"),
+      ]);
+
+      expect(capturedSessionStore!.size).toBe(1);
+      expect(capturedSessionStore!.has("valid-session")).toBe(true);
+      expect(capturedSessionStore!.has("other-session")).toBe(false);
+    });
+
+    it("should skip malformed entry data", () => {
+      const validData = {
+        sessionId: "well-formed",
+        taskName: "good",
+        prompt: "p",
+        status: "completed",
+        messages: [],
+        exitCode: 0,
+        startedAt: 1000,
+      };
+
+      fireSessionStart("resume", [
+        makeCustomEntry(null),
+        makeCustomEntry({ sessionId: 123 }),
+        makeCustomEntry(validData),
+      ]);
+
+      // Only the well-formed entry should be in the store
+      expect(capturedSessionStore!.size).toBe(1);
+      expect(capturedSessionStore!.has("well-formed")).toBe(true);
+    });
+
+    it("should convert stale running sessions to error status", () => {
+      const runningData = {
+        sessionId: "stale-running",
+        taskName: "stale",
+        prompt: "p",
+        status: "running",
+        messages: [],
+        exitCode: null,
+        startedAt: 1000,
+      };
+
+      fireSessionStart("resume", [makeCustomEntry(runningData)]);
+
+      const record = capturedSessionStore!.get("stale-running")!;
+      expect(record.runs).toHaveLength(1);
+      expect(record.runs[0].status).toBe("error");
+      expect(record.runs[0].errorMessage).toContain("interrupted");
+    });
+
+    it("should skip reconstruction for new sessions", () => {
+      const getEntries = vi.fn().mockReturnValue([
+        makeCustomEntry({
+          sessionId: "should-not-appear",
+          taskName: "t",
+          prompt: "p",
+          status: "completed",
+          messages: [],
+          exitCode: 0,
+          startedAt: 1000,
+        }),
+      ]);
+
+      const event = { reason: "new" };
+      const ctx = { sessionManager: { getEntries } };
+      capturedSessionStartHandler!(event, ctx);
+
+      expect(getEntries).not.toHaveBeenCalled();
+      expect(capturedSessionStore!.size).toBe(0);
     });
   });
 });

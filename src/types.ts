@@ -23,6 +23,9 @@ export const DEFAULT_TIMEOUT = 600;
 /** Error message for loop detection kills */
 export const LOOP_DETECTED_MESSAGE = "Loop detected: sub-agent is repeating the same tool calls";
 
+/** Custom entry type identifier for persisting subagent session data */
+export const CUSTOM_ENTRY_TYPE = "pi-subagents";
+
 // ── Types ────────────────────────────────────────────────────────────
 
 /** Tool call part in a message (used internally for type narrowing) */
@@ -144,6 +147,57 @@ export function syncState(source: SubagentState, target: SubagentState): void {
   target.model = source.model;
   target.stopReason = source.stopReason;
   target.errorMessage = source.errorMessage;
+}
+
+/**
+ * Serialize SubagentSessionData for storage in a custom entry.
+ * Data is already JSON-compatible by construction (parsed from child process stdout).
+ */
+export function serializeSessionData(session: SubagentSessionData): unknown {
+    return session;
+}
+
+/**
+ * Deserialize and validate session data from a custom entry.
+ * Returns null if the data is malformed or missing required fields.
+ * Stale "running" sessions (from crashes) are converted to "error" status.
+ */
+export function deserializeSessionData(data: unknown): SubagentSessionData | null {
+    if (!data || typeof data !== "object") {
+        return null;
+    }
+    const d = data as Record<string, unknown>;
+    // Validate required fields
+    if (
+        typeof d.sessionId !== "string" ||
+        typeof d.taskName !== "string" ||
+        typeof d.prompt !== "string" ||
+        typeof d.status !== "string" ||
+        !Array.isArray(d.messages) ||
+        d.messages.length > 1000
+    ) {
+        return null;
+    }
+    // Validate message structure
+    for (const msg of d.messages) {
+        if (!msg || typeof msg !== "object" || typeof msg.role !== "string") {
+            return null;
+        }
+    }
+    // Validate status value
+    if (d.status !== "running" && d.status !== "completed" && d.status !== "error") {
+        return null;
+    }
+    
+    const result = d as unknown as SubagentSessionData;
+    
+    // Stale "running" sessions from a crash should be marked as "error"
+    if (result.status === "running") {
+        result.status = "error";
+        result.errorMessage = result.errorMessage || "Session was interrupted (main agent session ended unexpectedly)";
+    }
+    
+    return result;
 }
 
 // Re-export from format-transcript to maintain backward compatibility

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Session persistence**: Sub-agent session data is now persisted to the main agent's session tree via `pi.appendEntry()`. Sessions survive agent restarts and crashes, and are automatically reconstructed on session load. Persistence occurs per-sub-agent after each task completes or errors. Stale "running" sessions left over from crashes are auto-converted to "error" status during reconstruction. Resume functionality now works across session restarts. Persistence is fault-tolerant — failures are logged and do not affect delegation.
 - **Timeout extension**: Sub-agents that are actively working (making tool calls) when their timeout expires now get an automatic extension. Each tool call restarts an idle timer. The sub-agent is killed only after `extend_timeout_debounce` seconds (default 30) of no activity. The TUI always shows the original timeout value. Configurable via `subagents.extend_timeout_debounce` setting.
 - **Loop detection**: Sub-agents that repeat the same tool calls consecutively are now automatically killed. When `looping_tool_count` (default 5) consecutive tool call signatures (serialized as JSON) are identical strings, the sub-agent is immediately stopped with an error. Configurable via `subagents.looping_tool_count` setting.
 - `suggestedSkills` profile field — suggests skill names to the sub-agent via `--skill` CLI flags; the model chooses whether to load them.

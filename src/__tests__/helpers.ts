@@ -23,6 +23,7 @@ export function createMockPi(overrides: Partial<ExtensionAPI> = {}): ExtensionAP
     registerCommand: vi.fn(),
     on: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
+    appendEntry: vi.fn(),
     ui: {
       notify: vi.fn(),
       confirm: vi.fn(),

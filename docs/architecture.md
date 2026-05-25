@@ -4,14 +4,14 @@ Deep-dive architecture document for the pi-subagents extension. This covers inte
 
 ## 1. Overview
 
-pi-subagents is a pi-coding-agent extension that enables the main agent to spawn multiple isolated sub-agent processes in parallel. Each sub-agent runs its own `pi` subprocess with an independent context window, provider/model configuration, and tool access. Live output from each sub-agent is rendered in a rolling TUI window inline with the main agent's conversation. The extension provides four tools — `delegate_to_subagents`, `get_subagent_output`, `get_subagent_session`, and `list_subagent_profiles` — plus a `/profile` slash command for interactive profile management. Session data is maintained in an in-memory store with LRU eviction, and all sub-agent communication flows through JSONL-parsed stdout from the spawned processes.
+pi-subagents is a pi-coding-agent extension that enables the main agent to spawn multiple isolated sub-agent processes in parallel. Each sub-agent runs its own `pi` subprocess with an independent context window, provider/model configuration, and tool access. Live output from each sub-agent is rendered in a rolling TUI window inline with the main agent's conversation. The extension provides four tools — `delegate_to_subagents`, `get_subagent_output`, `get_subagent_session`, and `list_subagent_profiles` — plus a `/profile` slash command for interactive profile management. Session data is maintained in an in-memory store with LRU eviction, **and is also persisted to the main agent's session tree** via custom entries written through `pi.appendEntry()`. On session load (startup, resume, reload, or fork), the `session_start` handler reconstructs the in-memory store from these persisted entries. All sub-agent communication flows through JSONL-parsed stdout from the spawned processes.
 
 ## 2. Module Map
 
 | File                           | Responsibility                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`                 | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_shutdown` lifecycle event                                                                                                                                                                                                                   |
-| `src/types.ts`                 | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper. Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts`                                                      |
+| `src/index.ts`                 | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_start` (reconstructs in-memory store from persisted custom entries) and `session_shutdown` lifecycle events                                                                                                                                 |
+| `src/types.ts`                 | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper, session persistence helpers (`CUSTOM_ENTRY_TYPE`, `serializeSessionData()`, `deserializeSessionData()`). Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts` |
 | `src/spawner.ts`               | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Also processes `turn_end` events to capture ls/find tool result summaries. Also contains `getPiInvocation()` (moved from `utils.ts`)                                            |
 | `src/format-tool-call.ts`      | `formatToolCall()` (one-line tool previews), `countNonEmptyLines()` (edit/write diff stats), `shortenPath()`, `formatBashCommand()`, `collapseCdDot()`, `shortenPathsInText()`, `formatToolResult()` (ls/find result summaries)                                                                                                             |
 | `src/settings.ts`              | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local)                                                                                                                                                                                                                                      |
@@ -22,7 +22,7 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 | `src/profile-editor.ts`        | Interactive profile creation/editing via `/profile` command                                                                                                                                                                                                                                                                                 |
 | `src/commands/profile.ts`      | `/profile` slash command (list, show, create, edit, delete)                                                                                                                                                                                                                                                                                 |
 | `src/schemas.ts`               | TypeBox schemas for `delegate_to_subagents` parameter validation                                                                                                                                                                                                                                                                            |
-| `src/tools/delegate.ts`        | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration. Delegates TUI rendering to `delegate-render.ts`                                                                                                                                                                                |
+| `src/tools/delegate.ts`        | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration, session persistence via `persistSession()` helper. Delegates TUI rendering to `delegate-render.ts`                                                                                                                           |
 | `src/tools/delegate-render.ts` | `colorizeToolLine()`, `renderDelegateCall()`, `renderDelegateResult()` — pure rendering functions for the delegate tool TUI display                                                                                                                                                                                                         |
 | `src/tools/retrieval.ts`       | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers                                                                                                                                                                                                                        |
 | `src/utils.ts`                 | Shared helpers: ANSI stripping (`stripAnsi`), `appendLineToWindow()`, `getTextParts()`, `getLastAssistantText()`, `mapWithConcurrencyLimit()`, `countWindowStatuses()`, `getSummaryText()`                                                                                                                                                  |
@@ -55,7 +55,7 @@ index.ts
 │   │   ├── types.ts
 │   │   └── utils.ts
 │   │       └── types.ts
-│   ├── types.ts
+│   ├── types.ts              ← CUSTOM_ENTRY_TYPE, serializeSessionData
 │   └── utils.ts
 │       └── types.ts
 ├── tools/retrieval.ts
@@ -64,7 +64,7 @@ index.ts
 │   ├── types.ts
 │   └── utils.ts
 │       └── types.ts
-└── types.ts
+└── types.ts              ← CUSTOM_ENTRY_TYPE, deserializeSessionData
     └── format-transcript.ts
 ```
 
@@ -93,10 +93,14 @@ interface SessionRecord {
 - **Max sessions:** When `sessionStore.size >= 32`, the oldest session (determined by `runs[0].startedAt`) is evicted (LRU by start time).
 - **Max runs per session:** When a session is resumed, the new run is appended to `record.runs`. If the array exceeds 10 entries, the oldest run is shifted off (`shift()`).
 
+**Persistence:** After each sub-agent completes (or errors), `persistSession()` writes the session data to the main agent's session tree via `pi.appendEntry(CUSTOM_ENTRY_TYPE, serializeSessionData(session))`. This ensures session data survives across session reloads, resumes, and forks.
+
+**Reconstruction:** On `session_start` (for any reason other than `"new"`), the handler iterates the session's custom entries, deserializes any with `customType === CUSTOM_ENTRY_TYPE` via `deserializeSessionData()`, and calls `registerSession()` to rebuild the in-memory store. Stale `"running"` sessions (from crashes) are automatically converted to `"error"` status during deserialization.
+
 **Cleanup:** The store is cleared entirely on the `session_shutdown` event:
 
 ```ts
-pi.on("session_shutdown", async () => {
+pi.on("session_shutdown", () => {
   sessionStore.clear();
 });
 ```
@@ -118,9 +122,15 @@ pi.on("session_shutdown", async () => {
    c. runSubAgent() spawns pi subprocess
    d. stdout lines parsed as JSONL, appended to rolling window; `turn_end` events processed to capture ls/find tool result summaries
    e. Process exit → status set to "completed" or "error"
+   f. persistSession() → serialize and write to main agent's session tree via pi.appendEntry()
 8. Summary result returned with session IDs
 9. LLM retrieves output via get_subagent_output(sessionId)
    or get_subagent_session(sessionId)
+
+**On session load** (`session_start` with reason ≠ `"new"`):
+- Custom entries with `customType === "pi-subagents"` are deserialized via `deserializeSessionData()`
+- Validated entries are registered into the in-memory session store
+- Stale `"running"` entries (from crashes) are converted to `"error"` status
 ```
 
 ### 3.3 Resume Flow

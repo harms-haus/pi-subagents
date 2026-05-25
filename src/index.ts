@@ -25,6 +25,7 @@
 import { registerProfileCommand } from "./commands/profile";
 import { registerDelegateTool } from "./tools/delegate";
 import { registerRetrievalTools } from "./tools/retrieval";
+import { CUSTOM_ENTRY_TYPE, deserializeSessionData } from "./types";
 import type { SessionRecord, SubagentSessionData } from "./types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -74,6 +75,32 @@ export default function (pi: ExtensionAPI) {
     }
     return active;
   }
+
+  // Reconstruct session store from persisted custom entries on session load
+  pi.on("session_start", (event, ctx) => {
+    // New sessions have no prior data to reconstruct
+    if (event.reason === "new") {
+      return;
+    }
+
+    try {
+      const entries = ctx.sessionManager.getEntries();
+      for (const entry of entries) {
+        if (
+          entry.type === "custom" &&
+          "customType" in entry &&
+          entry.customType === CUSTOM_ENTRY_TYPE
+        ) {
+          const sessionData = deserializeSessionData(entry.data);
+          if (sessionData) {
+            registerSession(sessionData);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[pi-subagents] Failed to reconstruct session data:", err);
+    }
+  });
 
   pi.on("session_shutdown", () => {
     sessionStore.clear();

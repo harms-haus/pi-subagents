@@ -102,8 +102,8 @@ bun run test:watch
 | Test File                    | What It Covers                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------------ |
 | `helpers.ts`                 | Shared test helpers: factory functions for mock objects with sensible defaults  |
-| `index.test.ts`              | Tests session store: `registerSession` (creation, resume, eviction, capping), `getActiveSessionIds`, shutdown handler |
-| `types-helpers.test.ts`      | Tests `syncState` helper function |
+| `index.test.ts`              | Tests session store: `registerSession` (creation, resume, eviction, capping), `getActiveSessionIds`, shutdown handler, `session_start` handler / session reconstruction from custom entries |
+| `types-helpers.test.ts`      | Tests `syncState`, `serializeSessionData`, `deserializeSessionData`, `CUSTOM_ENTRY_TYPE` |
 | `schemas.test.ts`            | `TaskSchema` and `DelegateParams` validation — required fields, optional fields, type mismatches, array constraints |
 | `profiles-core.test.ts`           | `resolveProfile`, `profileSummary`, `formatProfileDetail` (API key masking), `getProfilesDir`, `validateProfileTools`, `applyExcludeTools`, `validateProfileSkills`, `resolveProfileSkills`, `loadProfiles` (cache, project-local, parsing), `apiKey` security |
 | `profiles-args.test.ts`           | `profileToArgs` CLI generation, `extraArgs` tool-override security, `excludeTools` and `suggestedSkills` in `profileToArgs`, `profileSummary`/`formatProfileDetail` with `excludeTools` and skills |
@@ -114,7 +114,7 @@ bun run test:watch
 | `spawner-tool-display.test.ts`    | Path shortening in tool calls, bash command `&&` splitting, `formatToolCall` defaults, todo tool renderers, tool count tracking |
 | `spawner-loop.test.ts`            | Loop detection (consecutive similar tool calls) |
 | `delegate-core.test.ts`           | Tool registration (`registerDelegateTool`, `registerRetrievalTools`, `registerProfileCommand`), retrieval tool execution (valid/invalid sessions, multi-run), rendering functions |
-| `delegate-advanced.test.ts`       | Delegate timeout (`AbortSignal`), timeout extension, resume validation (non-existent, still-running), resume prompt formatting, multi-run output/session, abort signal forwarding, loop detection |
+| `delegate-advanced.test.ts`       | Delegate timeout (`AbortSignal`), timeout extension, resume validation (non-existent, still-running), resume prompt formatting, multi-run output/session, abort signal forwarding, loop detection, `persistSession` / `appendEntry` calls after task completion |
 | `delegate-features.test.ts`       | `excludeTools` resolution, unknown profile handling, skill resolution, `files` parameter, file path security |
 | `delegate-render.test.ts`    | Tests `renderCall` and `renderResult` for delegate tool (TUI rendering) |
 | `retrieval-tools.test.ts`    | Tests retrieval tools: `list_subagent_profiles`, `createTruncatingRenderResult`, toolResult extraction |

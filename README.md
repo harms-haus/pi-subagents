@@ -317,6 +317,7 @@ You can skip any field by answering "No" — it will be omitted from the profile
 - **Session resume**: Continue work from completed/errored sessions with full transcript context
 - **Per-task timeouts**: Configurable timeout per sub-agent (default 600s), with auto-extension while the agent remains active
 - **Loop detection**: Automatically kills sub-agents that repeat the same tool calls in a tight loop
+- **Session persistence**: Sessions are persisted to the main agent's session log immediately after each sub-agent completes. On agent restart, sessions are reconstructed from the log — no data is lost across restarts.
 
 ## Architecture
 
@@ -346,7 +347,12 @@ Main Agent TUI
         │   │   ├── Track tool calls & results
         │   │   └── [timeout?] Abort if task timeout exceeded
         │   │
-        │   └── Store session data (messages, status, exit code)
+        │   ├── Store session data (messages, status, exit code)
+        │   └── persistSession → pi.appendEntry() (fault-tolerant)
+        │
+        ├── On session_start (restart/resume):
+        │   └── Reconstruct sessionStore from persisted entries
+        │       └── Stale "running" sessions → auto-converted to "error"
         │
         └── Return session IDs → get_subagent_output / get_subagent_session
 ```

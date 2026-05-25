@@ -212,6 +212,28 @@ Two checks are performed during `execute()`, before any sub-agents are spawned:
 
 If validation fails for **any** task, the entire tool call throws — no sub-agents are spawned.
 
+#### Session Persistence
+
+Sessions are persisted to the main agent's session log immediately after each sub-agent completes (or errors). This enables session data to survive agent restarts.
+
+**How it works:**
+
+1. After each task finishes — whether successfully, due to an error (unknown profile, loop detection, timeout), or any other reason — `persistSession()` calls `pi.appendEntry()` with the custom entry type `"pi-subagents"` and the serialized `SubagentSessionData`.
+2. Each task is persisted independently. For multiple tasks, `appendEntry` is called once per task.
+3. Persistence is **fault-tolerant**: if `appendEntry()` throws, the error is caught and logged as a warning. It does not break delegation or affect other tasks.
+
+**Session reconstruction on restart:**
+
+- When the main agent session restarts or resumes (`session_start` event with `reason !== "new"`), the extension iterates over all custom entries in the session log and reconstructs the in-memory session store via `deserializeSessionData()`.
+- Only entries with `customType === "pi-subagents"` are processed. Malformed entries are silently skipped.
+- **Stale "running" sessions** — sessions that were still `"running"` when the main agent session ended (e.g., due to a crash) — are automatically converted to `"error"` status with the message:
+  ```
+  Session was interrupted (main agent session ended unexpectedly)
+  ```
+  This ensures that `get_subagent_output` and `get_subagent_session` can always return meaningful data for persisted sessions.
+- New sessions (`reason === "new"`) skip reconstruction entirely — there is no prior data to load.
+- On `session_shutdown`, the in-memory session store is cleared.
+
 ### TUI Rendering
 
 The tool provides custom `renderCall` and `renderResult` implementations:

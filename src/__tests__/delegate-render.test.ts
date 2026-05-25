@@ -61,6 +61,7 @@ function getRenderFunctions() {
     registerCommand: vi.fn(),
     on: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
+    appendEntry: vi.fn(),
   } as unknown as ExtensionAPI;
 
   const sessionStore = new Map<string, SessionRecord>();

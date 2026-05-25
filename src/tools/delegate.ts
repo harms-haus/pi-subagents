@@ -27,10 +27,12 @@ import {
 import { resolvePackageSkillPaths } from "../skill-discovery";
 import { runSubAgent } from "../spawner";
 import {
+  CUSTOM_ENTRY_TYPE,
   DEFAULT_TIMEOUT,
   formatRunsForResume,
   LOOP_DETECTED_MESSAGE,
   MAX_CONCURRENCY,
+  serializeSessionData,
 } from "../types";
 import { getSummaryText, mapWithConcurrencyLimit } from "../utils";
 import { renderDelegateCall, renderDelegateResult } from "./delegate-render";
@@ -110,6 +112,16 @@ export function registerDelegateTool(
   registerSession: (session: SubagentSessionData) => void,
   getActiveSessionIds: () => Set<string>,
 ): void {
+  /** Persist session data to the main agent's session tree */
+  function persistSession(session: SubagentSessionData): void {
+    try {
+      pi.appendEntry(CUSTOM_ENTRY_TYPE, serializeSessionData(session));
+    } catch (err) {
+      // Persistence should never break delegation
+      console.warn("[pi-subagents] Failed to persist session data:", err);
+    }
+  }
+
   pi.registerTool({
     name: "delegate_to_subagents",
     label: "Delegate to Sub-agents",
@@ -337,6 +349,7 @@ export function registerDelegateTool(
             win.exitCode = 1;
             session.exitCode = 1;
             emitUpdate();
+            persistSession(session);
             return;
           }
 
@@ -352,6 +365,7 @@ export function registerDelegateTool(
               win.exitCode = 1;
               session.exitCode = 1;
               emitUpdate();
+              persistSession(session);
               return;
             }
             skillResolvedProfile = result.profile;
@@ -483,6 +497,9 @@ export function registerDelegateTool(
             win.completedAt = Date.now();
             emitUpdate();
           }
+
+          // Persist session data after completion/error
+          persistSession(session);
         });
       } finally {
         clearInterval(timerInterval);

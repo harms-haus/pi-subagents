@@ -6,6 +6,7 @@ import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
 import { registerRetrievalTools } from "../tools/retrieval";
 import type { SessionRecord, SubagentSessionData, WindowedSubagentDetails } from "../types";
+import { CUSTOM_ENTRY_TYPE } from "../types";
 import { createMockPi } from "./helpers";
 
 // Mock the TUI components
@@ -816,6 +817,154 @@ describe("delegate-advanced", () => {
       expect(runSubAgent).toHaveBeenCalledTimes(1);
       const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
       expect(callArgs.loopingToolCount).toBe(3);
+    });
+  });
+
+  // ── Persistence ─────────────────────────────────────────────────
+
+  describe("persistence", () => {
+    it("should call pi.appendEntry after successful task completion", async () => {
+      vi.mocked(runSubAgent).mockImplementationOnce(async (opts) => {
+        opts.win.status = "completed";
+        opts.session.status = "completed";
+        opts.win.exitCode = 0;
+        opts.session.exitCode = 0;
+        return { loopDetected: false };
+      });
+
+      const executeFn = getDelegateExecute();
+
+      const result = await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "test prompt" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(result).toBeDefined();
+      expect(mockPi.appendEntry).toHaveBeenCalledTimes(1);
+
+      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [string, Record<string, unknown>];
+      expect(entryType).toBe(CUSTOM_ENTRY_TYPE);
+      expect(entryData.sessionId).toBe(
+        (result.details as WindowedSubagentDetails).sessionIds[0],
+      );
+      expect(entryData.taskName).toBe("test-task");
+      expect(entryData.status).toBe("completed");
+    });
+
+    it("should call pi.appendEntry after unknown profile error", async () => {
+      const executeFn = getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "profile-task", prompt: "test prompt", profile: "nonexistent-profile" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(mockPi.appendEntry).toHaveBeenCalledTimes(1);
+
+      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [string, Record<string, unknown>];
+      expect(entryType).toBe(CUSTOM_ENTRY_TYPE);
+      expect(entryData.status).toBe("error");
+      expect(entryData.errorMessage).toContain("Unknown profile");
+      expect(entryData.errorMessage).toContain("nonexistent-profile");
+    });
+
+    it("should call pi.appendEntry after loop detection", async () => {
+      vi.mocked(runSubAgent).mockResolvedValueOnce({ loopDetected: true });
+
+      const executeFn = getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "loop-task", prompt: "test prompt" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(mockPi.appendEntry).toHaveBeenCalledTimes(1);
+
+      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [string, Record<string, unknown>];
+      expect(entryType).toBe(CUSTOM_ENTRY_TYPE);
+      expect(entryData.status).toBe("error");
+      expect(entryData.errorMessage).toContain("Loop detected");
+    });
+
+    it("should call pi.appendEntry once per task for multiple tasks", async () => {
+      const executeFn = getDelegateExecute();
+
+      await executeFn(
+        "tool-call-id",
+        {
+          tasks: [
+            { name: "task-1", prompt: "prompt 1" },
+            { name: "task-2", prompt: "prompt 2" },
+            { name: "task-3", prompt: "prompt 3" },
+          ],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(mockPi.appendEntry).toHaveBeenCalledTimes(3);
+
+      // Verify each call has the correct taskName
+      const calls = vi.mocked(mockPi.appendEntry).mock.calls;
+      const taskNames = calls.map((call) => (call[1] as Record<string, unknown>).taskName);
+      expect(taskNames).toContain("task-1");
+      expect(taskNames).toContain("task-2");
+      expect(taskNames).toContain("task-3");
+
+      // Each call should have a matching sessionId
+      for (const call of calls) {
+        const entryData = call[1] as Record<string, unknown>;
+        const sessionId = entryData.sessionId as string;
+        expect(typeof sessionId).toBe("string");
+        expect(sessionId.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("should not throw if appendEntry fails", async () => {
+      vi.mocked(runSubAgent).mockImplementationOnce(async (opts) => {
+        opts.win.status = "completed";
+        opts.session.status = "completed";
+        opts.win.exitCode = 0;
+        opts.session.exitCode = 0;
+        return { loopDetected: false };
+      });
+
+      vi.mocked(mockPi.appendEntry).mockImplementation(() => {
+        throw new Error("Storage is full");
+      });
+
+      const executeFn = getDelegateExecute();
+
+      const result = await executeFn(
+        "tool-call-id",
+        {
+          tasks: [{ name: "test-task", prompt: "test prompt" }],
+        },
+        undefined,
+        vi.fn(),
+        { cwd: process.cwd() } as any,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.content).toBeDefined();
+      const details = result.details as WindowedSubagentDetails;
+      expect(details.windows[0].status).toBe("completed");
     });
   });
 });

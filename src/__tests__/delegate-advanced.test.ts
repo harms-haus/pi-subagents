@@ -847,11 +847,12 @@ describe("delegate-advanced", () => {
       expect(result).toBeDefined();
       expect(mockPi.appendEntry).toHaveBeenCalledTimes(1);
 
-      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [string, Record<string, unknown>];
+      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
       expect(entryType).toBe(CUSTOM_ENTRY_TYPE);
-      expect(entryData.sessionId).toBe(
-        (result.details as WindowedSubagentDetails).sessionIds[0],
-      );
+      expect(entryData.sessionId).toBe((result.details as WindowedSubagentDetails).sessionIds[0]);
       expect(entryData.taskName).toBe("test-task");
       expect(entryData.status).toBe("completed");
     });
@@ -871,7 +872,10 @@ describe("delegate-advanced", () => {
 
       expect(mockPi.appendEntry).toHaveBeenCalledTimes(1);
 
-      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [string, Record<string, unknown>];
+      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
       expect(entryType).toBe(CUSTOM_ENTRY_TYPE);
       expect(entryData.status).toBe("error");
       expect(entryData.errorMessage).toContain("Unknown profile");
@@ -895,7 +899,10 @@ describe("delegate-advanced", () => {
 
       expect(mockPi.appendEntry).toHaveBeenCalledTimes(1);
 
-      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [string, Record<string, unknown>];
+      const [entryType, entryData] = vi.mocked(mockPi.appendEntry).mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
       expect(entryType).toBe(CUSTOM_ENTRY_TYPE);
       expect(entryData.status).toBe("error");
       expect(entryData.errorMessage).toContain("Loop detected");

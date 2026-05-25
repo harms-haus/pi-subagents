@@ -3,7 +3,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { syncState, serializeSessionData, deserializeSessionData, CUSTOM_ENTRY_TYPE } from "../types";
+import {
+  syncState,
+  serializeSessionData,
+  deserializeSessionData,
+  CUSTOM_ENTRY_TYPE,
+} from "../types";
 import type { SubagentSessionData } from "../types";
 import { makeWindow, makeSession } from "./helpers";
 

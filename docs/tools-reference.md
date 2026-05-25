@@ -39,15 +39,15 @@ Defined by `DelegateParams` (TypeBox schema in [`schemas.ts`](../src/schemas.ts)
 
 Each element of the `tasks` array has the following fields:
 
-| Field     | Type     | Required | Default         | Description                                                                                                                                 |
-| --------- | -------- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`    | `string` | Yes      | —               | Display name for this sub-agent's TUI window.                                                                                               |
-| `prompt`  | `string` | Yes      | —               | The task/prompt sent to the sub-agent. When `resume` is set, the prior transcript is prepended (see [Resume Mechanics](#resume-mechanics)). |
-| `cwd`     | `string` | No       | `process.cwd()` | Working directory for this sub-agent. Must be an absolute path and must not contain `..` segments.                                          |
-| `profile` | `string` | No       | —               | Named sub-agent profile for this specific task (overrides the top-level `profile`). See [docs/profiles.md](profiles.md).                    |
-| `timeout` | `number` | No       | `600`           | Timeout in seconds. Must be ≥ 1. Aborts the sub-agent when exceeded.                                                                        |
-| `resume`  | `string` | No       | —               | A previous session ID to continue work from. The resumed agent receives the prior session's transcript as context.                          |
-| `files`   | `Array<FileSpec>` | No | —         | File paths to read and prepend to the sub-agent's prompt. See [Files Parameter](#files-parameter).                                          |
+| Field     | Type              | Required | Default         | Description                                                                                                                                 |
+| --------- | ----------------- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | `string`          | Yes      | —               | Display name for this sub-agent's TUI window.                                                                                               |
+| `prompt`  | `string`          | Yes      | —               | The task/prompt sent to the sub-agent. When `resume` is set, the prior transcript is prepended (see [Resume Mechanics](#resume-mechanics)). |
+| `cwd`     | `string`          | No       | `process.cwd()` | Working directory for this sub-agent. Must be an absolute path and must not contain `..` segments.                                          |
+| `profile` | `string`          | No       | —               | Named sub-agent profile for this specific task (overrides the top-level `profile`). See [docs/profiles.md](profiles.md).                    |
+| `timeout` | `number`          | No       | `600`           | Timeout in seconds. Must be ≥ 1. Aborts the sub-agent when exceeded.                                                                        |
+| `resume`  | `string`          | No       | —               | A previous session ID to continue work from. The resumed agent receives the prior session's transcript as context.                          |
+| `files`   | `Array<FileSpec>` | No       | —               | File paths to read and prepend to the sub-agent's prompt. See [Files Parameter](#files-parameter).                                          |
 
 ### Return Value
 
@@ -120,17 +120,21 @@ When a task specifies `files`, each file is read from disk and its contents are 
 Each entry in the `files` array can be:
 
 - **A string** — Just a file path (relative to the task's `cwd` or absolute):
+
   ```json
   "src/main.ts"
   ```
 
 - **A range object** — Read specific lines (1-indexed, inclusive):
+
   ```json
   { "path": "src/main.ts", "start": 10, "end": 50 }
   ```
+
   If `start` is omitted, defaults to line 1. If `end` is omitted, reads to end of file.
 
 - **A head object** — Read the first N lines (minimum: 1):
+
   ```json
   { "path": "src/main.ts", "head": 20 }
   ```
@@ -157,6 +161,7 @@ import { foo } from "bar";
 ```
 
 Missing or unreadable files produce a placeholder instead of failing the entire task:
+
 - `[file not found: path]` — File does not exist
 - `[could not read file: path]` — File exists but cannot be read (permissions, encoding)
 - `[file too large: path (NKB, limit 1024KB)]` — File exceeds the 1 MB size limit
@@ -500,10 +505,10 @@ All error conditions and their messages:
 | **Unknown skill (suggestedSkills)**              | `delegate_to_subagents`                       | `Unknown skills: "bad-name". Available skills: skill-a, skill-b`                                                                         | Profile specifies a skill name not found by skill discovery. The task is marked as error; other tasks continue normally.                             |
 | **Skills + noSkills conflict (suggestedSkills)** | `delegate_to_subagents`                       | `Profile "name" has both "suggestedSkills" and "noSkills" set. These are mutually exclusive — --no-skills would override --skill flags.` | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned.                                  |
 | **Skills + noSkills conflict (loadSkills)**      | `delegate_to_subagents`                       | `Profile "name" has both "loadSkills" and "noSkills" set. These are mutually exclusive — --no-skills disables skill discovery.`          | Profile validation throws during `validateProfileSkills()`. The entire tool call fails — no sub-agents are spawned.                                  |
-| **Loop detected**                                | `delegate_to_subagents` (internal)            | `Loop detected: sub-agent is repeating the same tool calls`                                                                              | `looping_tool_count` consecutive tool call signatures (serialized as JSON) were identical. The sub-agent is killed via `SIGTERM`.                 |
+| **Loop detected**                                | `delegate_to_subagents` (internal)            | `Loop detected: sub-agent is repeating the same tool calls`                                                                              | `looping_tool_count` consecutive tool call signatures (serialized as JSON) were identical. The sub-agent is killed via `SIGTERM`.                    |
 | **File not found**                               | `delegate_to_subagents` (files)               | `[file not found: {path}]`                                                                                                               | A file specified in `files` does not exist. The task continues with a placeholder in the prompt.                                                     |
-| **File unreadable**                              | `delegate_to_subagents` (files)               | `[could not read file: {path}]`                                                                                                          | A file exists but cannot be read (permissions, encoding). The task continues with a placeholder.                                                    |
-| **File too large**                               | `delegate_to_subagents` (files)               | `[file too large: {path} ({size}KB, limit 1024KB)]`                                                                                      | A file exceeds the 1 MB size limit. The task continues with a placeholder.                                                                          |
+| **File unreadable**                              | `delegate_to_subagents` (files)               | `[could not read file: {path}]`                                                                                                          | A file exists but cannot be read (permissions, encoding). The task continues with a placeholder.                                                     |
+| **File too large**                               | `delegate_to_subagents` (files)               | `[file too large: {path} ({size}KB, limit 1024KB)]`                                                                                      | A file exceeds the 1 MB size limit. The task continues with a placeholder.                                                                           |
 | **Tool restriction override guard**              | `delegate_to_subagents`                       | `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.`                   | Thrown when `extraArgs` contains `--tools`, `-t`, `--no-tools`, or `-nt` (including their `=` forms) while the profile has tool restrictions active. |
 
 ---

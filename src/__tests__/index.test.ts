@@ -484,10 +484,7 @@ describe("index.ts — default export", () => {
 
   describe("session_start handler — session reconstruction", () => {
     /** Helper: invoke the captured session_start handler with mock event + context */
-    function fireSessionStart(
-      reason: string,
-      entries: unknown[],
-    ): void {
+    function fireSessionStart(reason: string, entries: unknown[]): void {
       const event = { reason };
       const ctx = {
         sessionManager: {
@@ -499,8 +496,8 @@ describe("index.ts — default export", () => {
 
     /** Helper: create a custom entry that looks like a persisted subagent session */
     function makeCustomEntry(
-        data: unknown,
-        customType: string = CUSTOM_ENTRY_TYPE,
+      data: unknown,
+      customType: string = CUSTOM_ENTRY_TYPE,
     ): { type: string; customType: string; data: unknown } {
       return { type: "custom", customType, data };
     }
@@ -545,10 +542,7 @@ describe("index.ts — default export", () => {
         startedAt: 2000,
       };
 
-      fireSessionStart("resume", [
-        makeCustomEntry(run1),
-        makeCustomEntry(run2),
-      ]);
+      fireSessionStart("resume", [makeCustomEntry(run1), makeCustomEntry(run2)]);
 
       const record = capturedSessionStore!.get("multi-reconstruct")!;
       expect(record.runs).toHaveLength(2);

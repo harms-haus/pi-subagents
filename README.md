@@ -71,22 +71,22 @@ After `delegate_to_subagents` completes, it returns **session IDs** for each tas
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tasks` | `Array<{name, prompt, cwd?, profile?, timeout?, resume?, files?}>` | Yes | Array of tasks to delegate. Each gets its own sub-agent process. |
-| `profile` | `string` | No | Default profile for all tasks (overridden by per-task profile) |
+| Name      | Type                                                               | Required | Description                                                      |
+| --------- | ------------------------------------------------------------------ | -------- | ---------------------------------------------------------------- |
+| `tasks`   | `Array<{name, prompt, cwd?, profile?, timeout?, resume?, files?}>` | Yes      | Array of tasks to delegate. Each gets its own sub-agent process. |
+| `profile` | `string`                                                           | No       | Default profile for all tasks (overridden by per-task profile)   |
 
 Each task:
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | `string` | Yes | Display label shown in the TUI window header |
-| `prompt` | `string` | Yes | Prompt sent to the sub-agent (same as typing into pi directly) |
-| `cwd` | `string` | No | Working directory for the sub-agent (default: current directory) |
-| `profile` | `string` | No | Named profile to use for this sub-agent (see below) |
-| `timeout` | `number` | No | Timeout in seconds for this sub-agent. Default: 600. Timeouts auto-extend when the sub-agent is actively producing output — after the initial timeout expires, the sub-agent is only killed after a configurable idle period (see `extend_timeout_debounce` setting). |
-| `resume` | `string` | No | Previous session ID to resume from. The resumed sub-agent receives the prior session's transcript as context. Only completed or errored sessions can be resumed. |
-| `files` | `Array<FileSpec>` | No | File paths to read and prepend to the sub-agent's prompt. See "Providing File Context" above. |
+| Field     | Type              | Required | Description                                                                                                                                                                                                                                                           |
+| --------- | ----------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | `string`          | Yes      | Display label shown in the TUI window header                                                                                                                                                                                                                          |
+| `prompt`  | `string`          | Yes      | Prompt sent to the sub-agent (same as typing into pi directly)                                                                                                                                                                                                        |
+| `cwd`     | `string`          | No       | Working directory for the sub-agent (default: current directory)                                                                                                                                                                                                      |
+| `profile` | `string`          | No       | Named profile to use for this sub-agent (see below)                                                                                                                                                                                                                   |
+| `timeout` | `number`          | No       | Timeout in seconds for this sub-agent. Default: 600. Timeouts auto-extend when the sub-agent is actively producing output — after the initial timeout expires, the sub-agent is only killed after a configurable idle period (see `extend_timeout_debounce` setting). |
+| `resume`  | `string`          | No       | Previous session ID to resume from. The resumed sub-agent receives the prior session's transcript as context. Only completed or errored sessions can be resumed.                                                                                                      |
+| `files`   | `Array<FileSpec>` | No       | File paths to read and prepend to the sub-agent's prompt. See "Providing File Context" above.                                                                                                                                                                         |
 
 The `maxLinesPerWindow` setting is configured in `settings.json` under `subagents.maxLinesPerWindow` (default: 15).
 
@@ -138,10 +138,10 @@ Profiles let you pre-configure the provider, model, system prompt, thinking leve
 
 ### Profile Locations
 
-| Scope | Directory |
-|-------|-----------|
-| Global | `~/.pi/agent/agent-profiles/*.md` |
-| Project | `.pi/agent-profiles/*.md` |
+| Scope   | Directory                         |
+| ------- | --------------------------------- |
+| Global  | `~/.pi/agent/agent-profiles/*.md` |
+| Project | `.pi/agent-profiles/*.md`         |
 
 Project-local profiles override global profiles with the same name.
 
@@ -157,6 +157,7 @@ model: claude-sonnet-4-5
 thinkingLevel: high
 tools: read,bash,grep,find
 ---
+
 You are an expert code reviewer. Focus on bugs, security issues, and performance problems. Be thorough but concise.
 ```
 
@@ -180,30 +181,31 @@ provider: openai
 model: gpt-4o
 appendSystemPrompt: Use web search to find information. Cite sources when possible.
 ---
+
 You are a research assistant.
 ```
 
 ### Profile Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `string` | **Required.** Profile identifier (from YAML frontmatter name field) |
-| `provider` | `string` | Provider name (e.g., `"anthropic"`, `"openai"`, `"dashscope"`) |
-| `model` | `string` | Model pattern or ID. Supports `"provider/id"` format and `":thinking"` shorthand (e.g., `"sonnet:high"`) |
-| `systemPrompt` | N/A | Set via the **body** of the markdown file (text after `---`). Replaces the default system prompt entirely. |
-| `appendSystemPrompt` | `string` | Append text to the default system prompt |
-| `thinkingLevel` | `string` | Thinking level: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` |
-| `noTools` | `boolean` | Disable all tools |
-| `tools` | `string` or `string[]` | Comma-separated string or YAML array of tool names to enable (allowlist) |
-| `excludeTools` | `string` or `string[]` | Comma-separated string or YAML array of tool names to exclude (blacklist; mutually exclusive with `tools`) |
-| `noExtensions` | `boolean` | Disable all extensions |
-| `extensions` | `string` or `string[]` | Comma-separated string or YAML array of extension paths to load |
-| `noSkills` | `boolean` | Disable skills. Mutually exclusive with `suggestedSkills` and `loadSkills` |
-| `suggestedSkills` | `string` or `string[]` | Skill names to *suggest* to the sub-agent via `--skill` CLI flags; the model chooses whether to load them |
-| `loadSkills` | `string` or `string[]` | Skill names to *pre-load* into the sub-agent's system prompt (content wrapped in `<loaded_skill>` XML tags) |
-| `noContextFiles` | `boolean` | Disable AGENTS.md/CLAUDE.md context files |
-| `apiKey` | `string` | Custom API key (stored as `PI_API_KEY` env var, not in CLI args) |
-| `extraArgs` | `string` or `string[]` | Comma-separated string or YAML array of additional CLI arguments |
+| Field                | Type                   | Description                                                                                                 |
+| -------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `name`               | `string`               | **Required.** Profile identifier (from YAML frontmatter name field)                                         |
+| `provider`           | `string`               | Provider name (e.g., `"anthropic"`, `"openai"`, `"dashscope"`)                                              |
+| `model`              | `string`               | Model pattern or ID. Supports `"provider/id"` format and `":thinking"` shorthand (e.g., `"sonnet:high"`)    |
+| `systemPrompt`       | N/A                    | Set via the **body** of the markdown file (text after `---`). Replaces the default system prompt entirely.  |
+| `appendSystemPrompt` | `string`               | Append text to the default system prompt                                                                    |
+| `thinkingLevel`      | `string`               | Thinking level: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`                              |
+| `noTools`            | `boolean`              | Disable all tools                                                                                           |
+| `tools`              | `string` or `string[]` | Comma-separated string or YAML array of tool names to enable (allowlist)                                    |
+| `excludeTools`       | `string` or `string[]` | Comma-separated string or YAML array of tool names to exclude (blacklist; mutually exclusive with `tools`)  |
+| `noExtensions`       | `boolean`              | Disable all extensions                                                                                      |
+| `extensions`         | `string` or `string[]` | Comma-separated string or YAML array of extension paths to load                                             |
+| `noSkills`           | `boolean`              | Disable skills. Mutually exclusive with `suggestedSkills` and `loadSkills`                                  |
+| `suggestedSkills`    | `string` or `string[]` | Skill names to _suggest_ to the sub-agent via `--skill` CLI flags; the model chooses whether to load them   |
+| `loadSkills`         | `string` or `string[]` | Skill names to _pre-load_ into the sub-agent's system prompt (content wrapped in `<loaded_skill>` XML tags) |
+| `noContextFiles`     | `boolean`              | Disable AGENTS.md/CLAUDE.md context files                                                                   |
+| `apiKey`             | `string`               | Custom API key (stored as `PI_API_KEY` env var, not in CLI args)                                            |
+| `extraArgs`          | `string` or `string[]` | Comma-separated string or YAML array of additional CLI arguments                                            |
 
 Array fields (`tools`, `extensions`, `extraArgs`, `suggestedSkills`, `loadSkills`) support both YAML arrays and comma-separated strings:
 
@@ -266,13 +268,13 @@ The profile cache refreshes every 5 seconds.
 
 Additional settings are configured in `settings.json` under the `subagents` key:
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `maxLinesPerWindow` | `number` | `15` | Number of lines shown in each sub-agent's rolling TUI window |
-| `commandPreviewWidth` | `number` | Terminal width − 4 (TTY) or `160` (non-TTY) | Controls tool call preview truncation width in the rolling window. **In TTY mode, terminal width − 4 is used as a hard override — settings files are never consulted.** In non-TTY mode, falls back through settings files (global → project → default 160). Minimum: 20 |
-| `extend_timeout_debounce` | `number` | `30` | Seconds of idle time (no output activity) before a timed-out sub-agent is killed. The initial timeout starts this idle window; any output resets it. Range: 0–300. |
-| `looping_tool_count` | `number` | `5` | Number of consecutive tool calls checked for loop detection. Set to `0` to disable. Range: 0–50. |
-| `looping_tool_similarity` | `number` | `0.95` | Bigram similarity threshold for loop detection. When the last `looping_tool_count` tool calls are all pairwise similar above this threshold, the sub-agent is killed. Range: 0–1. |
+| Setting                   | Type     | Default                                     | Description                                                                                                                                                                                                                                                              |
+| ------------------------- | -------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `maxLinesPerWindow`       | `number` | `15`                                        | Number of lines shown in each sub-agent's rolling TUI window                                                                                                                                                                                                             |
+| `commandPreviewWidth`     | `number` | Terminal width − 4 (TTY) or `160` (non-TTY) | Controls tool call preview truncation width in the rolling window. **In TTY mode, terminal width − 4 is used as a hard override — settings files are never consulted.** In non-TTY mode, falls back through settings files (global → project → default 160). Minimum: 20 |
+| `extend_timeout_debounce` | `number` | `30`                                        | Seconds of idle time (no output activity) before a timed-out sub-agent is killed. The initial timeout starts this idle window; any output resets it. Range: 0–300.                                                                                                       |
+| `looping_tool_count`      | `number` | `5`                                         | Number of consecutive tool calls checked for loop detection. Set to `0` to disable. Range: 0–50.                                                                                                                                                                         |
+| `looping_tool_similarity` | `number` | `0.95`                                      | Bigram similarity threshold for loop detection. When the last `looping_tool_count` tool calls are all pairwise similar above this threshold, the sub-agent is killed. Range: 0–1.                                                                                        |
 
 Settings are loaded from `~/.pi/agent/settings.json` (global) and `.pi/settings.json` (project-local, overrides global). **Note:** `commandPreviewWidth` settings are only consulted in non-TTY mode.
 
@@ -280,14 +282,14 @@ Settings are loaded from `~/.pi/agent/settings.json` (global) and `.pi/settings.
 
 Use `/profile` interactively to manage subagent profiles without editing files by hand:
 
-| Command | Description |
-|---------|-------------|
-| `/profile list` | List all profiles with summaries |
-| `/profile show <name>` | Display full details of a profile |
-| `/profile <name>` | Alias for `show` |
-| `/profile create <name>` | Interactively create a new profile |
-| `/profile edit <name>` | Interactively edit an existing profile |
-| `/profile delete <name>` | Delete a profile |
+| Command                  | Description                            |
+| ------------------------ | -------------------------------------- |
+| `/profile list`          | List all profiles with summaries       |
+| `/profile show <name>`   | Display full details of a profile      |
+| `/profile <name>`        | Alias for `show`                       |
+| `/profile create <name>` | Interactively create a new profile     |
+| `/profile edit <name>`   | Interactively edit an existing profile |
+| `/profile delete <name>` | Delete a profile                       |
 
 ### Interactive Editor
 

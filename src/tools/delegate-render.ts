@@ -63,7 +63,15 @@ function colorizeWriteCount(line: string, theme: Theme): string | null {
 /** Pattern 3: (N lines) line count (read tool) */
 function colorizeReadLineCount(line: string, theme: Theme): string | null {
   const m = line.match(/^(.*?)(\()(\d+)( lines?\))(.*)$/);
-  if (!m || m[1] === undefined || m[2] === undefined || m[3] === undefined || m[4] === undefined || m[5] === undefined) return null;
+  if (
+    !m ||
+    m[1] === undefined ||
+    m[2] === undefined ||
+    m[3] === undefined ||
+    m[4] === undefined ||
+    m[5] === undefined
+  )
+    return null;
   return (
     theme.fg("muted", m[1]) +
     theme.fg("muted", m[2]) +
@@ -79,18 +87,14 @@ function colorizeInlineResult(line: string, theme: Theme): string | null {
   if (!m || m[1] === undefined || m[2] === undefined || m[3] === undefined) return null;
   const count = m[2];
   if (count === "0") return theme.fg("muted", line);
-  return (
-    theme.fg("muted", m[1]) + theme.fg("toolDiffAdded", count) + theme.fg("muted", m[3])
-  );
+  return theme.fg("muted", m[1]) + theme.fg("toolDiffAdded", count) + theme.fg("muted", m[3]);
 }
 
 /** Pattern 4: ls/find result summaries (indented lines with entry counts) */
 function colorizeResultSummary(line: string, theme: Theme): string | null {
   const m = line.match(/^(\s{2})(\d+)(\s.*)$/);
   if (!m || m[1] === undefined || m[2] === undefined || m[3] === undefined) return null;
-  return (
-    theme.fg("muted", m[1]) + theme.fg("toolDiffAdded", m[2]) + theme.fg("muted", m[3])
-  );
+  return theme.fg("muted", m[1]) + theme.fg("toolDiffAdded", m[2]) + theme.fg("muted", m[3]);
 }
 
 // ── Delegate tool call rendering ────────────────────────────────────────────
@@ -129,12 +133,7 @@ export function renderDelegateCall(
 // ── Delegate tool result rendering ──────────────────────────────────────────
 
 /** Build the global status header line showing running/done/error counts. */
-function buildStatusHeader(
-  running: number,
-  done: number,
-  errors: number,
-  theme: Theme,
-): string {
+function buildStatusHeader(running: number, done: number, errors: number, theme: Theme): string {
   let header = theme.fg("toolTitle", theme.bold("Sub-agents: "));
   const parts: string[] = [];
   if (running > 0) {
@@ -153,8 +152,7 @@ function buildStatusHeader(
 /** Build the per-agent header line with profile, tool count, file count, todos, and elapsed time. */
 function buildWindowHeader(win: SubAgentWindow, theme: Theme): string {
   const icon = win.status === "running" ? "⏳" : win.status === "error" ? "✗" : "✓";
-  const color =
-    win.status === "running" ? "warning" : win.status === "error" ? "error" : "success";
+  const color = win.status === "running" ? "warning" : win.status === "error" ? "error" : "success";
 
   let headerLine = `${theme.fg(color, icon)} ${theme.fg("accent", theme.bold(win.name))}`;
 

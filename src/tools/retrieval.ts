@@ -11,7 +11,12 @@ import { loadMaxLinesPerWindow } from "../settings";
 import { getLastAssistantText } from "../utils";
 import { formatTranscript, RETRIEVAL_OPTIONS } from "../format-transcript";
 import type { SessionRecord } from "../types";
-import type { ExtensionAPI, ExtensionContext, Theme, AgentToolResult } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  Theme,
+  AgentToolResult,
+} from "@earendil-works/pi-coding-agent";
 
 // ── Rendering Helpers ───────────────────────────────────────────────────────
 
@@ -49,8 +54,7 @@ function createTruncatingRenderResult(defaultLabel: string = "(no output)") {
     if (!text) return new Text(theme.fg("toolOutput", defaultLabel), 0, 0);
     const content = text.type === "text" ? text.text : defaultLabel;
     const lines = content.split("\n");
-    const maxLines: number =
-      (result.details as Record<string, unknown>).maxLines as number;
+    const maxLines: number = (result.details as Record<string, unknown>).maxLines as number;
 
     if (lines.length <= maxLines) {
       return new Text(theme.fg("toolOutput", content), 0, 0);
@@ -247,10 +251,12 @@ function registerListSubagentProfiles(pi: ExtensionAPI): void {
           details: { count: 0 },
         };
       }
-      const summaries = names.map((n) => {
-        const p = profiles[n];
-        return p ? ([n, profileSummary(n, p)] as const) : null;
-      }).filter((s): s is [string, string] => s !== null);
+      const summaries = names
+        .map((n) => {
+          const p = profiles[n];
+          return p ? ([n, profileSummary(n, p)] as const) : null;
+        })
+        .filter((s): s is [string, string] => s !== null);
       return {
         content: [{ type: "text", text: summaries.map(([, s]) => s).join("\n") }],
         details: {

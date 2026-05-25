@@ -370,7 +370,11 @@ export function formatToolResultInline(
 
 // ── formatToolCall case helpers ────────────────────────────────────
 
-function formatEditCall(a: Record<string, string>, args: Record<string, unknown>, cwd: string): string {
+function formatEditCall(
+  a: Record<string, string>,
+  args: Record<string, unknown>,
+  cwd: string,
+): string {
   const path = shortenPath(a.path || a.filePath || "...", cwd);
   const edits = (args.edits as Array<{ oldText?: string; newText?: string }> | undefined) ?? [];
   const count = edits.length;
@@ -520,7 +524,11 @@ function formatFetchCall(toolName: string, a: Record<string, string>, widthBudge
   return `${toolName} → ${truncated}`;
 }
 
-function formatDefaultCall(toolName: string, args: Record<string, unknown>, widthBudget: number): string {
+function formatDefaultCall(
+  toolName: string,
+  args: Record<string, unknown>,
+  widthBudget: number,
+): string {
   const argsStr = JSON.stringify(args);
   const budget = widthBudget - toolName.length - 1;
   if (argsStr === "{}") {
@@ -535,7 +543,12 @@ function formatDefaultCall(toolName: string, args: Record<string, unknown>, widt
 const TOOL_FORMATTERS: Partial<
   Record<
     string,
-    (a: Record<string, string>, args: Record<string, unknown>, cwd: string, widthBudget: number) => string
+    (
+      a: Record<string, string>,
+      args: Record<string, unknown>,
+      cwd: string,
+      widthBudget: number,
+    ) => string
   >
 > = {
   edit: (a, args, cwd) => formatEditCall(a, args, cwd),

@@ -222,11 +222,19 @@ export async function resolveProfileSkills(
   const resolved: SubagentProfile = { ...profile };
 
   if (profile.suggestedSkills?.length) {
-    resolved.suggestedSkills = resolveSuggestedSkills(profile.suggestedSkills, localSkillMap, available);
+    resolved.suggestedSkills = resolveSuggestedSkills(
+      profile.suggestedSkills,
+      localSkillMap,
+      available,
+    );
   }
 
   if (profile.loadSkills?.length) {
-    const loadSkillsContent = resolveLoadSkillsContent(profile.loadSkills, localSkillMap, available);
+    const loadSkillsContent = resolveLoadSkillsContent(
+      profile.loadSkills,
+      localSkillMap,
+      available,
+    );
     if (loadSkillsContent) {
       resolved.appendSystemPrompt = (resolved.appendSystemPrompt ?? "") + loadSkillsContent;
     }

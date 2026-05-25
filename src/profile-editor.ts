@@ -46,7 +46,10 @@ async function promptProvider(
   ui: ProfileEditorUIContext,
   profile: SubagentProfile,
 ): Promise<StepResult> {
-  const value = await ui.input("Provider (e.g. anthropic, openai, dashscope):", profile.provider ?? "");
+  const value = await ui.input(
+    "Provider (e.g. anthropic, openai, dashscope):",
+    profile.provider ?? "",
+  );
   if (value === undefined) return CANCELLED;
   if (value) {
     profile.provider = value;
@@ -60,7 +63,10 @@ async function promptModel(
   ui: ProfileEditorUIContext,
   profile: SubagentProfile,
 ): Promise<StepResult> {
-  const value = await ui.input("Model (supports provider/id and :thinking shorthand):", profile.model ?? "");
+  const value = await ui.input(
+    "Model (supports provider/id and :thinking shorthand):",
+    profile.model ?? "",
+  );
   if (value === undefined) return CANCELLED;
   if (value) {
     profile.model = value;
@@ -261,10 +267,7 @@ async function promptSkillsConfig(
     return true;
   }
 
-  const add = await ui.confirm(
-    "Configure skills?",
-    "Configure skill loading for the subagent?",
-  );
+  const add = await ui.confirm("Configure skills?", "Configure skill loading for the subagent?");
   if (!add) return true;
 
   const suggestedStr = await ui.input(

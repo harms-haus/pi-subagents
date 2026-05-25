@@ -56,10 +56,7 @@ function handleShow(tokens: string[], ctx: ProfileCommandContext): void {
 async function handleCreate(tokens: string[], ctx: ProfileCommandContext): Promise<void> {
   const name = tokens[1];
   if (!(name && /^[a-zA-Z0-9_-]+$/.test(name))) {
-    ctx.ui.notify(
-      "Usage: /profile create <name>  (alphanumeric, hyphens, underscores)",
-      "warning",
-    );
+    ctx.ui.notify("Usage: /profile create <name>  (alphanumeric, hyphens, underscores)", "warning");
     return;
   }
   const profiles = loadProfiles(ctx.cwd);

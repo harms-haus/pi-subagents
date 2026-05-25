@@ -156,7 +156,11 @@ function inlineToolResultSummary(
 /**
  * Track todo progress from write_todos / edit_todos tool calls.
  */
-function trackTodoProgress(toolName: string, toolArgs: Record<string, unknown>, win: SubAgentWindow): void {
+function trackTodoProgress(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  win: SubAgentWindow,
+): void {
   if (toolName === "write_todos") {
     const newCount = (toolArgs.todos as unknown[] | undefined)?.length ?? 0;
     const mode = toolArgs.mode as string | undefined;
@@ -200,10 +204,7 @@ function trackToolCallForLoop(
 /**
  * Process a single tool call from a message: format, track todos, and record for loop detection.
  */
-function processToolCall(
-  part: ToolCallPart,
-  ctx: LineContext,
-): void {
+function processToolCall(part: ToolCallPart, ctx: LineContext): void {
   const toolArgs = part.arguments || {};
   const toolName = part.name;
   const preview = formatToolCall(toolName, toolArgs, ctx.cwd, ctx.widthBudget);
@@ -241,7 +242,11 @@ function syncAssistantMeta(msg: Message, win: SubAgentWindow, session: SubagentS
  * Check whether the last N tool calls are all identical (loop detection).
  */
 function checkLoop(win: SubAgentWindow, loopingToolCount: number): boolean {
-  if (loopingToolCount <= 0 || !win.recentToolCalls || win.recentToolCalls.length < loopingToolCount) {
+  if (
+    loopingToolCount <= 0 ||
+    !win.recentToolCalls ||
+    win.recentToolCalls.length < loopingToolCount
+  ) {
     return false;
   }
   const recent = win.recentToolCalls.slice(-loopingToolCount);
@@ -256,10 +261,7 @@ function checkLoop(win: SubAgentWindow, loopingToolCount: number): boolean {
 /**
  * Process a message_end event: store the message, render content, and detect loops.
  */
-function handleMessageEnd(
-  msg: Message,
-  ctx: LineContext,
-): { loopDetected: boolean } {
+function handleMessageEnd(msg: Message, ctx: LineContext): { loopDetected: boolean } {
   ctx.session.messages.push(msg);
   if (ctx.session.messages.length >= MAX_MESSAGES_PER_SESSION) {
     ctx.session.messages.shift();

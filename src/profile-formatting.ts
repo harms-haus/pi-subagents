@@ -115,14 +115,14 @@ const DETAIL_STRING_FIELDS: Array<{ key: keyof SubagentProfile; label: string }>
   { key: "thinkingLevel", label: "thinkingLevel:" },
   { key: "systemPrompt", label: "systemPrompt:" },
   { key: "appendSystemPrompt", label: "appendSystemPrompt:" },
-];;
+];
 
 /** Fields displayed as comma-separated array values in profile detail. */
 const DETAIL_ARRAY_FIELDS: Array<{ key: keyof SubagentProfile; label: string }> = [
   { key: "extensions", label: "extensions:" },
   { key: "suggestedSkills", label: "suggestedSkills:" },
   { key: "loadSkills", label: "loadSkills:" },
-];;
+];
 
 function pushDetailToolLines(lines: string[], profile: SubagentProfile): void {
   if (profile.noTools) {

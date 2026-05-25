@@ -320,13 +320,9 @@ describe("retrieval-tools", () => {
       sessionStore.set("multi", { runs: [run1, run2, run3] });
 
       const execute = getToolExecute(mockPi, "get_subagent_output");
-      const result = await execute(
-        "tc-id",
-        { sessionId: "multi" },
-        undefined,
-        vi.fn(),
-        { cwd: "/tmp" } as any,
-      );
+      const result = await execute("tc-id", { sessionId: "multi" }, undefined, vi.fn(), {
+        cwd: "/tmp",
+      } as any);
 
       // Should return latest (3rd) run output
       expect((result.content[0]! as { text: string }).text).toBe("Run 3 output");
@@ -363,13 +359,9 @@ describe("retrieval-tools", () => {
       sessionStore.set("tools-only", { runs: [session] });
 
       const execute = getToolExecute(mockPi, "get_subagent_output");
-      const result = await execute(
-        "tc-id",
-        { sessionId: "tools-only" },
-        undefined,
-        vi.fn(),
-        { cwd: "/tmp" } as any,
-      );
+      const result = await execute("tc-id", { sessionId: "tools-only" }, undefined, vi.fn(), {
+        cwd: "/tmp",
+      } as any);
 
       // No assistant text → placeholder message
       expect((result.content[0]! as { text: string }).text).toBe("(no text output from sub-agent)");
@@ -396,13 +388,9 @@ describe("retrieval-tools", () => {
       sessionStore.set("error-session", { runs: [session] });
 
       const execute = getToolExecute(mockPi, "get_subagent_session");
-      const result = await execute(
-        "tc-id",
-        { sessionId: "error-session" },
-        undefined,
-        vi.fn(),
-        { cwd: "/tmp" } as any,
-      );
+      const result = await execute("tc-id", { sessionId: "error-session" }, undefined, vi.fn(), {
+        cwd: "/tmp",
+      } as any);
 
       const text = (result.content[0]! as { text: string }).text;
       expect(text).toContain("Partial response");

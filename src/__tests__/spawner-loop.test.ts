@@ -362,5 +362,29 @@ describe("spawner-loop", () => {
       const result = await promise;
       expect(result.loopDetected).toBe(true);
     });
+
+    it("should cap recentToolCalls buffer to prevent unbounded memory", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 1000,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+        loopingToolCount: 3,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Emit 25 identical tool calls to exceed the max buffer cap
+      for (let i = 0; i < 25; i++) {
+        emitToolCall(mockProcess, "read", { path: "/file.ts" });
+      }
+
+      // Buffer should be capped at max(loopingToolCount*2, 20) = 20
+      expect(mockWindow.recentToolCalls!.length).toBeLessThanOrEqual(20);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
   });
 });

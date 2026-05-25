@@ -83,6 +83,21 @@ function getToolRenderResult(mockPi: ExtensionAPI, toolName: string) {
   return renderResult;
 }
 
+/** Extract a registered tool's renderCall function by name */
+function getToolRenderCall(mockPi: ExtensionAPI, toolName: string) {
+  const call = vi
+    .mocked(mockPi.registerTool)
+    .mock.calls.find((c: [{ name: string }]) => c[0].name === toolName);
+  if (!call) {
+    throw new Error(`Tool "${toolName}" not registered`);
+  }
+  const renderCall = call[0].renderCall;
+  if (!renderCall) {
+    throw new Error(`Tool "${toolName}" has no renderCall`);
+  }
+  return renderCall;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────
 
 describe("retrieval-tools", () => {
@@ -395,6 +410,97 @@ describe("retrieval-tools", () => {
       const text = (result.content[0]! as { text: string }).text;
       expect(text).toContain("Partial response");
       expect(text).toContain("[Error: something broke]");
+    });
+  });
+
+  // ── createSimpleRenderResult (used by list_subagent_profiles) ──────
+
+  describe("createSimpleRenderResult", () => {
+    it("returns default label when content array is empty", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderResult = getToolRenderResult(mockPi, "list_subagent_profiles");
+      const theme = createMockTheme();
+
+      const result = {
+        content: [] as Array<{ type: string; text: string }>,
+        details: {},
+      };
+
+      renderResult(result as any, { expanded: false, isPartial: false }, theme, null as any);
+
+      // Should have returned a Text with the default label
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolOutput", "(no profiles)");
+    });
+
+    it("returns default label when content type is not text", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderResult = getToolRenderResult(mockPi, "list_subagent_profiles");
+      const theme = createMockTheme();
+
+      const result = {
+        content: [{ type: "image", data: "..." }] as any,
+        details: {},
+      };
+
+      renderResult(result, { expanded: false, isPartial: false }, theme, null as any);
+
+      // Should have returned a Text with the default label since type !== "text"
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolOutput", "(no profiles)");
+    });
+
+    it("returns text content when content type is text", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderResult = getToolRenderResult(mockPi, "list_subagent_profiles");
+      const theme = createMockTheme();
+
+      const result = {
+        content: [{ type: "text", text: "coder: claude-sonnet-4-5" }],
+        details: {},
+      };
+
+      renderResult(result as any, { expanded: false, isPartial: false }, theme, null as any);
+
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolOutput", "coder: claude-sonnet-4-5");
+    });
+  });
+
+  // ── createSessionRenderCall ─────────────────────────────────────────
+
+  describe("createSessionRenderCall", () => {
+    it("renders with sessionId when provided", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderCall = getToolRenderCall(mockPi, "get_subagent_output");
+      const theme = createMockTheme();
+
+      renderCall({ sessionId: "abc-123" }, theme, null as any);
+
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("accent", "abc-123");
+    });
+
+    it("renders with placeholder when sessionId is undefined", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderCall = getToolRenderCall(mockPi, "get_subagent_output");
+      const theme = createMockTheme();
+
+      renderCall({}, theme, null as any);
+
+      // Should use "..." when sessionId is not provided
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("accent", "...");
+    });
+  });
+
+  // ── list_subagent_profiles renderCall ───────────────────────────────
+
+  describe("list_subagent_profiles renderCall", () => {
+    it("renders tool title", () => {
+      registerRetrievalTools(mockPi, sessionStore);
+      const renderCall = getToolRenderCall(mockPi, "list_subagent_profiles");
+      const theme = createMockTheme();
+
+      renderCall({}, theme, null as any);
+
+      expect(vi.mocked(theme.fg)).toHaveBeenCalledWith("toolTitle", expect.any(String));
+      expect(vi.mocked(theme.bold)).toHaveBeenCalledWith("list_subagent_profiles");
     });
   });
 });

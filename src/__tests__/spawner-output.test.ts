@@ -563,4 +563,190 @@ describe("spawner-output", () => {
       await promise;
     });
   });
+
+  describe("inlineToolResultSummary edge cases", () => {
+    const CWD = "/home/user/projects/my-app";
+
+    it("should handle ls result with non-text content parts (no text extracted)", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      emitToolCall(mockProcess, "ls", { path: "." });
+      // Emit turn_end with only non-text content (no text extracted)
+      const jsonEvent = JSON.stringify({
+        type: "turn_end",
+        message: { role: "assistant", content: [] },
+        toolResults: [
+          {
+            toolName: "ls",
+            content: [{ type: "image", data: "..." }],
+            isError: false,
+          },
+        ],
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      // No inline summary should be appended (no text content)
+      const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
+      expect(lsLine?.text).toBe("→ ls → .");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle empty text content in ls result", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      emitToolCall(mockProcess, "ls", { path: "." });
+      const jsonEvent = JSON.stringify({
+        type: "turn_end",
+        message: { role: "assistant", content: [] },
+        toolResults: [
+          {
+            toolName: "ls",
+            content: [{ type: "text", text: "" }],
+            isError: false,
+          },
+        ],
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      // No inline summary should be appended (empty text)
+      const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
+      expect(lsLine?.text).toBe("→ ls → .");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle turn_end with missing toolResults field", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      const linesBefore = mockWindow.lines.length;
+      const jsonEvent = JSON.stringify({
+        type: "turn_end",
+        message: { role: "assistant", content: [] },
+        // No toolResults field
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      expect(mockWindow.lines.length).toBe(linesBefore);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("handleStderrData edge cases", () => {
+    it("should ignore empty stderr data", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Emit empty/whitespace-only stderr data
+      mockProcess.stderr.emit("data", Buffer.from("   \n  \n"));
+
+      // Give time for any debounced updates to fire
+      await new Promise((r) => setTimeout(r, 100));
+
+      // No [stderr] line should appear
+      const stderrLine = mockWindow.lines.find((l) => l.text.includes("[stderr]"));
+      expect(stderrLine).toBeUndefined();
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
+
+  describe("handleStdoutLine edge cases", () => {
+    it("should handle empty line", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      const linesBefore = mockWindow.lines.length;
+      mockProcess.stdout.emit("data", Buffer.from("\n"));
+
+      expect(mockWindow.lines.length).toBe(linesBefore);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should handle unknown JSON event types", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      const jsonEvent = JSON.stringify({ type: "unknown_event", data: {} });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(false);
+    });
+
+    it("should handle message_end without message field", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      const linesBefore = mockWindow.lines.length;
+      const jsonEvent = JSON.stringify({ type: "message_end" });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      // message_end without message should not process
+      expect(mockWindow.lines.length).toBe(linesBefore);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+  });
 });

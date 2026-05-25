@@ -15,6 +15,8 @@ export default defineConfig({
         "src/**/*.d.ts",
         "src/types.ts",
         "src/types/**",
+        "src/profile-types.ts",
+        "src/skill-discovery.ts",
       ],
       thresholds: {
         statements: 90,

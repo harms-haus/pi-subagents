@@ -309,4 +309,105 @@ describe("/profile command", () => {
 
     expect(result).toBeNull();
   });
+
+  // ── 18. handleList: profile value is falsy ──────────────────────
+  it("list: filters out profiles with falsy values", async () => {
+    const profiles = {
+      "valid-profile": { provider: "anthropic" },
+      "null-profile": null as any,
+    };
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue(profiles);
+    (profileSummary as ReturnType<typeof vi.fn>).mockImplementation(
+      (name: string) => `summary:${name}`,
+    );
+    const ctx = createCtx();
+
+    await command.handler("list", ctx);
+
+    // Should only include valid-profile, not null-profile
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("summary:valid-profile"),
+      "info",
+    );
+    expect(ctx.ui.notify).not.toHaveBeenCalledWith(
+      expect.stringContaining("summary:null-profile"),
+      "info",
+    );
+  });
+
+  // ── 19. handleShow: profile value is falsy after hasOwn ─────────
+  it("show: does nothing when profile value is falsy", async () => {
+    const profiles = { ghost: null as any };
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue(profiles);
+    const ctx = createCtx();
+
+    await command.handler("show ghost", ctx);
+
+    // formatProfileDetail should NOT be called since profile is falsy
+    expect(formatProfileDetail).not.toHaveBeenCalled();
+    // No notification should be sent (silent no-op)
+    const calls = (ctx.ui.notify as ReturnType<typeof vi.fn>).mock.calls;
+    const infoCalls = calls.filter((c: any) => c[1] === "info");
+    expect(infoCalls).toHaveLength(0);
+  });
+
+  // ── 20. handleEdit: no name provided ───────────────────────────
+  it("edit: shows usage when no name is given", async () => {
+    const ctx = createCtx();
+
+    await command.handler("edit", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Usage: /profile edit <name>", "warning");
+  });
+
+  // ── 21. handleDelete: no name provided ─────────────────────────
+  it("delete: shows usage when no name is given", async () => {
+    const ctx = createCtx(true);
+
+    await command.handler("delete", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Usage: /profile delete <name>", "warning");
+  });
+
+  // ── 22. handleDelete: neither global nor project profile deleted ─
+  it("delete: shows error when profile not found in either scope", async () => {
+    (deleteProfile as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    const ctx = createCtx(true);
+
+    await command.handler("delete nonexistent", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining('Profile "nonexistent" not found'),
+      "error",
+    );
+  });
+
+  // ── 23. handleBareName: profile value is falsy ──────────────────
+  it("bare name: does not notify when profile value is falsy", async () => {
+    const profiles = { ghost: null as any };
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue(profiles);
+    const ctx = createCtx();
+
+    await command.handler("ghost", ctx);
+
+    // handleBareName returns true (hasOwn matches) but doesn't notify
+    expect(formatProfileDetail).not.toHaveBeenCalled();
+    // No notification at all — it's a silent return true
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
+  });
+
+  // ── 24. handler: empty args ────────────────────────────────────
+  it("handler: shows usage when args is empty string", async () => {
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({});
+    const ctx = createCtx();
+
+    await command.handler("", ctx);
+
+    // Empty args → tokens = [""], sub = "" → doesn't match any subcommand,
+    // doesn't match SUBCOMMAND_RE, doesn't match handleBareName → usage
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Usage: /profile"),
+      "warning",
+    );
+  });
 });

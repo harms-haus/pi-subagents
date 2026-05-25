@@ -228,6 +228,32 @@ describe("spawner-core", () => {
       expect(mockWindow.status).toBe("error");
     });
 
+    it("should flush remaining buffer on process exit", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Send data without a trailing newline so it stays in the buffer
+      mockProcess.stdout.emit("data", Buffer.from("leftover line"));
+
+      // Buffer should contain the partial line, not yet processed
+      expect(mockWindow.lines).toHaveLength(0);
+
+      // Close the process — buffer should be flushed and processed
+      mockProcess.emit("close", 0);
+      await promise;
+
+      // The leftover buffer should have been processed as a line
+      expect(mockWindow.lines.some((l) => l.text.includes("leftover line"))).toBe(true);
+      expect(mockWindow.status).toBe("completed");
+    });
+
     it("should handle abort signal with SIGTERM", async () => {
       const abortController = new AbortController();
 

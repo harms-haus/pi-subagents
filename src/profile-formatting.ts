@@ -47,58 +47,56 @@ export function profileSummary(name: string, profile: SubagentProfile): string {
 
 // ── Profile Serialization ────────────────────────────────────────────
 
-export function serializeProfileToMarkdown(name: string, profile: SubagentProfile): string {
-  const fmLines: string[] = ["---"];
+/** String-valued profile fields for frontmatter serialization. */
+const SERIALIZABLE_STRING_FIELDS = [
+  "provider",
+  "model",
+  "thinkingLevel",
+  "appendSystemPrompt",
+  "apiKey",
+] as const;
+
+/** Boolean-valued profile fields for frontmatter serialization. */
+const SERIALIZABLE_BOOLEAN_FIELDS = [
+  "noTools",
+  "noExtensions",
+  "noSkills",
+  "noContextFiles",
+] as const;
+
+/** Array-valued profile fields serialized as comma-joined strings. */
+const SERIALIZABLE_ARRAY_FIELDS = [
+  "tools",
+  "excludeTools",
+  "extensions",
+  "extraArgs",
+  "suggestedSkills",
+  "loadSkills",
+] as const;
+
+function pushFrontmatterLines(fmLines: string[], name: string, profile: SubagentProfile): void {
+  fmLines.push("---");
   fmLines.push(`name: ${yamlQuote(name)}`);
 
-  if (profile.provider !== undefined) {
-    fmLines.push(`provider: ${yamlQuote(profile.provider)}`);
+  for (const field of SERIALIZABLE_STRING_FIELDS) {
+    const value = profile[field];
+    if (value !== undefined) fmLines.push(`${field}: ${yamlQuote(value)}`);
   }
-  if (profile.model !== undefined) {
-    fmLines.push(`model: ${yamlQuote(profile.model)}`);
+  for (const field of SERIALIZABLE_BOOLEAN_FIELDS) {
+    const value = profile[field];
+    if (value !== undefined) fmLines.push(`${field}: ${value}`);
   }
-  if (profile.thinkingLevel !== undefined) {
-    fmLines.push(`thinkingLevel: ${yamlQuote(profile.thinkingLevel)}`);
+  for (const field of SERIALIZABLE_ARRAY_FIELDS) {
+    const value = profile[field];
+    if (value && value.length > 0) {
+      fmLines.push(`${field}: ${yamlQuote(value.join(","))}`);
+    }
   }
-  if (profile.appendSystemPrompt !== undefined) {
-    fmLines.push(`appendSystemPrompt: ${yamlQuote(profile.appendSystemPrompt)}`);
-  }
-  if (profile.apiKey !== undefined) {
-    fmLines.push(`apiKey: ${yamlQuote(profile.apiKey)}`);
-  }
+}
 
-  if (profile.noTools !== undefined) {
-    fmLines.push(`noTools: ${profile.noTools}`);
-  }
-  if (profile.noExtensions !== undefined) {
-    fmLines.push(`noExtensions: ${profile.noExtensions}`);
-  }
-  if (profile.noSkills !== undefined) {
-    fmLines.push(`noSkills: ${profile.noSkills}`);
-  }
-  if (profile.noContextFiles !== undefined) {
-    fmLines.push(`noContextFiles: ${profile.noContextFiles}`);
-  }
-
-  if (profile.tools && profile.tools.length > 0) {
-    fmLines.push(`tools: ${yamlQuote(profile.tools.join(","))}`);
-  }
-  if (profile.excludeTools && profile.excludeTools.length > 0) {
-    fmLines.push(`excludeTools: ${yamlQuote(profile.excludeTools.join(","))}`);
-  }
-  if (profile.extensions && profile.extensions.length > 0) {
-    fmLines.push(`extensions: ${yamlQuote(profile.extensions.join(","))}`);
-  }
-  if (profile.extraArgs && profile.extraArgs.length > 0) {
-    fmLines.push(`extraArgs: ${yamlQuote(profile.extraArgs.join(","))}`);
-  }
-  if (profile.suggestedSkills && profile.suggestedSkills.length > 0) {
-    fmLines.push(`suggestedSkills: ${yamlQuote(profile.suggestedSkills.join(","))}`);
-  }
-  if (profile.loadSkills && profile.loadSkills.length > 0) {
-    fmLines.push(`loadSkills: ${yamlQuote(profile.loadSkills.join(","))}`);
-  }
-
+export function serializeProfileToMarkdown(name: string, profile: SubagentProfile): string {
+  const fmLines: string[] = [];
+  pushFrontmatterLines(fmLines, name, profile);
   fmLines.push("---");
 
   // Body is the system prompt
@@ -110,27 +108,23 @@ export function serializeProfileToMarkdown(name: string, profile: SubagentProfil
   return `${fmLines.join("\n")}\n`;
 }
 
-/**
- * Format a profile as a human-readable multi-line string for display.
- */
-export function formatProfileDetail(name: string, profile: SubagentProfile): string {
-  const lines: string[] = [];
-  lines.push(`Profile: ${name}`);
-  if (profile.provider) {
-    lines.push(`  provider:          ${profile.provider}`);
-  }
-  if (profile.model) {
-    lines.push(`  model:             ${profile.model}`);
-  }
-  if (profile.thinkingLevel) {
-    lines.push(`  thinkingLevel:     ${profile.thinkingLevel}`);
-  }
-  if (profile.systemPrompt) {
-    lines.push(`  systemPrompt:      ${profile.systemPrompt}`);
-  }
-  if (profile.appendSystemPrompt) {
-    lines.push(`  appendSystemPrompt: ${profile.appendSystemPrompt}`);
-  }
+/** Fields displayed as simple string values in profile detail. */
+const DETAIL_STRING_FIELDS: Array<{ key: keyof SubagentProfile; label: string }> = [
+  { key: "provider", label: "provider:" },
+  { key: "model", label: "model:" },
+  { key: "thinkingLevel", label: "thinkingLevel:" },
+  { key: "systemPrompt", label: "systemPrompt:" },
+  { key: "appendSystemPrompt", label: "appendSystemPrompt:" },
+];;
+
+/** Fields displayed as comma-separated array values in profile detail. */
+const DETAIL_ARRAY_FIELDS: Array<{ key: keyof SubagentProfile; label: string }> = [
+  { key: "extensions", label: "extensions:" },
+  { key: "suggestedSkills", label: "suggestedSkills:" },
+  { key: "loadSkills", label: "loadSkills:" },
+];;
+
+function pushDetailToolLines(lines: string[], profile: SubagentProfile): void {
   if (profile.noTools) {
     lines.push(`  noTools:           true`);
   } else if (profile.tools) {
@@ -138,24 +132,12 @@ export function formatProfileDetail(name: string, profile: SubagentProfile): str
   } else if (profile.excludeTools && profile.excludeTools.length > 0) {
     lines.push(`  excludeTools:      [${profile.excludeTools.join(", ")}]`);
   }
-  if (profile.noExtensions) {
-    lines.push(`  noExtensions:      true`);
-  }
-  if (profile.extensions) {
-    lines.push(`  extensions:        [${profile.extensions.join(", ")}]`);
-  }
-  if (profile.noSkills) {
-    lines.push(`  noSkills:          true`);
-  }
-  if (profile.noContextFiles) {
-    lines.push(`  noContextFiles:    true`);
-  }
-  if (profile.suggestedSkills) {
-    lines.push(`  suggestedSkills:   [${profile.suggestedSkills.join(", ")}]`);
-  }
-  if (profile.loadSkills) {
-    lines.push(`  loadSkills:        [${profile.loadSkills.join(", ")}]`);
-  }
+}
+
+function pushDetailSpecialLines(lines: string[], profile: SubagentProfile): void {
+  if (profile.noExtensions) lines.push(`  noExtensions:      true`);
+  if (profile.noSkills) lines.push(`  noSkills:          true`);
+  if (profile.noContextFiles) lines.push(`  noContextFiles:    true`);
   if (profile.apiKey) {
     const masked =
       profile.apiKey.length > 8
@@ -166,5 +148,31 @@ export function formatProfileDetail(name: string, profile: SubagentProfile): str
   if (profile.extraArgs) {
     lines.push(`  extraArgs:         ${JSON.stringify(profile.extraArgs)}`);
   }
+}
+
+/**
+ * Format a profile as a human-readable multi-line string for display.
+ */
+export function formatProfileDetail(name: string, profile: SubagentProfile): string {
+  const lines: string[] = [];
+  lines.push(`Profile: ${name}`);
+
+  for (const { key, label } of DETAIL_STRING_FIELDS) {
+    const value = profile[key];
+    if (typeof value === "string") {
+      lines.push(`  ${label.padEnd(label === "appendSystemPrompt:" ? 20 : 19)}${value}`);
+    }
+  }
+
+  pushDetailToolLines(lines, profile);
+
+  for (const { key, label } of DETAIL_ARRAY_FIELDS) {
+    const value = profile[key];
+    if (Array.isArray(value) && value.length > 0) {
+      lines.push(`  ${label.padEnd(19)}[${value.join(", ")}]`);
+    }
+  }
+
+  pushDetailSpecialLines(lines, profile);
   return lines.join("\n");
 }

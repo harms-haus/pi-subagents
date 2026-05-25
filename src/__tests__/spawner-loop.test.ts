@@ -52,7 +52,7 @@ describe("spawner-loop", () => {
   let mockProcess: ReturnType<typeof createMockProcess>;
   let mockWindow: SubAgentWindow;
   let mockSession: SubagentSessionData;
-  let onUpdateSpy: ReturnType<typeof vi.fn>;
+  let onUpdateSpy: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,7 +83,7 @@ describe("spawner-loop", () => {
       startedAt: Date.now(),
     };
 
-    onUpdateSpy = vi.fn();
+    onUpdateSpy = vi.fn<() => void>();
   });
 
   describe("loop detection", () => {

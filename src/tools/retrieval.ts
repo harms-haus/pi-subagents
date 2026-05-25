@@ -11,7 +11,7 @@ import { loadMaxLinesPerWindow } from "../settings";
 import { getLastAssistantText } from "../utils";
 import { formatTranscript, RETRIEVAL_OPTIONS } from "../format-transcript";
 import type { SessionRecord } from "../types";
-import type { ExtensionAPI, Theme, AgentToolResult } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, Theme, AgentToolResult } from "@earendil-works/pi-coding-agent";
 
 // ── Rendering Helpers ───────────────────────────────────────────────────────
 
@@ -27,7 +27,8 @@ function createSimpleRenderResult(defaultLabel: string = "(no output)") {
     _context: unknown,
   ) => {
     const text = result.content[0];
-    const content = text?.type === "text" ? text.text : defaultLabel;
+    if (!text) return new Text(theme.fg("toolOutput", defaultLabel), 0, 0);
+    const content = text.type === "text" ? text.text : defaultLabel;
     return new Text(theme.fg("toolOutput", content), 0, 0);
   };
 }
@@ -45,10 +46,11 @@ function createTruncatingRenderResult(defaultLabel: string = "(no output)") {
     _context: unknown,
   ) => {
     const text = result.content[0];
-    const content = text?.type === "text" ? text.text : defaultLabel;
+    if (!text) return new Text(theme.fg("toolOutput", defaultLabel), 0, 0);
+    const content = text.type === "text" ? text.text : defaultLabel;
     const lines = content.split("\n");
     const maxLines: number =
-      ((result.details as Record<string, unknown>)?.maxLines as number) ?? 15;
+      (result.details as Record<string, unknown>).maxLines as number;
 
     if (lines.length <= maxLines) {
       return new Text(theme.fg("toolOutput", content), 0, 0);
@@ -86,15 +88,26 @@ function sessionNotFoundMessage(sessionId: string): string {
   return `Session "${sessionId}" not found. The session may have expired or the ID is incorrect.`;
 }
 
-/**
- * Register the retrieval tools: get_subagent_output, get_subagent_session, and list_subagent_profiles.
- */
-export function registerRetrievalTools(
+/** Shared type for execute context parameter. */
+type ToolExecuteContext = ExtensionContext;
+
+/** Look up a session record, throwing if not found or has no runs. */
+function requireSession(
+  sessionStore: Map<string, SessionRecord>,
+  sessionId: string,
+): SessionRecord {
+  const record = sessionStore.get(sessionId);
+  if (!record || record.runs.length === 0) {
+    throw new Error(sessionNotFoundMessage(sessionId));
+  }
+  return record;
+}
+
+/** Register the get_subagent_output tool. */
+function registerGetSubagentOutput(
   pi: ExtensionAPI,
   sessionStore: Map<string, SessionRecord>,
 ): void {
-  // ── Tool: get_subagent_output ───────────────────────────────────
-
   pi.registerTool({
     name: "get_subagent_output",
     label: "Get Sub-agent Output",
@@ -113,16 +126,18 @@ export function registerRetrievalTools(
       "delegate_to_subagents completes, instead of asking the sub-agent to write to a file.",
     ],
 
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const record = sessionStore.get(params.sessionId);
-      if (!record || record.runs.length === 0) {
-        throw new Error(sessionNotFoundMessage(params.sessionId));
-      }
-
-      // Get the LATEST run's output
+    async execute(
+      _toolCallId: string,
+      params: { sessionId: string },
+      _signal: AbortSignal | undefined,
+      _onUpdate: unknown,
+      ctx: ToolExecuteContext,
+    ) {
+      const record = requireSession(sessionStore, params.sessionId);
       const latestRun = record.runs[record.runs.length - 1];
+      if (!latestRun) throw new Error(sessionNotFoundMessage(params.sessionId));
       const lastText = getLastAssistantText(latestRun.messages);
-      const maxLines = await loadMaxLinesPerWindow(ctx?.cwd);
+      const maxLines = await loadMaxLinesPerWindow(ctx.cwd);
       return {
         content: [{ type: "text", text: lastText || "(no text output from sub-agent)" }],
         details: {
@@ -138,9 +153,13 @@ export function registerRetrievalTools(
     renderCall: createSessionRenderCall("get_subagent_output"),
     renderResult: createTruncatingRenderResult("(no output)"),
   });
+}
 
-  // ── Tool: get_subagent_session ──────────────────────────────────
-
+/** Register the get_subagent_session tool. */
+function registerGetSubagentSession(
+  pi: ExtensionAPI,
+  sessionStore: Map<string, SessionRecord>,
+): void {
   pi.registerTool({
     name: "get_subagent_session",
     label: "Get Sub-agent Session",
@@ -160,17 +179,18 @@ export function registerRetrievalTools(
       "need the final output.",
     ],
 
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const record = sessionStore.get(params.sessionId);
-      if (!record || record.runs.length === 0) {
-        throw new Error(sessionNotFoundMessage(params.sessionId));
-      }
-
+    async execute(
+      _toolCallId: string,
+      params: { sessionId: string },
+      _signal: AbortSignal | undefined,
+      _onUpdate: unknown,
+      ctx: ToolExecuteContext,
+    ) {
+      const record = requireSession(sessionStore, params.sessionId);
       const transcript = formatTranscript(record.runs, RETRIEVAL_OPTIONS);
-
-      // Get latest run info for details
       const latestRun = record.runs[record.runs.length - 1];
-      const maxLines = await loadMaxLinesPerWindow(ctx?.cwd);
+      if (!latestRun) throw new Error(sessionNotFoundMessage(params.sessionId));
+      const maxLines = await loadMaxLinesPerWindow(ctx.cwd);
       return {
         content: [{ type: "text", text: transcript || "(no messages in session)" }],
         details: {
@@ -189,9 +209,10 @@ export function registerRetrievalTools(
     renderCall: createSessionRenderCall("get_subagent_session"),
     renderResult: createTruncatingRenderResult("(no output)"),
   });
+}
 
-  // ── Tool: list_subagent_profiles ────────────────────────────────
-
+/** Register the list_subagent_profiles tool. */
+function registerListSubagentProfiles(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "list_subagent_profiles",
     label: "List Sub-agent Profiles",
@@ -206,8 +227,14 @@ export function registerRetrievalTools(
       "one for delegate_to_subagents.",
     ],
 
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      const profiles = await loadProfiles(ctx.cwd);
+    async execute(
+      _toolCallId: string,
+      _params: Record<string, unknown>,
+      _signal: AbortSignal | undefined,
+      _onUpdate: unknown,
+      ctx: ToolExecuteContext,
+    ) {
+      const profiles = loadProfiles(ctx.cwd);
       const names = Object.keys(profiles);
       if (names.length === 0) {
         return {
@@ -220,7 +247,10 @@ export function registerRetrievalTools(
           details: { count: 0 },
         };
       }
-      const summaries = names.map((n) => [n, profileSummary(n, profiles[n])] as const);
+      const summaries = names.map((n) => {
+        const p = profiles[n];
+        return p ? ([n, profileSummary(n, p)] as const) : null;
+      }).filter((s): s is [string, string] => s !== null);
       return {
         content: [{ type: "text", text: summaries.map(([, s]) => s).join("\n") }],
         details: {
@@ -230,10 +260,22 @@ export function registerRetrievalTools(
       };
     },
 
-    renderCall(_args, theme, _context) {
+    renderCall(_args: unknown, theme: Theme, _context: unknown) {
       return new Text(theme.fg("toolTitle", theme.bold("list_subagent_profiles")), 0, 0);
     },
 
     renderResult: createSimpleRenderResult("(no profiles)"),
   });
+}
+
+/**
+ * Register the retrieval tools: get_subagent_output, get_subagent_session, and list_subagent_profiles.
+ */
+export function registerRetrievalTools(
+  pi: ExtensionAPI,
+  sessionStore: Map<string, SessionRecord>,
+): void {
+  registerGetSubagentOutput(pi, sessionStore);
+  registerGetSubagentSession(pi, sessionStore);
+  registerListSubagentProfiles(pi);
 }

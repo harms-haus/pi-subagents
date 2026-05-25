@@ -627,9 +627,9 @@ describe("loadProfilesFromDir (excludeTools parsing)", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles();
+    const profiles = loadProfiles();
     expect(profiles["string-exclude"]).toBeDefined();
-    expect(profiles["string-exclude"].excludeTools).toEqual(["bash", "write"]);
+    expect(profiles["string-exclude"]!.excludeTools).toEqual(["bash", "write"]);
   });
 
   it("should parse excludeTools from YAML array", async () => {
@@ -647,9 +647,9 @@ describe("loadProfilesFromDir (excludeTools parsing)", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles();
+    const profiles = loadProfiles();
     expect(profiles["array-exclude"]).toBeDefined();
-    expect(profiles["array-exclude"].excludeTools).toEqual(["bash", "write"]);
+    expect(profiles["array-exclude"]!.excludeTools).toEqual(["bash", "write"]);
   });
 });
 
@@ -664,14 +664,14 @@ describe("loadProfiles cache", () => {
     vi.mocked(readdirSync).mockReturnValue([]);
 
     // First call populates the cache
-    const result1 = await loadProfiles();
+    const result1 = loadProfiles();
     // loadProfiles calls loadProfilesFromDir twice: global dir + project dir (no cwd)
     // With no cwd, only the global dir is loaded
     const firstCallCount = vi.mocked(readdirSync).mock.calls.length;
     expect(firstCallCount).toBeGreaterThanOrEqual(1);
 
     // Second call within TTL should hit the cache — readdirSync should NOT be called again
-    const result2 = await loadProfiles();
+    const result2 = loadProfiles();
     expect(vi.mocked(readdirSync).mock.calls.length).toBe(firstCallCount); // same count as first call
     expect(result2).toBe(result1); // same object reference
   });
@@ -726,22 +726,22 @@ describe("loadProfiles - project-local profile overriding", () => {
         body: "",
       });
 
-    const profiles = await loadProfiles("/fake/project");
+    const profiles = loadProfiles("/fake/project");
 
     // Global-only profile should be present
     expect(profiles["global-only"]).toBeDefined();
-    expect(profiles["global-only"].provider).toBe("openai");
-    expect(profiles["global-only"].model).toBe("gpt-4");
+    expect(profiles["global-only"]!.provider).toBe("openai");
+    expect(profiles["global-only"]!.model).toBe("gpt-4");
 
     // Project-only profile should be present
     expect(profiles["project-only"]).toBeDefined();
-    expect(profiles["project-only"].provider).toBe("dashscope");
-    expect(profiles["project-only"].model).toBe("qwen-max");
+    expect(profiles["project-only"]!.provider).toBe("dashscope");
+    expect(profiles["project-only"]!.model).toBe("qwen-max");
 
     // "shared" should be overridden by project-local version
     expect(profiles["shared"]).toBeDefined();
-    expect(profiles["shared"].provider).toBe("openai"); // project-local override, not "anthropic"
-    expect(profiles["shared"].model).toBe("gpt-4o"); // project-local override, not "claude-3"
+    expect(profiles["shared"]!.provider).toBe("openai"); // project-local override, not "anthropic"
+    expect(profiles["shared"]!.model).toBe("gpt-4o"); // project-local override, not "claude-3"
 
     // Should have exactly 3 profiles
     expect(Object.keys(profiles)).toHaveLength(3);
@@ -767,9 +767,9 @@ describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles();
+    const profiles = loadProfiles();
     expect(profiles["skills-profile"]).toBeDefined();
-    expect(profiles["skills-profile"].suggestedSkills).toEqual(["coding", "testing"]);
+    expect(profiles["skills-profile"]!.suggestedSkills).toEqual(["coding", "testing"]);
   });
 
   it("should parse loadSkills from YAML array", async () => {
@@ -787,9 +787,9 @@ describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles();
+    const profiles = loadProfiles();
     expect(profiles["load-profile"]).toBeDefined();
-    expect(profiles["load-profile"].loadSkills).toEqual(["coding", "testing"]);
+    expect(profiles["load-profile"]!.loadSkills).toEqual(["coding", "testing"]);
   });
 
   it("should handle profile with both suggestedSkills and loadSkills", async () => {
@@ -813,10 +813,10 @@ describe("loadProfilesFromDir (suggestedSkills / loadSkills parsing)", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles();
+    const profiles = loadProfiles();
     expect(profiles["both-skills"]).toBeDefined();
-    expect(profiles["both-skills"].suggestedSkills).toEqual(["coding"]);
-    expect(profiles["both-skills"].loadSkills).toEqual(["testing"]);
+    expect(profiles["both-skills"]!.suggestedSkills).toEqual(["coding"]);
+    expect(profiles["both-skills"]!.loadSkills).toEqual(["testing"]);
   });
 });
 
@@ -841,9 +841,9 @@ describe("apiKey security in loadProfilesFromDir", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles();
+    const profiles = loadProfiles();
     expect(profiles["api-key-profile"]).toBeDefined();
-    expect(profiles["api-key-profile"].apiKey).toBe("sk-global-test-key");
+    expect(profiles["api-key-profile"]!.apiKey).toBe("sk-global-test-key");
   });
 
   it("should refuse apiKey from project-scoped profiles and emit warning", async () => {
@@ -864,10 +864,10 @@ describe("apiKey security in loadProfilesFromDir", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles("/fake/project");
+    const profiles = loadProfiles("/fake/project");
     expect(profiles["project-key"]).toBeDefined();
     // apiKey should NOT be loaded from project-scoped profile
-    expect(profiles["project-key"].apiKey).toBeUndefined();
+    expect(profiles["project-key"]!.apiKey).toBeUndefined();
 
     // Warning should have been emitted
     expect(warnSpy).toHaveBeenCalledWith(
@@ -906,12 +906,12 @@ describe("apiKey security in loadProfilesFromDir", () => {
         body: "",
       });
 
-    const profiles = await loadProfiles("/fake/project");
+    const profiles = loadProfiles("/fake/project");
 
     // Project-local override should have the new model but NOT the apiKey
     expect(profiles["shared"]).toBeDefined();
-    expect(profiles["shared"].model).toBe("gpt-4o");
-    expect(profiles["shared"].apiKey).toBeUndefined();
+    expect(profiles["shared"]!.model).toBe("gpt-4o");
+    expect(profiles["shared"]!.apiKey).toBeUndefined();
 
     // Warning should have been emitted for the project-scoped apiKey
     expect(warnSpy).toHaveBeenCalledWith(
@@ -1036,8 +1036,8 @@ describe("profile round-trip: serializeProfileToMarkdown → parse → verify fi
       body: "You are an expert coder.",
     });
 
-    const profiles = await loadProfiles();
-    const parsed = profiles["round-trip-profile"];
+    const profiles = loadProfiles();
+    const parsed = profiles["round-trip-profile"]!;
 
     expect(parsed).toBeDefined();
     expect(parsed.provider).toBe("anthropic");
@@ -1075,8 +1075,8 @@ describe("profile round-trip: serializeProfileToMarkdown → parse → verify fi
       body: "",
     });
 
-    const profiles = await loadProfiles();
-    const parsed = profiles["minimal"];
+    const profiles = loadProfiles();
+    const parsed = profiles["minimal"]!;
 
     expect(parsed).toBeDefined();
     expect(parsed.model).toBe("openai/gpt-4o");
@@ -1106,8 +1106,8 @@ describe("profile round-trip: serializeProfileToMarkdown → parse → verify fi
       body: "",
     });
 
-    const profiles = await loadProfiles();
-    const parsed = profiles["excl-profile"];
+    const profiles = loadProfiles();
+    const parsed = profiles["excl-profile"]!;
 
     expect(parsed).toBeDefined();
     expect(parsed.model).toBe("anthropic/claude-sonnet-4");
@@ -1131,19 +1131,19 @@ describe("loadProfiles cache expiration", () => {
       vi.mocked(readdirSync).mockReturnValue([]);
 
       // First call populates the cache
-      await loadProfiles();
+      loadProfiles();
       const firstCallCount = vi.mocked(readdirSync).mock.calls.length;
       expect(firstCallCount).toBeGreaterThanOrEqual(1);
 
       // Second call within TTL should hit the cache
-      await loadProfiles();
+      loadProfiles();
       expect(vi.mocked(readdirSync).mock.calls.length).toBe(firstCallCount);
 
       // Advance past the TTL (5000ms)
       vi.advanceTimersByTime(5001);
 
       // Third call after TTL should re-read from disk
-      await loadProfiles();
+      loadProfiles();
       expect(vi.mocked(readdirSync).mock.calls.length).toBeGreaterThan(firstCallCount);
     } finally {
       vi.useRealTimers();
@@ -1179,11 +1179,11 @@ describe("loadProfiles with unreadable file", () => {
       body: "",
     });
 
-    const profiles = await loadProfiles();
+    const profiles = loadProfiles();
 
     // Good profile should still be loaded
     expect(profiles["good"]).toBeDefined();
-    expect(profiles["good"].model).toBe("openai/gpt-4o");
+    expect(profiles["good"]!.model).toBe("openai/gpt-4o");
 
     // Bad profile should not be present (graceful degradation)
     expect(profiles["bad"]).toBeUndefined();

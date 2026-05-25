@@ -25,9 +25,9 @@ export default tseslint.config(
       "@typescript-eslint/no-non-null-assertion": "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
 
-      "max-depth": ["warn", 5],
-      "max-lines-per-function": ["warn", { max: 100, skipBlankLines: true, skipComments: true }],
-      complexity: ["warn", 15],
+      "max-depth": ["error", 5],
+      "max-lines-per-function": ["error", { max: 100, skipBlankLines: true, skipComments: true }],
+      complexity: ["error", 15],
 
       "@typescript-eslint/no-unsafe-argument": "error",
       "@typescript-eslint/no-unsafe-assignment": "error",
@@ -40,9 +40,9 @@ export default tseslint.config(
         "error",
         { checksConditionals: true, checksVoidReturn: true },
       ],
-      "@typescript-eslint/no-unnecessary-condition": "warn",
+      "@typescript-eslint/no-unnecessary-condition": "error",
       "@typescript-eslint/restrict-template-expressions": [
-        "warn",
+        "error",
         { allowNumber: true, allowBoolean: true },
       ],
       "@typescript-eslint/require-await": "warn",
@@ -66,8 +66,9 @@ export default tseslint.config(
       "max-lines-per-function": "off",
       complexity: "off",
       "max-depth": "off",
+      "@typescript-eslint/no-unnecessary-condition": "warn",
+      "@typescript-eslint/no-base-to-string": "warn",
       "@typescript-eslint/require-await": "off",
-      "@typescript-eslint/no-base-to-string": "off",
     },
   },
 );

@@ -8,11 +8,15 @@ import { createMockPi, createMockTheme, makeSession } from "./helpers";
 
 // Mock the TUI components (same pattern as tools.test.ts)
 vi.mock("@earendil-works/pi-tui", () => ({
-  Text: vi.fn().mockImplementation((text: string) => ({ text })),
-  Container: vi.fn().mockImplementation(() => ({
-    addChild: vi.fn(),
-  })),
-  Spacer: vi.fn().mockImplementation(() => ({ spacer: true })),
+  Text: vi.fn().mockImplementation(function (this: any, text: string) {
+    this.text = text;
+  }),
+  Container: vi.fn().mockImplementation(function (this: any) {
+    this.addChild = vi.fn();
+  }),
+  Spacer: vi.fn().mockImplementation(function (this: any) {
+    this.spacer = true;
+  }),
 }));
 
 // Mock the AI types
@@ -33,7 +37,7 @@ vi.mock("typebox", () => ({
 
 // Mock the profiles module
 vi.mock("../profiles", () => ({
-  loadProfiles: vi.fn().mockResolvedValue({}),
+  loadProfiles: vi.fn().mockReturnValue({}),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   validateProfileTools: vi.fn(),
@@ -95,7 +99,7 @@ describe("retrieval-tools", () => {
 
   describe("list_subagent_profiles execute", () => {
     it("returns empty message when no profiles", async () => {
-      vi.mocked(loadProfiles).mockResolvedValueOnce({});
+      vi.mocked(loadProfiles).mockReturnValueOnce({});
 
       registerRetrievalTools(mockPi, sessionStore);
       const execute = getToolExecute(mockPi, "list_subagent_profiles");
@@ -112,7 +116,7 @@ describe("retrieval-tools", () => {
     });
 
     it("returns summaries when profiles exist", async () => {
-      vi.mocked(loadProfiles).mockResolvedValueOnce({
+      vi.mocked(loadProfiles).mockReturnValueOnce({
         coder: { model: "claude-sonnet-4-5" },
         reviewer: { model: "gpt-4o" },
       });
@@ -125,9 +129,9 @@ describe("retrieval-tools", () => {
 
       const result = await execute("tc-id", {}, undefined, vi.fn(), { cwd: "/tmp" } as any);
 
-      expect(result.content[0].type).toBe("text");
-      expect((result.content[0] as { text: string }).text).toContain("coder: claude-sonnet-4-5");
-      expect((result.content[0] as { text: string }).text).toContain("reviewer: gpt-4o");
+      expect(result.content[0]!.type).toBe("text");
+      expect((result.content[0]! as { text: string }).text).toContain("coder: claude-sonnet-4-5");
+      expect((result.content[0]! as { text: string }).text).toContain("reviewer: gpt-4o");
       expect((result.details as any).count).toBe(2);
       expect((result.details as any).profiles).toEqual({
         coder: "coder: claude-sonnet-4-5",
@@ -217,9 +221,11 @@ describe("retrieval-tools", () => {
       sessionStore.set("s1", { runs: [session] });
 
       const execute = getToolExecute(mockPi, "get_subagent_session");
-      const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), null as any);
+      const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), {
+        cwd: "/tmp",
+      } as any);
 
-      expect((result.content[0] as { text: string }).text).toContain(
+      expect((result.content[0]! as { text: string }).text).toContain(
         "[tool result]: Tool returned successfully",
       );
     });
@@ -239,9 +245,11 @@ describe("retrieval-tools", () => {
       sessionStore.set("s1", { runs: [session] });
 
       const execute = getToolExecute(mockPi, "get_subagent_session");
-      const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), null as any);
+      const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), {
+        cwd: "/tmp",
+      } as any);
 
-      const outputText = (result.content[0] as { text: string }).text;
+      const outputText = (result.content[0]! as { text: string }).text;
       // Should contain truncated text (500 chars + "...")
       expect(outputText).toContain("...");
       const match = outputText.match(/\[tool result\]: (.+)\.\.\./);
@@ -264,10 +272,12 @@ describe("retrieval-tools", () => {
       sessionStore.set("s1", { runs: [session] });
 
       const execute = getToolExecute(mockPi, "get_subagent_session");
-      const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), null as any);
+      const result = await execute("tc-id", { sessionId: "s1" }, undefined, vi.fn(), {
+        cwd: "/tmp",
+      } as any);
 
       // No text part in toolResult — content should reflect empty messages
-      expect((result.content[0] as { text: string }).text).toContain("(no messages in session)");
+      expect((result.content[0]! as { text: string }).text).toContain("(no messages in session)");
     });
   });
 
@@ -315,11 +325,11 @@ describe("retrieval-tools", () => {
         { sessionId: "multi" },
         undefined,
         vi.fn(),
-        null as any,
+        { cwd: "/tmp" } as any,
       );
 
       // Should return latest (3rd) run output
-      expect((result.content[0] as { text: string }).text).toBe("Run 3 output");
+      expect((result.content[0]! as { text: string }).text).toBe("Run 3 output");
       expect((result.details as any).runCount).toBe(3);
       expect((result.details as any).sessionId).toBe("multi");
       expect((result.details as any).status).toBe("completed");
@@ -358,11 +368,11 @@ describe("retrieval-tools", () => {
         { sessionId: "tools-only" },
         undefined,
         vi.fn(),
-        null as any,
+        { cwd: "/tmp" } as any,
       );
 
       // No assistant text → placeholder message
-      expect((result.content[0] as { text: string }).text).toBe("(no text output from sub-agent)");
+      expect((result.content[0]! as { text: string }).text).toBe("(no text output from sub-agent)");
     });
   });
 
@@ -391,10 +401,10 @@ describe("retrieval-tools", () => {
         { sessionId: "error-session" },
         undefined,
         vi.fn(),
-        null as any,
+        { cwd: "/tmp" } as any,
       );
 
-      const text = (result.content[0] as { text: string }).text;
+      const text = (result.content[0]! as { text: string }).text;
       expect(text).toContain("Partial response");
       expect(text).toContain("[Error: something broke]");
     });

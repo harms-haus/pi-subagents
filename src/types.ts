@@ -157,17 +157,16 @@ export function serializeSessionData(session: SubagentSessionData): unknown {
   return session;
 }
 
+/** Valid session status values */
+const VALID_STATUSES = new Set(["running", "completed", "error"]);
+
 /**
- * Deserialize and validate session data from a custom entry.
- * Returns null if the data is malformed or missing required fields.
- * Stale "running" sessions (from crashes) are converted to "error" status.
+ * Check if raw data has valid top-level session fields.
+ * Returns the typed record if valid, or null.
  */
-export function deserializeSessionData(data: unknown): SubagentSessionData | null {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
+function validateSessionShape(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== "object") return null;
   const d = data as Record<string, unknown>;
-  // Validate required fields
   if (
     typeof d.sessionId !== "string" ||
     typeof d.taskName !== "string" ||
@@ -178,21 +177,36 @@ export function deserializeSessionData(data: unknown): SubagentSessionData | nul
   ) {
     return null;
   }
-  // Validate message structure
-  for (const msg of d.messages) {
+  if (!VALID_STATUSES.has(d.status)) return null;
+  return d;
+}
+
+/**
+ * Check that every message in the array has a valid string `role` field.
+ */
+function validateMessages(messages: unknown[]): boolean {
+  for (const msg of messages) {
     if (
       !msg ||
       typeof msg !== "object" ||
       !("role" in msg) ||
       typeof (msg as Record<string, unknown>).role !== "string"
     ) {
-      return null;
+      return false;
     }
   }
-  // Validate status value
-  if (d.status !== "running" && d.status !== "completed" && d.status !== "error") {
-    return null;
-  }
+  return true;
+}
+
+/**
+ * Deserialize and validate session data from a custom entry.
+ * Returns null if the data is malformed or missing required fields.
+ * Stale "running" sessions (from crashes) are converted to "error" status.
+ */
+export function deserializeSessionData(data: unknown): SubagentSessionData | null {
+  const d = validateSessionShape(data);
+  if (!d) return null;
+  if (!validateMessages(d.messages as unknown[])) return null;
 
   const result = d as unknown as SubagentSessionData;
 

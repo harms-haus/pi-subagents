@@ -133,6 +133,64 @@ export function validateProfileSkills(profile: SubagentProfile, profileName?: st
 }
 
 /**
+ * Resolve suggested skill names to file paths.
+ * Throws if any skill name is not found in the available skills.
+ */
+function resolveSuggestedSkills(
+  names: string[],
+  localSkillMap: Map<string, { filePath: string; name: string; description: string }>,
+  available: string[],
+): string[] {
+  const paths: string[] = [];
+  const notFound: string[] = [];
+  for (const name of names) {
+    const skill = localSkillMap.get(name);
+    if (!skill) {
+      notFound.push(name);
+    } else {
+      paths.push(skill.filePath);
+    }
+  }
+  if (notFound.length > 0) {
+    throw new Error(
+      `Unknown skills: ${notFound.map((n) => `"${n}"`).join(", ")}. Available skills: ${available.join(", ") || "(none)"}`,
+    );
+  }
+  return paths;
+}
+
+/**
+ * Resolve loadable skill names to content for injecting into appendSystemPrompt.
+ * Throws if any skill name is not found in the available skills.
+ */
+function resolveLoadSkillsContent(
+  names: string[],
+  localSkillMap: Map<string, { filePath: string; name: string; description: string }>,
+  available: string[],
+): string {
+  const skillParts: string[] = [];
+  const loadNotFound: string[] = [];
+  for (const name of names) {
+    const skill = localSkillMap.get(name);
+    if (!skill) {
+      loadNotFound.push(name);
+    } else {
+      const raw = readFileSync(skill.filePath, "utf-8");
+      const body = stripFrontmatter(raw).trim();
+      if (body) {
+        skillParts.push(`<loaded_skill name="${skill.name}">\n${body}\n</loaded_skill>`);
+      }
+    }
+  }
+  if (loadNotFound.length > 0) {
+    throw new Error(
+      `Unknown skills: ${loadNotFound.map((n) => `"${n}"`).join(", ")}. Available skills: ${available.join(", ") || "(none)"}`,
+    );
+  }
+  return skillParts.length > 0 ? `\n\n${skillParts.join("\n\n")}` : "";
+}
+
+/**
  * Resolve skill names in a profile to file paths and content.
  * suggestedSkills: names → file paths (for --skill CLI flags)
  * loadSkills: names → SKILL.md body → injected into appendSystemPrompt
@@ -163,49 +221,13 @@ export async function resolveProfileSkills(
   const available = result.skills.map((s) => s.name);
   const resolved: SubagentProfile = { ...profile };
 
-  // Resolve suggestedSkills: names → file paths
   if (profile.suggestedSkills?.length) {
-    const paths: string[] = [];
-    const notFound: string[] = [];
-    for (const name of profile.suggestedSkills) {
-      const skill = localSkillMap.get(name);
-      if (!skill) {
-        notFound.push(name);
-      } else {
-        paths.push(skill.filePath);
-      }
-    }
-    if (notFound.length > 0) {
-      throw new Error(
-        `Unknown skills: ${notFound.map((n) => `"${n}"`).join(", ")}. Available skills: ${available.join(", ") || "(none)"}`,
-      );
-    }
-    resolved.suggestedSkills = paths;
+    resolved.suggestedSkills = resolveSuggestedSkills(profile.suggestedSkills, localSkillMap, available);
   }
 
-  // Resolve loadSkills: names → content injected into appendSystemPrompt
   if (profile.loadSkills?.length) {
-    const skillParts: string[] = [];
-    const loadNotFound: string[] = [];
-    for (const name of profile.loadSkills) {
-      const skill = localSkillMap.get(name);
-      if (!skill) {
-        loadNotFound.push(name);
-      } else {
-        const raw = readFileSync(skill.filePath, "utf-8");
-        const body = stripFrontmatter(raw).trim();
-        if (body) {
-          skillParts.push(`<loaded_skill name="${skill.name}">\n${body}\n</loaded_skill>`);
-        }
-      }
-    }
-    if (loadNotFound.length > 0) {
-      throw new Error(
-        `Unknown skills: ${loadNotFound.map((n) => `"${n}"`).join(", ")}. Available skills: ${available.join(", ") || "(none)"}`,
-      );
-    }
-    if (skillParts.length > 0) {
-      const loadSkillsContent = `\n\n${skillParts.join("\n\n")}`;
+    const loadSkillsContent = resolveLoadSkillsContent(profile.loadSkills, localSkillMap, available);
+    if (loadSkillsContent) {
       resolved.appendSystemPrompt = (resolved.appendSystemPrompt ?? "") + loadSkillsContent;
     }
     resolved.loadSkills = undefined;
@@ -215,6 +237,89 @@ export async function resolveProfileSkills(
 }
 
 // ── Profile Loading from Markdown Files ──────────────────────────────
+
+/** String fields to copy directly from frontmatter to profile. */
+const STRING_FIELDS = ["provider", "model", "appendSystemPrompt"] as const;
+
+/** Boolean flags to copy from frontmatter to profile. */
+const BOOLEAN_FLAGS = ["noTools", "noExtensions", "noSkills", "noContextFiles"] as const;
+
+/** Array-or-string fields to parse and copy. */
+const ARRAY_FIELDS = [
+  "tools",
+  "excludeTools",
+  "extensions",
+  "extraArgs",
+  "suggestedSkills",
+  "loadSkills",
+] as const;
+
+/**
+ * Apply the apiKey field with scope-aware safety checks.
+ */
+function applyApiKey(
+  profile: SubagentProfile,
+  frontmatter: Record<string, unknown>,
+  scope: "global" | "project",
+  name: string,
+  filePath: string,
+): void {
+  if (typeof frontmatter.apiKey !== "string") return;
+  if (scope === "project") {
+    console.warn(
+      `Warning: Refusing to load apiKey from project-local profile "${name}" in ${filePath}. Move the profile to the global directory (~/.pi/agent/agent-profiles/) or use environment variables.`,
+    );
+    return;
+  }
+  profile.apiKey = frontmatter.apiKey;
+}
+
+/**
+ * Parse frontmatter fields into a SubagentProfile.
+ * Returns undefined if the frontmatter is missing a valid name.
+ */
+function parseProfileFromFrontmatter(
+  frontmatter: Record<string, unknown>,
+  body: string,
+  scope: "global" | "project",
+  filePath: string,
+): SubagentProfile | undefined {
+  const name = frontmatter.name;
+  if (typeof name !== "string" || !name) {
+    return undefined;
+  }
+
+  const profile: SubagentProfile = {};
+
+  // String fields
+  for (const field of STRING_FIELDS) {
+    if (typeof frontmatter[field] === "string") {
+      profile[field] = frontmatter[field];
+    }
+  }
+  // thinkingLevel has a type cast
+  if (typeof frontmatter.thinkingLevel === "string") {
+    profile.thinkingLevel = frontmatter.thinkingLevel as ThinkingLevel;
+  }
+  applyApiKey(profile, frontmatter, scope, name, filePath);
+
+  // Body = system prompt
+  const trimmedBody = body.trim();
+  if (trimmedBody) profile.systemPrompt = trimmedBody;
+
+  // Array/string fields
+  for (const field of ARRAY_FIELDS) {
+    const parsed = parseStringOrArray(frontmatter[field]);
+    if (parsed) profile[field] = parsed;
+  }
+
+  // Boolean flags
+  for (const flag of BOOLEAN_FLAGS) {
+    if (frontmatter[flag] === true) profile[flag] = true;
+  }
+
+  return profile;
+}
 
 function loadProfilesFromDir(
   dir: string,
@@ -241,88 +346,11 @@ function loadProfilesFromDir(
     try {
       const content = readFileSync(filePath, "utf-8");
       const { frontmatter, body } = parseFrontmatter(content);
-
-      const name = frontmatter.name;
-      if (typeof name !== "string") {
-        continue;
+      const profile = parseProfileFromFrontmatter(frontmatter, body, scope, filePath);
+      if (profile) {
+        const name = frontmatter.name as string;
+        profiles[name] = profile;
       }
-      if (!name) {
-        continue;
-      }
-
-      const profile: SubagentProfile = {};
-
-      if (typeof frontmatter.provider === "string") {
-        profile.provider = frontmatter.provider;
-      }
-      if (typeof frontmatter.model === "string") {
-        profile.model = frontmatter.model;
-      }
-      if (typeof frontmatter.thinkingLevel === "string") {
-        profile.thinkingLevel = frontmatter.thinkingLevel as ThinkingLevel;
-      }
-      if (typeof frontmatter.appendSystemPrompt === "string") {
-        profile.appendSystemPrompt = frontmatter.appendSystemPrompt;
-      }
-      if (typeof frontmatter.apiKey === "string") {
-        if (scope === "project") {
-          console.warn(
-            `Warning: Refusing to load apiKey from project-local profile "${name}" in ${filePath}. Move the profile to the global directory (~/.pi/agent/agent-profiles/) or use environment variables.`,
-          );
-        } else {
-          profile.apiKey = frontmatter.apiKey;
-        }
-      }
-
-      const trimmedBody = body.trim();
-      if (trimmedBody) {
-        profile.systemPrompt = trimmedBody;
-      }
-
-      const tools = parseStringOrArray(frontmatter.tools);
-      if (tools) {
-        profile.tools = tools;
-      }
-
-      const excludeTools = parseStringOrArray(frontmatter.excludeTools);
-      if (excludeTools) {
-        profile.excludeTools = excludeTools;
-      }
-
-      if (frontmatter.noTools === true) {
-        profile.noTools = true;
-      }
-      if (frontmatter.noExtensions === true) {
-        profile.noExtensions = true;
-      }
-      if (frontmatter.noSkills === true) {
-        profile.noSkills = true;
-      }
-      if (frontmatter.noContextFiles === true) {
-        profile.noContextFiles = true;
-      }
-
-      const extensions = parseStringOrArray(frontmatter.extensions);
-      if (extensions) {
-        profile.extensions = extensions;
-      }
-
-      const extraArgs = parseStringOrArray(frontmatter.extraArgs);
-      if (extraArgs) {
-        profile.extraArgs = extraArgs;
-      }
-
-      const suggestedSkills = parseStringOrArray(frontmatter.suggestedSkills);
-      if (suggestedSkills) {
-        profile.suggestedSkills = suggestedSkills;
-      }
-
-      const loadSkillsField = parseStringOrArray(frontmatter.loadSkills);
-      if (loadSkillsField) {
-        profile.loadSkills = loadSkillsField;
-      }
-
-      profiles[name] = profile;
     } catch (error) {
       console.warn(
         `Failed to load profile from ${filePath}:`,
@@ -336,7 +364,7 @@ function loadProfilesFromDir(
  * Load subagent profiles from markdown files.
  * Project-local profiles override global profiles.
  */
-export async function loadProfiles(cwd?: string): Promise<SubagentProfiles> {
+export function loadProfiles(cwd?: string): SubagentProfiles {
   const cached = profilesCache.get(cwd ?? "");
   if (cached) {
     return cached;
@@ -399,6 +427,75 @@ function isWithinDir(filePath: string, dir: string): boolean {
   return resolved === resolvedDir || resolved.startsWith(resolvedDir + sep);
 }
 
+/**
+ * Push basic CLI flags (provider, model, prompts, thinking, tools, etc.) onto args.
+ */
+function pushBasicArgs(args: string[], profile: SubagentProfile): void {
+  if (profile.provider) args.push("--provider", profile.provider);
+  if (profile.model) args.push("--model", profile.model);
+  if (profile.systemPrompt) args.push("--system-prompt", profile.systemPrompt);
+  if (profile.appendSystemPrompt) args.push("--append-system-prompt", profile.appendSystemPrompt);
+  if (profile.thinkingLevel) args.push("--thinking", profile.thinkingLevel);
+
+  if (profile.noTools) {
+    args.push("--no-tools");
+  } else if (profile.tools && profile.tools.length > 0) {
+    args.push("--tools", profile.tools.join(","));
+  }
+
+  if (profile.noExtensions) args.push("--no-extensions");
+  if (profile.noSkills) args.push("--no-skills");
+  if (profile.noContextFiles) args.push("--no-context-files");
+}
+
+/**
+ * Push --skill flags for suggestedSkills, validating paths are within allowed directories.
+ */
+function pushSkillArgs(
+  args: string[],
+  profile: SubagentProfile,
+  cwd?: string,
+  agentDir?: string,
+): void {
+  if (!profile.suggestedSkills) return;
+  const safeDirs: string[] = [];
+  if (cwd) safeDirs.push(resolve(cwd));
+  if (agentDir) safeDirs.push(resolve(agentDir));
+  for (const skillPath of profile.suggestedSkills) {
+    if (!skillPath) continue;
+    if (safeDirs.length > 0 && !safeDirs.some((d) => isWithinDir(skillPath, d))) {
+      throw new Error(`Refusing skill path outside allowed directories: ${skillPath}`);
+    }
+    args.push("--skill", skillPath);
+  }
+}
+
+/**
+ * Validate and push extraArgs, checking for safety violations.
+ */
+function pushExtraArgs(args: string[], profile: SubagentProfile): void {
+  if (!profile.extraArgs) return;
+  const hasToolRestrictions =
+    profile.noTools === true ||
+    (profile.tools !== undefined && profile.tools.length > 0) ||
+    (profile.excludeTools !== undefined && profile.excludeTools.length > 0);
+
+  for (const arg of profile.extraArgs) {
+    if (hasToolRestrictions && isDangerousFlag(arg)) {
+      throw new Error(
+        `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.`,
+      );
+    }
+    if (arg.includes("\0")) {
+      throw new Error("Invalid extraArg: contains null byte");
+    }
+    if (/^[\s|&;$\\`!]|&&|\|\||;|>|>>|<|<</.test(arg)) {
+      throw new Error(`Refusing extraArg: potentially unsafe argument '${arg.slice(0, 40)}'`);
+    }
+  }
+  args.push(...profile.extraArgs);
+}
+
 export function profileToArgs(
   profile: SubagentProfile,
   cwd?: string,
@@ -407,40 +504,11 @@ export function profileToArgs(
   const args: string[] = [];
   const envVars: Record<string, string> = {};
 
-  if (profile.provider) {
-    args.push("--provider", profile.provider);
-  }
-
-  if (profile.model) {
-    // Support "provider/id" and ":thinking" shorthand in the model field
-    args.push("--model", profile.model);
-  }
-
-  if (profile.systemPrompt) {
-    args.push("--system-prompt", profile.systemPrompt);
-  }
-
-  if (profile.appendSystemPrompt) {
-    args.push("--append-system-prompt", profile.appendSystemPrompt);
-  }
-
-  if (profile.thinkingLevel) {
-    args.push("--thinking", profile.thinkingLevel);
-  }
+  pushBasicArgs(args, profile);
 
   // Store API key in environment variable to avoid CLI exposure via /proc/PID/cmdline
   if (profile.apiKey) {
     envVars.PI_API_KEY = profile.apiKey;
-  }
-
-  if (profile.noTools) {
-    args.push("--no-tools");
-  } else if (profile.tools && profile.tools.length > 0) {
-    args.push("--tools", profile.tools.join(","));
-  }
-
-  if (profile.noExtensions) {
-    args.push("--no-extensions");
   }
 
   if (profile.extensions) {
@@ -449,53 +517,8 @@ export function profileToArgs(
     }
   }
 
-  if (profile.noSkills) {
-    args.push("--no-skills");
-  }
-
-  if (profile.suggestedSkills) {
-    const safeDirs: string[] = [];
-    if (cwd) safeDirs.push(resolve(cwd));
-    if (agentDir) safeDirs.push(resolve(agentDir));
-    for (const skillPath of profile.suggestedSkills) {
-      if (skillPath) {
-        if (safeDirs.length > 0 && !safeDirs.some((d) => isWithinDir(skillPath, d))) {
-          throw new Error(`Refusing skill path outside allowed directories: ${skillPath}`);
-        }
-        args.push("--skill", skillPath);
-      }
-    }
-  }
-
-  if (profile.noContextFiles) {
-    args.push("--no-context-files");
-  }
-
-  // Validate extraArgs for safety before pushing
-  if (profile.extraArgs) {
-    const hasToolRestrictions =
-      profile.noTools === true ||
-      (profile.tools !== undefined && profile.tools.length > 0) ||
-      (profile.excludeTools !== undefined && profile.excludeTools.length > 0);
-
-    for (const arg of profile.extraArgs) {
-      // Block tool-override flags when profile has tool restrictions
-      if (hasToolRestrictions && isDangerousFlag(arg)) {
-        throw new Error(
-          `Refusing extraArg "${arg}" which would override profile tool restrictions. Use the dedicated profile fields instead.`,
-        );
-      }
-      // Block null bytes
-      if (arg.includes("\0")) {
-        throw new Error("Invalid extraArg: contains null byte");
-      }
-      // Block shell operators and command separators
-      if (/^[\s|&;$\\`!]|&&|\|\||;|>|>>|<|<</.test(arg)) {
-        throw new Error(`Refusing extraArg: potentially unsafe argument '${arg.slice(0, 40)}'`);
-      }
-    }
-    args.push(...profile.extraArgs);
-  }
+  pushSkillArgs(args, profile, cwd, agentDir);
+  pushExtraArgs(args, profile);
 
   return { args, env: envVars };
 }

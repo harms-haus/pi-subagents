@@ -9,11 +9,15 @@ import { createMockPi } from "./helpers";
 
 // Mock the TUI components
 vi.mock("@earendil-works/pi-tui", () => ({
-  Text: vi.fn().mockImplementation((text: string) => ({ text })),
-  Container: vi.fn().mockImplementation(() => ({
-    addChild: vi.fn(),
-  })),
-  Spacer: vi.fn().mockImplementation(() => ({ spacer: true })),
+  Text: vi.fn().mockImplementation(function (this: any, text: string) {
+    this.text = text;
+  }),
+  Container: vi.fn().mockImplementation(function (this: any) {
+    this.addChild = vi.fn();
+  }),
+  Spacer: vi.fn().mockImplementation(function (this: any) {
+    this.spacer = true;
+  }),
 }));
 
 // Mock the AI types
@@ -45,7 +49,7 @@ vi.mock("../spawner", () => ({
 
 // Mock the profiles module
 vi.mock("../profiles", () => ({
-  loadProfiles: vi.fn().mockResolvedValue({}),
+  loadProfiles: vi.fn().mockReturnValue({}),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   resolveProfileSkills: vi.fn(async (profile: unknown) => profile),
@@ -158,7 +162,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.profile).toBeDefined();
       expect(callArgs.profile?.tools).toEqual(["read", "write"]);
       expect(callArgs.profile?.excludeTools).toBeUndefined();
@@ -192,7 +196,7 @@ describe("delegate-features", () => {
     it("should set error status when profile name does not exist", async () => {
       vi.mocked(resolveProfile).mockReturnValue(undefined);
       const { loadProfiles } = await import("../profiles");
-      vi.mocked(loadProfiles).mockResolvedValueOnce({
+      vi.mocked(loadProfiles).mockReturnValueOnce({
         "code-reviewer": { model: "anthropic/claude-sonnet-4" },
         "fast-worker": { provider: "openai" },
       });
@@ -216,9 +220,9 @@ describe("delegate-features", () => {
       expect(text).toContain("Unknown profile");
 
       const details = result.details as WindowedSubagentDetails;
-      expect(details.windows[0].status).toBe("error");
-      expect(details.windows[0].errorMessage).toContain("Unknown profile");
-      expect(details.windows[0].errorMessage).toContain("nonexistent");
+      expect(details.windows[0]!.status).toBe("error");
+      expect(details.windows[0]!.errorMessage).toContain("Unknown profile");
+      expect(details.windows[0]!.errorMessage).toContain("nonexistent");
     });
   });
 
@@ -267,7 +271,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.profile).toBeDefined();
       expect(callArgs.profile!.suggestedSkills).toEqual(["/skills/my-skill/SKILL.md"]);
     });
@@ -296,8 +300,8 @@ describe("delegate-features", () => {
       expect(runSubAgent).not.toHaveBeenCalled();
 
       const details = result.details as WindowedSubagentDetails;
-      expect(details.windows[0].status).toBe("error");
-      expect(details.windows[0].errorMessage).toContain('Skill "missing-skill" not found');
+      expect(details.windows[0]!.status).toBe("error");
+      expect(details.windows[0]!.errorMessage).toContain('Skill "missing-skill" not found');
 
       const text = (result.content[0] as { text: string }).text;
       expect(text).toContain("error");
@@ -324,7 +328,7 @@ describe("delegate-features", () => {
       expect(resolveProfileSkills).not.toHaveBeenCalled();
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.profile).toEqual({ model: "anthropic/claude-sonnet-4" });
     });
 
@@ -409,10 +413,10 @@ describe("delegate-features", () => {
 
       expect(runSubAgent).toHaveBeenCalledTimes(2);
 
-      const call0 = vi.mocked(runSubAgent).mock.calls[0][0];
+      const call0 = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(call0.profile!.suggestedSkills).toEqual(["/a/SKILL.md"]);
 
-      const call1 = vi.mocked(runSubAgent).mock.calls[1][0];
+      const call1 = vi.mocked(runSubAgent).mock.calls[1]![0];
       expect(call1.profile!.suggestedSkills).toEqual(["/b/SKILL.md"]);
     });
 
@@ -446,7 +450,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.task.name).toBe("succeeding-task");
       expect(callArgs.profile!.suggestedSkills).toEqual(["/good/SKILL.md"]);
 
@@ -479,7 +483,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("=== src/foo.ts ===");
       expect(prompt).toContain("hello world");
@@ -504,7 +508,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("[file not found: missing.ts]");
     });
@@ -525,7 +529,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("[could not read file: no-access.ts]");
     });
@@ -552,7 +556,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("line1");
       expect(prompt).toContain("line2");
@@ -581,7 +585,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).not.toContain("line3");
       expect(prompt).toContain("line4");
@@ -610,7 +614,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).not.toContain("line1");
       expect(prompt).toContain("line2");
@@ -641,7 +645,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("=== a.ts ===");
       expect(prompt).toContain("=== b.ts ===");
@@ -663,7 +667,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toBe("do the thing");
     });
@@ -689,7 +693,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.task.prompt).toContain("[file too large: huge.log");
       expect(callArgs.task.prompt).toContain("review");
     });
@@ -760,7 +764,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
 
       // Verify ordering: files come first, then resume context, then prompt
@@ -795,7 +799,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("[access denied: path outside project directory: /etc/passwd]");
       expect(prompt).not.toContain("sensitive data");
@@ -821,7 +825,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("[access denied: path outside project directory");
       expect(prompt).not.toContain("sensitive data");
@@ -849,7 +853,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       expect(prompt).toContain("=== src/foo.ts ===");
       expect(prompt).toContain("safe content");
@@ -877,7 +881,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       // ../../etc/passwd resolves to /etc/passwd which is outside /safe/subdir
       expect(prompt).toContain("[access denied: path outside project directory");
@@ -904,7 +908,7 @@ describe("delegate-features", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       const prompt = callArgs.task.prompt;
       // ../../etc/passwd resolves to /etc/passwd which is outside /home/user/project
       expect(prompt).toContain("[access denied: path outside project directory");

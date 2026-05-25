@@ -27,7 +27,7 @@ describe("spawner-output", () => {
   let mockProcess: ReturnType<typeof createMockProcess>;
   let mockWindow: SubAgentWindow;
   let mockSession: SubagentSessionData;
-  let onUpdateSpy: ReturnType<typeof vi.fn>;
+  let onUpdateSpy: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,7 +58,7 @@ describe("spawner-output", () => {
       startedAt: Date.now(),
     };
 
-    onUpdateSpy = vi.fn();
+    onUpdateSpy = vi.fn<() => void>();
   });
 
   describe("runSubAgent output processing", () => {
@@ -78,8 +78,8 @@ describe("spawner-output", () => {
 
       // stdout line processing is synchronous — window lines should be populated immediately
       expect(mockWindow.lines).toHaveLength(2);
-      expect(mockWindow.lines[0].text).toBe("line 1");
-      expect(mockWindow.lines[1].text).toBe("line 2");
+      expect(mockWindow.lines[0]!.text).toBe("line 1");
+      expect(mockWindow.lines[1]!.text).toBe("line 2");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -110,7 +110,7 @@ describe("spawner-output", () => {
 
       // JSON event processing is synchronous
       expect(mockSession.messages).toHaveLength(1);
-      expect(mockSession.messages[0].role).toBe("assistant");
+      expect(mockSession.messages[0]!.role).toBe("assistant");
       expect(mockWindow.model).toBe("test-model");
 
       mockProcess.emit("close", 0);
@@ -132,7 +132,7 @@ describe("spawner-output", () => {
       mockProcess.stdout.emit("data", Buffer.from("{ invalid json }\n"));
 
       // Should treat as plain text, not as JSON
-      expect(mockWindow.lines[0].text).toContain("invalid");
+      expect(mockWindow.lines[0]!.text).toContain("invalid");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -183,17 +183,17 @@ describe("spawner-output", () => {
       // 550 messages emitted, 499 retained, so first retained is index 51
       const firstRetainedIndex = totalMessages - (MAX_MESSAGES - 1);
       const firstMsgContent = (
-        mockSession.messages[0].content as Array<{ type: string; text: string }>
-      )[0].text;
+        mockSession.messages[0]!.content as Array<{ type: string; text: string }>
+      )[0]!.text;
       expect(firstMsgContent).toBe(`msg-${firstRetainedIndex}`);
 
       // The last message should be the most recent
       const lastMsgContent = (
-        mockSession.messages[mockSession.messages.length - 1].content as Array<{
+        mockSession.messages[mockSession.messages.length - 1]!.content as Array<{
           type: string;
           text: string;
         }>
-      )[0].text;
+      )[0]!.text;
       expect(lastMsgContent).toBe(`msg-${totalMessages - 1}`);
 
       mockProcess.emit("close", 0);
@@ -417,8 +417,8 @@ describe("spawner-output", () => {
       // Each ls tool line should have its own inline summary
       const lsLines = mockWindow.lines.filter((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(lsLines).toHaveLength(2);
-      expect(lsLines[0].text).toBe("→ ls → src → 2 files");
-      expect(lsLines[1].text).toBe("→ ls → test → 3 files");
+      expect(lsLines[0]!.text).toBe("→ ls → src → 2 files");
+      expect(lsLines[1]!.text).toBe("→ ls → test → 3 files");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -525,8 +525,8 @@ describe("spawner-output", () => {
       // Turn A's line should NOT have been modified by Turn B's result
       const lsLines = mockWindow.lines.filter((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(lsLines).toHaveLength(2);
-      expect(lsLines[0].text).toBe("→ ls → src → 2 files, 1 dir");
-      expect(lsLines[1].text).toBe("→ ls → tests → 3 files");
+      expect(lsLines[0]!.text).toBe("→ ls → src → 2 files, 1 dir");
+      expect(lsLines[1]!.text).toBe("→ ls → tests → 3 files");
 
       mockProcess.emit("close", 0);
       await promise;

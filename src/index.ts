@@ -70,7 +70,10 @@ export default function (pi: ExtensionAPI) {
     const active = new Set<string>();
     for (const [, record] of sessionStore) {
       if (record.runs.some((r) => r.status === "running")) {
-        active.add(record.runs[0].sessionId);
+        const firstRun = record.runs[0];
+        if (firstRun) {
+          active.add(firstRun.sessionId);
+        }
       }
     }
     return active;

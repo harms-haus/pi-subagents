@@ -62,6 +62,230 @@ function validateCwd(cwd: string | undefined, fallback: string): string {
 
 // ── Main Function ────────────────────────────────────────────────────
 
+// ── Stdout line processing helpers ─────────────────────────────────────
+
+/** Context object passed to all stdout processing helpers. */
+interface LineContext {
+  win: SubAgentWindow;
+  maxLines: number;
+  session: SubagentSessionData;
+  onUpdate: () => void;
+  cwd: string;
+  widthBudget: number;
+  loopingToolCount: number;
+}
+
+/**
+ * Process a turn_end event to inline ls/find result summaries.
+ */
+function handleTurnEnd(event: { type?: string }, ctx: LineContext): void {
+  const turnEvent = event as {
+    toolResults?: Array<{
+      toolName: string;
+      content: Array<{ type: string; text?: string }>;
+      details?: Record<string, unknown>;
+      isError: boolean;
+    }>;
+  };
+  const toolResults = turnEvent.toolResults;
+  if (!Array.isArray(toolResults)) {
+    return;
+  }
+
+  const usedIndices = new Set<number>();
+  for (const result of toolResults) {
+    if (result.isError || (result.toolName !== "ls" && result.toolName !== "find")) {
+      continue;
+    }
+    inlineToolResultSummary(result, ctx, usedIndices);
+  }
+  ctx.onUpdate();
+}
+
+/**
+ * Inline a single ls/find tool result summary into the window.
+ */
+function inlineToolResultSummary(
+  result: {
+    toolName: string;
+    content: Array<{ type: string; text?: string }>;
+    details?: Record<string, unknown>;
+  },
+  ctx: LineContext,
+  usedIndices: Set<number>,
+): void {
+  const textParts: string[] = [];
+  for (const part of result.content) {
+    if (part.type === "text" && part.text) {
+      textParts.push(part.text);
+    }
+  }
+  const textContent = textParts.join("");
+  if (!textContent) {
+    return;
+  }
+
+  const inlineSummary = formatToolResultInline(result.toolName, textContent, result.details);
+  if (!inlineSummary) {
+    return;
+  }
+
+  const marker = `→ ${result.toolName} →`;
+  // Find the first unused tool line matching this tool name
+  // that has NOT already received an inline result from a previous turn.
+  // A bare tool call line ("→ ls → src") has no " → " after the path,
+  // while an already-inlined line ("→ ls → src → 2 files") does.
+  for (let i = 0; i < ctx.win.lines.length; i++) {
+    const line = ctx.win.lines[i];
+    if (!line) continue;
+    if (
+      !usedIndices.has(i) &&
+      line.kind === "tool" &&
+      line.text.includes(marker) &&
+      !line.text.slice(line.text.indexOf(marker) + marker.length).includes(" → ")
+    ) {
+      usedIndices.add(i);
+      // Mutate the text directly — same object ref is in allMessages
+      line.text = `${line.text} → ${inlineSummary}`;
+      return;
+    }
+  }
+  appendLineToWindow(ctx.win, `  ${result.toolName}: ${inlineSummary}`, ctx.maxLines, "tool");
+}
+
+/**
+ * Track todo progress from write_todos / edit_todos tool calls.
+ */
+function trackTodoProgress(toolName: string, toolArgs: Record<string, unknown>, win: SubAgentWindow): void {
+  if (toolName === "write_todos") {
+    const newCount = (toolArgs.todos as unknown[] | undefined)?.length ?? 0;
+    const mode = toolArgs.mode as string | undefined;
+    if (mode === "append") {
+      win.todoTotal = (win.todoTotal ?? 0) + newCount;
+    } else {
+      win.todoTotal = newCount;
+      win.todoCompleted = 0;
+    }
+  } else if (toolName === "edit_todos") {
+    const editAction = toolArgs.action as string | undefined;
+    const editIndices = toolArgs.indices as number[] | undefined;
+    if ((editAction === "complete" || editAction === "abandon") && editIndices) {
+      win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
+    }
+  }
+}
+
+/**
+ * Track a tool call signature for loop detection, capping the buffer.
+ */
+function trackToolCallForLoop(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  win: SubAgentWindow,
+  loopingToolCount: number,
+): void {
+  const signature = `${toolName}:${JSON.stringify(toolArgs, Object.keys(toolArgs).sort())}`;
+
+  if (!win.recentToolCalls) {
+    win.recentToolCalls = [];
+  }
+  win.recentToolCalls.push(signature);
+  // Cap to only what's needed for loop detection
+  const maxKept = Math.max(loopingToolCount * 2, 20);
+  if (win.recentToolCalls.length > maxKept) {
+    win.recentToolCalls = win.recentToolCalls.slice(-maxKept);
+  }
+}
+
+/**
+ * Process a single tool call from a message: format, track todos, and record for loop detection.
+ */
+function processToolCall(
+  part: ToolCallPart,
+  ctx: LineContext,
+): void {
+  const toolArgs = part.arguments || {};
+  const toolName = part.name;
+  const preview = formatToolCall(toolName, toolArgs, ctx.cwd, ctx.widthBudget);
+  appendLineToWindow(ctx.win, `→ ${preview}`, ctx.maxLines, "tool");
+
+  trackTodoProgress(toolName, toolArgs, ctx.win);
+  trackToolCallForLoop(toolName, toolArgs, ctx.win, ctx.loopingToolCount);
+}
+
+/**
+ * Render text parts from a message into the window.
+ */
+function processTextParts(textParts: string[], ctx: LineContext): void {
+  for (const text of textParts) {
+    for (const textLine of text.split("\n")) {
+      appendLineToWindow(ctx.win, textLine, ctx.maxLines);
+    }
+  }
+}
+
+/**
+ * Sync assistant metadata (model, stopReason, errorMessage) from message to window/session.
+ */
+function syncAssistantMeta(msg: Message, win: SubAgentWindow, session: SubagentSessionData): void {
+  if (msg.role !== "assistant") {
+    return;
+  }
+  win.model = msg.model;
+  win.stopReason = msg.stopReason;
+  win.errorMessage = msg.errorMessage;
+  syncState(win, session);
+}
+
+/**
+ * Check whether the last N tool calls are all identical (loop detection).
+ */
+function checkLoop(win: SubAgentWindow, loopingToolCount: number): boolean {
+  if (loopingToolCount <= 0 || !win.recentToolCalls || win.recentToolCalls.length < loopingToolCount) {
+    return false;
+  }
+  const recent = win.recentToolCalls.slice(-loopingToolCount);
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[0] !== recent[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Process a message_end event: store the message, render content, and detect loops.
+ */
+function handleMessageEnd(
+  msg: Message,
+  ctx: LineContext,
+): { loopDetected: boolean } {
+  ctx.session.messages.push(msg);
+  if (ctx.session.messages.length >= MAX_MESSAGES_PER_SESSION) {
+    ctx.session.messages.shift();
+  }
+
+  const textParts = getTextParts(msg);
+  const hasContent = textParts.length > 0 || (msg.role === "assistant" && msg.content);
+
+  if (hasContent) {
+    processTextParts(textParts, ctx);
+
+    if (msg.content && typeof msg.content !== "string") {
+      for (const part of msg.content) {
+        if (part.type === "toolCall") {
+          processToolCall(part, ctx);
+        }
+      }
+    }
+  }
+
+  syncAssistantMeta(msg, ctx.win, ctx.session);
+  ctx.onUpdate();
+
+  return { loopDetected: checkLoop(ctx.win, ctx.loopingToolCount) };
+}
+
 /**
  * Process a single line of stdout output from the sub-agent process.
  * Handles both plain text lines and JSON events.
@@ -89,161 +313,15 @@ function handleStdoutLine(
     return { loopDetected: false };
   }
 
-  // Handle turn_end events for ls/find result summaries
+  const ctx: LineContext = { win, maxLines, session, onUpdate, cwd, widthBudget, loopingToolCount };
+
   if (event.type === "turn_end") {
-    const turnEvent = event as {
-      toolResults?: Array<{
-        toolName: string;
-        content: Array<{ type: string; text?: string }>;
-        details?: Record<string, unknown>;
-        isError: boolean;
-      }>;
-    };
-    const toolResults = turnEvent.toolResults;
-    if (Array.isArray(toolResults)) {
-      const usedIndices = new Set<number>();
-      for (const result of toolResults) {
-        if ((result.toolName === "ls" || result.toolName === "find") && !result.isError) {
-          const textParts: string[] = [];
-          for (const part of result.content) {
-            if (part.type === "text" && part.text) {
-              textParts.push(part.text);
-            }
-          }
-          const textContent = textParts.join("");
-          if (textContent) {
-            const inlineSummary = formatToolResultInline(
-              result.toolName,
-              textContent,
-              result.details,
-            );
-            if (inlineSummary) {
-              const marker = `→ ${result.toolName} →`;
-              // Find the first unused tool line matching this tool name
-              // that has NOT already received an inline result from a previous turn.
-              // A bare tool call line ("→ ls → src") has no " → " after the path,
-              // while an already-inlined line ("→ ls → src → 2 files") does.
-              let found = false;
-              for (let i = 0; i < win.lines.length; i++) {
-                if (
-                  !usedIndices.has(i) &&
-                  win.lines[i].kind === "tool" &&
-                  win.lines[i].text.includes(marker) &&
-                  !win.lines[i].text
-                    .slice(win.lines[i].text.indexOf(marker) + marker.length)
-                    .includes(" → ")
-                ) {
-                  usedIndices.add(i);
-                  // Mutate the text directly — same object ref is in allMessages
-                  win.lines[i].text = `${win.lines[i].text} → ${inlineSummary}`;
-                  found = true;
-                  break;
-                }
-              }
-              if (!found) {
-                appendLineToWindow(win, `  ${result.toolName}: ${inlineSummary}`, maxLines, "tool");
-              }
-            }
-          }
-        }
-      }
-      onUpdate();
-    }
+    handleTurnEnd(event, ctx);
     return { loopDetected: false };
   }
 
-  if (event.type !== "message_end" || !event.message) {
-    return { loopDetected: false };
-  }
-
-  const msg = event.message;
-  session.messages.push(msg);
-  if (session.messages.length >= MAX_MESSAGES_PER_SESSION) {
-    session.messages.shift();
-  }
-
-  const textParts = getTextParts(msg);
-  const hasTextOrContent = textParts.length > 0 || (msg.role === "assistant" && msg.content);
-
-  if (hasTextOrContent) {
-    for (const text of textParts) {
-      const textLines = text.split("\n");
-      for (const textLine of textLines) {
-        appendLineToWindow(win, textLine, maxLines);
-      }
-    }
-
-    if (msg.content && typeof msg.content !== "string") {
-      for (const part of msg.content) {
-        if (part.type === "toolCall") {
-          const toolArgs = (part as ToolCallPart).arguments || {};
-          const toolName = (part as ToolCallPart).name;
-          const preview = formatToolCall(toolName, toolArgs, cwd, widthBudget);
-          appendLineToWindow(win, `→ ${preview}`, maxLines, "tool");
-
-          // Track todo progress
-          if (toolName === "write_todos") {
-            const newCount = (toolArgs.todos as unknown[] | undefined)?.length ?? 0;
-            const mode = toolArgs.mode as string | undefined;
-            if (mode === "append") {
-              win.todoTotal = (win.todoTotal ?? 0) + newCount;
-            } else {
-              win.todoTotal = newCount;
-              win.todoCompleted = 0;
-            }
-          } else if (toolName === "edit_todos") {
-            const editAction = toolArgs.action as string | undefined;
-            const editIndices = toolArgs.indices as number[] | undefined;
-            if (editAction === "complete" && editIndices) {
-              win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
-            } else if (editAction === "abandon" && editIndices) {
-              win.todoCompleted = (win.todoCompleted ?? 0) + editIndices.length;
-            }
-          }
-
-          // Track tool call for loop detection
-          const signature = `${toolName}:${JSON.stringify(toolArgs, Object.keys(toolArgs).sort())}`;
-
-          if (!win.recentToolCalls) {
-            win.recentToolCalls = [];
-          }
-          win.recentToolCalls.push(signature);
-          // Cap to only what's needed for loop detection
-          const maxKept = Math.max(loopingToolCount * 2, 20);
-          if (win.recentToolCalls.length > maxKept) {
-            win.recentToolCalls = win.recentToolCalls.slice(-maxKept);
-          }
-        }
-      }
-    }
-  }
-
-  if (msg.role === "assistant" && (msg.model || msg.stopReason || msg.errorMessage)) {
-    win.model = msg.model;
-    win.stopReason = msg.stopReason;
-    win.errorMessage = msg.errorMessage;
-    syncState(win, session);
-  }
-
-  onUpdate();
-
-  // Check for loop: all of the last `loopingToolCount` calls must be identical
-  if (
-    loopingToolCount > 0 &&
-    win.recentToolCalls &&
-    win.recentToolCalls.length >= loopingToolCount
-  ) {
-    const recent = win.recentToolCalls.slice(-loopingToolCount);
-    let allIdentical = true;
-    for (let i = 1; i < recent.length; i++) {
-      if (recent[0] !== recent[i]) {
-        allIdentical = false;
-        break;
-      }
-    }
-    if (allIdentical) {
-      return { loopDetected: true };
-    }
+  if (event.type === "message_end" && event.message) {
+    return handleMessageEnd(event.message, ctx);
   }
 
   return { loopDetected: false };

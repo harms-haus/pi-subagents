@@ -88,6 +88,7 @@ export function formatTranscript(runs: SubagentSessionData[], options: Transcrip
 
   for (let i = 0; i < runs.length; i++) {
     const run = runs[i];
+    if (!run) continue;
     const header = options.runHeader(i, runs.length, run);
     if (header) parts.push(header);
 

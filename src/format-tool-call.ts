@@ -107,14 +107,14 @@ export function collapseCdDot(command: string, cwd: string): string {
     return command;
   }
 
-  if (match[1] === undefined) {
+  if (!command.includes("&&")) {
     // Exact match: `cd <cwd>` with nothing after → return "."
     return ".";
   }
 
-  // Has `&&` part
-  const after = match[2] ?? "";
-  if (after.trim() === "") {
+  // Has `&&` part — match[2] is the text after `&&\s*`, which may be empty
+  const after = match[2];
+  if (!after || after.trim() === "") {
     // `cd <cwd> &&` with nothing after → return empty string
     return "";
   }
@@ -124,6 +124,79 @@ export function collapseCdDot(command: string, cwd: string): string {
 }
 
 // ── Bash Command Formatting ────────────────────────────────────────
+
+function flushTruncatedSegment(
+  seg: string,
+  budget: number,
+  isLast: boolean,
+  isFirstLine: boolean,
+  lines: string[],
+  contPrefix: string,
+): { isFirstLine: boolean } {
+  const truncated = `${seg.slice(0, budget - TRUNCATION_SUFFIX_LENGTH)}...`;
+  const prefix = isFirstLine ? "" : contPrefix;
+  const suffix = isLast ? "" : " &&";
+  lines.push(`${prefix}${truncated}${suffix}`);
+  return { isFirstLine: false };
+}
+
+function formatBashSegments(
+  segments: string[],
+  firstLineBudget: number,
+  contLineBudget: number,
+  contPrefix: string,
+  separator: string,
+): string {
+  const lines: string[] = [];
+  let currentLine = "";
+  let isFirstLine = true;
+
+  for (let i = 0; i < segments.length; i++) {
+    const budget = isFirstLine && currentLine.length === 0 ? firstLineBudget : contLineBudget;
+    const seg = segments[i];
+    if (!seg) continue;
+    const isLast = i === segments.length - 1;
+
+    if (currentLine.length === 0) {
+      if (seg.length <= budget) {
+        currentLine = `${isFirstLine ? "" : contPrefix}${seg}`;
+      } else {
+        const result = flushTruncatedSegment(seg, budget, isLast, isFirstLine, lines, contPrefix);
+        isFirstLine = result.isFirstLine;
+        currentLine = "";
+      }
+    } else {
+      const withSeg = `${currentLine} && ${seg}`;
+      if (withSeg.length <= budget) {
+        currentLine = withSeg;
+      } else {
+        lines.push(`${currentLine}${separator}`);
+        isFirstLine = false;
+
+        if (seg.length <= contLineBudget) {
+          currentLine = `${contPrefix}${seg}`;
+        } else {
+          const result = flushTruncatedSegment(
+            seg,
+            contLineBudget,
+            isLast,
+            false,
+            lines,
+            contPrefix,
+          );
+          isFirstLine = result.isFirstLine;
+          currentLine = "";
+        }
+      }
+    }
+  }
+
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+
+  return lines.join("\n");
+}
 
 /**
  * Format a bash command with smart && splitting for display.
@@ -158,65 +231,10 @@ export function formatBashCommand(
     return `${cmd.slice(0, firstLineBudget - TRUNCATION_SUFFIX_LENGTH)}...`;
   }
 
-  const lines: string[] = [];
-  let currentLine = "";
-  let isFirstLine = true;
   const separator = " &&"; // goes at end of line when wrapping
   const contPrefix = "\u2502 "; // \u2502 = │ prefix for continuation lines
 
-  for (let i = 0; i < segments.length; i++) {
-    const budget = isFirstLine && currentLine.length === 0 ? firstLineBudget : contLineBudget;
-    const seg = segments[i];
-
-    if (currentLine.length === 0) {
-      // Start of a new line
-      if (seg.length <= budget) {
-        currentLine = `${isFirstLine ? "" : contPrefix}${seg}`;
-      } else {
-        // Segment too long even on its own line — truncate it
-        const truncated = `${seg.slice(0, budget - TRUNCATION_SUFFIX_LENGTH)}...`;
-        // If there are more segments after this, we need " &&" suffix
-        if (i < segments.length - 1) {
-          lines.push(`${isFirstLine ? "" : contPrefix}${truncated} &&`);
-        } else {
-          lines.push(`${isFirstLine ? "" : contPrefix}${truncated}`);
-        }
-        isFirstLine = false;
-        currentLine = "";
-      }
-    } else {
-      // Try to append to current line
-      const withSeg = `${currentLine} && ${seg}`;
-      if (withSeg.length <= budget) {
-        currentLine = withSeg;
-      } else {
-        // Won't fit — flush current line with separator and start new line
-        lines.push(`${currentLine}${separator}`);
-        isFirstLine = false;
-
-        // Now try to fit seg on a new continuation line
-        if (seg.length <= contLineBudget) {
-          currentLine = `${contPrefix}${seg}`;
-        } else {
-          // Segment too long on its own
-          const truncated = `${seg.slice(0, contLineBudget - TRUNCATION_SUFFIX_LENGTH)}...`;
-          if (i < segments.length - 1) {
-            lines.push(`${contPrefix}${truncated} &&`);
-          } else {
-            lines.push(`${contPrefix}${truncated}`);
-          }
-          currentLine = "";
-        }
-      }
-    }
-  }
-
-  // Flush remaining
-  if (currentLine.length > 0) {
-    lines.push(currentLine);
-  }
-
-  return lines.join("\n");
+  return formatBashSegments(segments, firstLineBudget, contLineBudget, contPrefix, separator);
 }
 
 // ── Tool Call Formatting ────────────────────────────────────────────
@@ -260,16 +278,7 @@ function countOutputEntries(text: string): number {
   return count;
 }
 
-function formatLsResultText(
-  text: string,
-  details?: { entryLimitReached?: number },
-  inline?: boolean,
-): string {
-  const prefix = inline ? "" : "  ";
-  if (!text || text === "(empty directory)" || text === "(empty directory)\n") {
-    return `${prefix}(empty)`;
-  }
-  // Count dirs among the output entries (lines starting without '[' and ending with '/')
+function countDirsInOutput(text: string): number {
   let dirs = 0;
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
@@ -280,6 +289,23 @@ function formatLsResultText(
       lineStart = i + 1;
     }
   }
+  return dirs;
+}
+
+function isEmptyLsOutput(text: string): boolean {
+  return !text || text === "(empty directory)" || text === "(empty directory)\n";
+}
+
+function formatLsResultText(
+  text: string,
+  details?: { entryLimitReached?: number },
+  inline?: boolean,
+): string {
+  const prefix = inline ? "" : "  ";
+  if (isEmptyLsOutput(text)) {
+    return `${prefix}(empty)`;
+  }
+  const dirs = countDirsInOutput(text);
   const total = countOutputEntries(text);
   const files = total - dirs;
   if (dirs === 0 && files === 0) {
@@ -342,6 +368,203 @@ export function formatToolResultInline(
   return null;
 }
 
+// ── formatToolCall case helpers ────────────────────────────────────
+
+function formatEditCall(a: Record<string, string>, args: Record<string, unknown>, cwd: string): string {
+  const path = shortenPath(a.path || a.filePath || "...", cwd);
+  const edits = (args.edits as Array<{ oldText?: string; newText?: string }> | undefined) ?? [];
+  const count = edits.length;
+  const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
+  let added = 0;
+  let removed = 0;
+  for (const edit of edits) {
+    removed += countNonEmptyLines(edit.oldText ?? "");
+    added += countNonEmptyLines(edit.newText ?? "");
+  }
+  const diffStats = count > 0 ? ` +${added}/-${removed}` : "";
+  return `edit → ${path}${suffix}${diffStats}`;
+}
+
+function formatWriteCall(a: Record<string, string>, cwd: string): string {
+  const path = shortenPath(a.path || a.filePath || "...", cwd);
+  const content = a.content || "";
+  const lines = countNonEmptyLines(content);
+  return `write → ${path} +${lines}`;
+}
+
+function formatGrepCall(a: Record<string, string>, cwd: string): string {
+  const pattern = a.pattern || "...";
+  if (a.glob) {
+    return `grep → /${pattern}/ → ${a.glob}`;
+  } else if (a.path) {
+    return `grep → /${pattern}/ → ${shortenPath(a.path, cwd)}`;
+  }
+  return `grep → /${pattern}/`;
+}
+
+function formatBashCall(a: Record<string, string>, cwd: string, widthBudget: number): string {
+  let cmd = (a.command || "...").split("\n")[0] ?? "...";
+  cmd = collapseCdDot(cmd, cwd);
+  if (cmd === "." || cmd === "") {
+    return `bash → cd .`;
+  }
+  cmd = shortenPathsInText(cmd, cwd);
+  return `bash → ${formatBashCommand(cmd, widthBudget - BASH_PREFIX_WIDTH, widthBudget - BASH_CONT_PREFIX_WIDTH)}`;
+}
+
+function formatReadCall(a: Record<string, string>, cwd: string): string {
+  const path = shortenPath(a.path || "...", cwd);
+  const parts = [path];
+  if (a.offset) {
+    parts.push(`:${a.offset}`);
+  }
+  if (a.limit) {
+    parts.push(`+${a.limit}`);
+  }
+  const lineCount = a.limit ? ` (${a.limit} lines)` : "";
+  return `read → ${parts.join("")}${lineCount}`;
+}
+
+function formatDelegateCall(a: Record<string, string>, args: Record<string, unknown>): string {
+  const tasks = (args.tasks || []) as { profile?: string }[];
+  const profiles = tasks.map((t) => t.profile).filter(Boolean);
+  const profileStr =
+    profiles.length > 0 ? ` [${profiles.join(", ")}]` : a.profile ? ` [${a.profile}]` : "";
+  return `delegate_to_subagents → ${tasks.length} task${tasks.length !== 1 ? "s" : ""}${profileStr}`;
+}
+
+function formatWriteTodosCall(args: Record<string, unknown>): string {
+  const n = (args.todos as unknown[] | undefined)?.length ?? 0;
+  return `write_todos → ${n} todos written`;
+}
+
+function formatLspRefactorSymbolCall(a: Record<string, string>, cwd: string): string {
+  const file = shortenPath(a.file || "...", cwd);
+  return `lsp_refactor_symbol → ${file}:${a.line}:${a.column} → ${a.newName || "..."}`;
+}
+
+function formatFetchRepoCall(a: Record<string, string>): string {
+  return `fetch_repo → ${a.url || "..."}`;
+}
+
+function formatSessionCall(toolName: string, args: Record<string, unknown>): string {
+  const sessionId = (args.sessionId as string) || "...";
+  return `${toolName} → ${sessionId}`;
+}
+
+function formatWorkflowStepCall(args: Record<string, unknown>): string {
+  const action = (args.action as string) || "?";
+  return `workflow_step → ${action}`;
+}
+
+function formatLsCall(a: Record<string, string>, cwd: string): string {
+  const path = a.path ? shortenPath(a.path, cwd) : ".";
+  return `ls → ${path}`;
+}
+
+function formatFindCall(a: Record<string, string>, cwd: string): string {
+  const pattern = a.pattern || "...";
+  if (a.path) {
+    return `find → ${pattern} in ${shortenPath(a.path, cwd)}`;
+  }
+  return `find → ${pattern}`;
+}
+
+function formatLspFindSymbolCall(a: Record<string, string>): string {
+  return `lsp_find_symbol → ${a.query || "..."}`;
+}
+
+function formatEditTodosCall(args: Record<string, unknown>): string {
+  const action = (args.action as string) || "?";
+  const indices = (args.indices as number[] | undefined) ?? [];
+  const todos = args.todos as Array<{ text?: string }> | undefined;
+  let desc: string;
+  if (todos && todos.length > 0) {
+    desc = todos.map((t) => t.text ?? "").join(", ");
+    if (desc.length > 48) {
+      desc = `${desc.slice(0, 45)}...`;
+    }
+  } else {
+    desc = `${action} [${indices.join(",")}]`;
+  }
+  return `edit_todos → ${desc}`;
+}
+
+function formatLspFileCall(toolName: string, a: Record<string, string>, cwd: string): string {
+  const file = shortenPath(a.file || "...", cwd);
+  return `${toolName} → ${file}`;
+}
+
+function formatLspPositionCall(toolName: string, a: Record<string, string>, cwd: string): string {
+  const file = shortenPath(a.file || "...", cwd);
+  return `${toolName} → ${file}:${a.line}:${a.column}`;
+}
+
+function formatLintFilesCall(args: Record<string, unknown>, cwd: string): string {
+  const files = args.files as string[] | undefined;
+  if (files && files.length > 0) {
+    const shortened = files.map((f) => shortenPath(f, cwd));
+    const preview =
+      shortened.length <= 3
+        ? shortened.join(", ")
+        : `${shortened.slice(0, 2).join(", ")}, ... +${shortened.length - 2} more`;
+    return `lint → ${preview}`;
+  }
+  return "lint → (all)";
+}
+
+function formatFetchCall(toolName: string, a: Record<string, string>, widthBudget: number): string {
+  const url = a.url || a.query || "...";
+  const urlBudget = widthBudget - toolName.length - 4;
+  const truncated = url.length > urlBudget ? `${url.slice(0, urlBudget - 3)}...` : url;
+  return `${toolName} → ${truncated}`;
+}
+
+function formatDefaultCall(toolName: string, args: Record<string, unknown>, widthBudget: number): string {
+  const argsStr = JSON.stringify(args);
+  const budget = widthBudget - toolName.length - 1;
+  if (argsStr === "{}") {
+    return toolName;
+  }
+  if (argsStr.length > budget) {
+    return `${toolName} ${argsStr.slice(0, Math.max(0, budget - 3))}...`;
+  }
+  return `${toolName} ${argsStr}`;
+}
+
+const TOOL_FORMATTERS: Partial<
+  Record<
+    string,
+    (a: Record<string, string>, args: Record<string, unknown>, cwd: string, widthBudget: number) => string
+  >
+> = {
+  edit: (a, args, cwd) => formatEditCall(a, args, cwd),
+  write: (a, _args, cwd) => formatWriteCall(a, cwd),
+  grep: (a, _args, cwd) => formatGrepCall(a, cwd),
+  bash: (a, _args, cwd, widthBudget) => formatBashCall(a, cwd, widthBudget),
+  read: (a, _args, cwd) => formatReadCall(a, cwd),
+  delegate_to_subagents: (a, args) => formatDelegateCall(a, args),
+  write_todos: (_a, args) => formatWriteTodosCall(args),
+  edit_todos: (_a, args) => formatEditTodosCall(args),
+  list_todos: () => "list_todos",
+  lsp_diagnostics: (a, _args, cwd) => formatLspFileCall("lsp_diagnostics", a, cwd),
+  lsp_find_references: (a, _args, cwd) => formatLspPositionCall("lsp_find_references", a, cwd),
+  lsp_goto_definition: (a, _args, cwd) => formatLspPositionCall("lsp_goto_definition", a, cwd),
+  lsp_find_symbol: (a) => formatLspFindSymbolCall(a),
+  lsp_call_hierarchy: (a, _args, cwd) => formatLspPositionCall("lsp_call_hierarchy", a, cwd),
+  lsp_refactor_symbol: (a, _args, cwd) => formatLspRefactorSymbolCall(a, cwd),
+  lint_files: (_a, args, cwd) => formatLintFilesCall(args, cwd),
+  fetch_content: (a, _args, _cwd, widthBudget) => formatFetchCall("fetch_content", a, widthBudget),
+  web_search: (a, _args, _cwd, widthBudget) => formatFetchCall("web_search", a, widthBudget),
+  fetch_repo: (a) => formatFetchRepoCall(a),
+  get_subagent_output: (_a, args) => formatSessionCall("get_subagent_output", args),
+  get_subagent_session: (_a, args) => formatSessionCall("get_subagent_session", args),
+  list_subagent_profiles: () => "list_subagent_profiles",
+  workflow_step: (_a, args) => formatWorkflowStepCall(args),
+  ls: (a, _args, cwd) => formatLsCall(a, cwd),
+  find: (a, _args, cwd) => formatFindCall(a, cwd),
+};
+
 /**
  * Format a tool call as a concise one-liner for the sub-agent rolling window.
  * Avoids dumping full JSON arguments for common tools.
@@ -352,187 +575,10 @@ export function formatToolCall(
   cwd: string,
   widthBudget: number,
 ): string {
-  // Typed view of args for display formatting
   const a = args as Record<string, string>;
-  switch (toolName) {
-    // File mutations: just show the filename
-    case "edit": {
-      const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
-      const edits = (args.edits as Array<{ oldText?: string; newText?: string }> | undefined) ?? [];
-      const count = edits.length;
-      const suffix = count ? ` (${count} edit${count > 1 ? "s" : ""})` : "";
-      // Count lines added/removed from edits
-      let added = 0;
-      let removed = 0;
-      for (const edit of edits) {
-        removed += countNonEmptyLines(edit.oldText ?? "");
-        added += countNonEmptyLines(edit.newText ?? "");
-      }
-      const diffStats = count > 0 ? ` +${added}/-${removed}` : "";
-      return `edit → ${path}${suffix}${diffStats}`;
-    }
-
-    case "write": {
-      const path = shortenPath(a.path ?? a.filePath ?? "...", cwd);
-      const content = a.content ?? "";
-      const lines = countNonEmptyLines(content);
-      return `write → ${path} +${lines}`;
-    }
-
-    case "grep": {
-      const pattern = a.pattern ?? "...";
-      if (a.glob) {
-        return `grep → /${pattern}/ → ${a.glob}`;
-      } else if (a.path) {
-        return `grep → /${pattern}/ → ${shortenPath(a.path, cwd)}`;
-      }
-      return `grep → /${pattern}/`;
-    }
-
-    case "bash": {
-      let cmd = (a.command ?? "...").split("\n")[0];
-      cmd = collapseCdDot(cmd, cwd);
-      if (cmd === "." || cmd === "") {
-        return `bash → cd .`;
-      }
-      cmd = shortenPathsInText(cmd, cwd);
-      return `bash → ${formatBashCommand(cmd, widthBudget - BASH_PREFIX_WIDTH, widthBudget - BASH_CONT_PREFIX_WIDTH)}`;
-    }
-
-    case "read": {
-      const path = shortenPath(a.path ?? "...", cwd);
-      const parts = [path];
-      if (a.offset) {
-        parts.push(`:${a.offset}`);
-      }
-      if (a.limit) {
-        parts.push(`+${a.limit}`);
-      }
-      const lineCount = a.limit ? ` (${a.limit} lines)` : "";
-      return `read → ${parts.join("")}${lineCount}`;
-    }
-
-    // Delegation
-    case "delegate_to_subagents": {
-      const tasks = (args.tasks ?? []) as { profile?: string }[];
-      const profiles = tasks.map((t) => t.profile).filter(Boolean);
-      const profileStr =
-        profiles.length > 0 ? ` [${profiles.join(", ")}]` : a.profile ? ` [${a.profile}]` : "";
-      return `delegate_to_subagents → ${tasks.length} task${tasks.length !== 1 ? "s" : ""}${profileStr}`;
-    }
-
-    // Todo tools
-    case "write_todos": {
-      const n = (args.todos as unknown[] | undefined)?.length ?? 0;
-      return `write_todos → ${n} todos written`;
-    }
-    case "edit_todos": {
-      const action = (args.action as string) ?? "?";
-      const indices = (args.indices as number[] | undefined) ?? [];
-      const todos = args.todos as Array<{ text?: string }> | undefined;
-      let desc: string;
-      if (todos && todos.length > 0) {
-        desc = todos.map((t) => t.text ?? "").join(", ");
-        if (desc.length > 48) {
-          desc = `${desc.slice(0, 45)}...`;
-        }
-      } else {
-        desc = `${action} [${indices.join(",")}]`;
-      }
-      return `edit_todos → ${desc}`;
-    }
-    case "list_todos":
-      return "list_todos";
-
-    // LSP tools
-    case "lsp_diagnostics": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_diagnostics → ${file}`;
-    }
-    case "lsp_find_references": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_find_references → ${file}:${a.line}:${a.column}`;
-    }
-    case "lsp_goto_definition": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_goto_definition → ${file}:${a.line}:${a.column}`;
-    }
-    case "lsp_find_symbol":
-      return `lsp_find_symbol → ${a.query ?? "..."}`;
-    case "lsp_call_hierarchy": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_call_hierarchy → ${file}:${a.line}:${a.column}`;
-    }
-    case "lsp_refactor_symbol": {
-      const file = shortenPath(a.file ?? "...", cwd);
-      return `lsp_refactor_symbol → ${file}:${a.line}:${a.column} → ${a.newName ?? "..."}`;
-    }
-
-    // Lint
-    case "lint_files": {
-      const files = args.files as string[] | undefined;
-      if (files && files.length > 0) {
-        const shortened = files.map((f) => shortenPath(f, cwd));
-        const preview =
-          shortened.length <= 3
-            ? shortened.join(", ")
-            : `${shortened.slice(0, 2).join(", ")}, ... +${shortened.length - 2} more`;
-        return `lint → ${preview}`;
-      }
-      return "lint → (all)";
-    }
-
-    // Fetch tools
-    case "fetch_content":
-    case "web_search": {
-      const url = a.url ?? a.query ?? "...";
-      const urlBudget = widthBudget - toolName.length - 4;
-      const truncated = url.length > urlBudget ? `${url.slice(0, urlBudget - 3)}...` : url;
-      return `${toolName} → ${truncated}`;
-    }
-    case "fetch_repo": {
-      const url = a.url ?? "...";
-      return `fetch_repo → ${url}`;
-    }
-
-    // Session retrieval
-    case "get_subagent_output":
-      return `get_subagent_output → ${(args.sessionId as string) ?? "..."}`;
-    case "get_subagent_session":
-      return `get_subagent_session → ${(args.sessionId as string) ?? "..."}`;
-    case "list_subagent_profiles":
-      return "list_subagent_profiles";
-
-    // Workflow
-    case "workflow_step": {
-      const action = (args.action as string) ?? "?";
-      return `workflow_step → ${action}`;
-    }
-
-    // File listing
-    case "ls": {
-      const path = a.path ? shortenPath(a.path, cwd) : ".";
-      return `ls → ${path}`;
-    }
-
-    case "find": {
-      const pattern = a.pattern ?? "...";
-      if (a.path) {
-        return `find → ${pattern} in ${shortenPath(a.path, cwd)}`;
-      }
-      return `find → ${pattern}`;
-    }
-
-    default: {
-      const argsStr = JSON.stringify(args);
-      const budget = widthBudget - toolName.length - 1;
-      if (argsStr === "{}") {
-        return toolName;
-      }
-      if (argsStr.length > budget) {
-        return `${toolName} ${argsStr.slice(0, Math.max(0, budget - 3))}...`;
-      }
-      return `${toolName} ${argsStr}`;
-    }
+  const formatter = TOOL_FORMATTERS[toolName];
+  if (formatter) {
+    return formatter(a, args, cwd, widthBudget);
   }
+  return formatDefaultCall(toolName, args, widthBudget);
 }

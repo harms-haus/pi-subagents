@@ -64,7 +64,7 @@ beforeEach(() => {
 describe("/profile command", () => {
   // ── 1. /profile list — empty ─────────────────────────────────────
   it("list: shows info message when no profiles exist", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({});
     const ctx = createCtx();
 
     await command.handler("list", ctx);
@@ -82,7 +82,7 @@ describe("/profile command", () => {
       "my-profile": { provider: "anthropic" },
       "other-profile": { provider: "openai" },
     };
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue(profiles);
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue(profiles);
     (profileSummary as ReturnType<typeof vi.fn>).mockImplementation(
       (name: string) => `summary:${name}`,
     );
@@ -107,7 +107,7 @@ describe("/profile command", () => {
 
   // ── 3. /profile ls (alias) ───────────────────────────────────────
   it("ls: works as alias for list", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({});
     const ctx = createCtx();
 
     await command.handler("ls", ctx);
@@ -121,7 +121,7 @@ describe("/profile command", () => {
   // ── 4. /profile show <name> — existing ───────────────────────────
   it("show: displays profile detail for existing profile", async () => {
     const profiles = { "my-profile": { provider: "anthropic" } };
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue(profiles);
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue(profiles);
     (formatProfileDetail as ReturnType<typeof vi.fn>).mockReturnValue("detail:my-profile");
     const ctx = createCtx();
 
@@ -133,7 +133,7 @@ describe("/profile command", () => {
 
   // ── 5. /profile show <name> — non-existing ───────────────────────
   it("show: shows error when profile not found", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({});
     const ctx = createCtx();
 
     await command.handler("show missing", ctx);
@@ -155,7 +155,7 @@ describe("/profile command", () => {
 
   // ── 7. /profile create <name> — valid ────────────────────────────
   it("create: opens editor for valid new name", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({});
     const ctx = createCtx();
 
     await command.handler("create my-agent", ctx);
@@ -179,7 +179,7 @@ describe("/profile command", () => {
 
   // ── 9. /profile create <existing> — duplicate ────────────────────
   it("create: warns when profile already exists", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({
       "my-profile": { provider: "anthropic" },
     });
     const ctx = createCtx();
@@ -196,7 +196,7 @@ describe("/profile command", () => {
   // ── 10. /profile edit <name> — existing ──────────────────────────
   it("edit: opens editor with existing profile data", async () => {
     const existing = { provider: "anthropic", model: "claude-sonnet" };
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({
       "my-profile": existing,
     });
     const ctx = createCtx();
@@ -212,7 +212,7 @@ describe("/profile command", () => {
 
   // ── 11. /profile edit <name> — non-existing ──────────────────────
   it("edit: shows error when profile not found", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({});
     const ctx = createCtx();
 
     await command.handler("edit ghost", ctx);
@@ -262,7 +262,7 @@ describe("/profile command", () => {
   // ── 15. /profile <bare-name> — alias for show ────────────────────
   it("bare name: shows profile detail when profile exists", async () => {
     const profiles = { "my-profile": { provider: "anthropic" } };
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue(profiles);
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue(profiles);
     (formatProfileDetail as ReturnType<typeof vi.fn>).mockReturnValue("detail:my-profile");
     const ctx = createCtx();
 
@@ -274,7 +274,7 @@ describe("/profile command", () => {
 
   // ── 16. Fallback usage message ───────────────────────────────────
   it("fallback: shows usage for unknown subcommand with no matching profile", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({});
     const ctx = createCtx();
 
     await command.handler("unknown-thing", ctx);
@@ -287,7 +287,7 @@ describe("/profile command", () => {
 
   // ── 17. getArgumentCompletions ───────────────────────────────────
   it("getArgumentCompletions: returns matching profiles and subcommands", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({
       "dev-agent": { provider: "anthropic" },
       "prod-agent": { provider: "openai" },
     });
@@ -301,7 +301,7 @@ describe("/profile command", () => {
   });
 
   it("getArgumentCompletions: returns null when nothing matches", async () => {
-    (loadProfiles as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (loadProfiles as ReturnType<typeof vi.fn>).mockReturnValue({
       "dev-agent": { provider: "anthropic" },
     });
 

@@ -202,7 +202,7 @@ describe("editProfileInteractive", () => {
     );
 
     // Verify no tools or excludeTools set
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.tools).toBeUndefined();
     expect(savedProfile.excludeTools).toBeUndefined();
   });
@@ -242,7 +242,7 @@ describe("editProfileInteractive", () => {
       "/tmp/project",
     );
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.noTools).toBeUndefined();
     expect(savedProfile.excludeTools).toBeUndefined();
   });
@@ -282,7 +282,7 @@ describe("editProfileInteractive", () => {
       "/tmp/project",
     );
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.noTools).toBeUndefined();
     expect(savedProfile.tools).toBeUndefined();
   });
@@ -320,7 +320,7 @@ describe("editProfileInteractive", () => {
       "/tmp/project",
     );
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.extensions).toBeUndefined();
   });
 
@@ -440,7 +440,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", { provider: "anthropic" }, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.provider).toBeUndefined();
     expect(savedProfile.model).toBe("gpt-4");
   });
@@ -491,7 +491,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", { systemPrompt: "old prompt" }, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.systemPrompt).toBeUndefined();
   });
 
@@ -540,7 +540,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", { appendSystemPrompt: "old append" }, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.appendSystemPrompt).toBeUndefined();
   });
 
@@ -567,7 +567,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", { thinkingLevel: "high" as const }, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.thinkingLevel).toBeUndefined();
   });
 
@@ -674,7 +674,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", { tools: ["read", "bash"] }, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.tools).toBeUndefined();
   });
 
@@ -704,7 +704,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", { excludeTools: ["bash"] }, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.excludeTools).toBeUndefined();
   });
 
@@ -794,7 +794,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", { extensions: ["/old/ext"] }, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.extensions).toBeUndefined();
   });
 
@@ -822,7 +822,7 @@ describe("editProfileInteractive", () => {
     await editProfileInteractive("test", {}, createCtx(ui));
 
     // When provider and model are empty strings, they get deleted
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.provider).toBeUndefined();
     expect(savedProfile.model).toBeUndefined();
   });
@@ -853,7 +853,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", {}, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.tools).toEqual(["read", "bash", "grep"]);
   });
 
@@ -971,7 +971,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", {}, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.suggestedSkills).toBeUndefined();
     expect(savedProfile.loadSkills).toEqual(["skill1"]);
   });
@@ -1001,7 +1001,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", {}, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.loadSkills).toBeUndefined();
     expect(savedProfile.suggestedSkills).toEqual(["skill1"]);
   });
@@ -1033,7 +1033,7 @@ describe("editProfileInteractive", () => {
       createCtx(ui),
     );
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.suggestedSkills).toEqual(["oldSkill1"]);
     expect(savedProfile.loadSkills).toEqual(["oldSkill2"]);
   });
@@ -1065,7 +1065,7 @@ describe("editProfileInteractive", () => {
       createCtx(ui),
     );
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.suggestedSkills).toBeUndefined();
     expect(savedProfile.loadSkills).toBeUndefined();
   });
@@ -1095,7 +1095,7 @@ describe("editProfileInteractive", () => {
 
     await editProfileInteractive("test", {}, createCtx(ui));
 
-    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const savedProfile = (saveProfile as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(savedProfile.suggestedSkills).toEqual(["skill1", "skill2", "skill3"]);
     expect(savedProfile.loadSkills).toEqual(["skill4", "skill5"]);
   });

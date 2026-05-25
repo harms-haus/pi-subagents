@@ -11,11 +11,15 @@ import { createMockPi } from "./helpers";
 
 // Mock the TUI components
 vi.mock("@earendil-works/pi-tui", () => ({
-  Text: vi.fn().mockImplementation((text: string) => ({ text })),
-  Container: vi.fn().mockImplementation(() => ({
-    addChild: vi.fn(),
-  })),
-  Spacer: vi.fn().mockImplementation(() => ({ spacer: true })),
+  Text: vi.fn().mockImplementation(function (this: any, text: string) {
+    this.text = text;
+  }),
+  Container: vi.fn().mockImplementation(function (this: any) {
+    this.addChild = vi.fn();
+  }),
+  Spacer: vi.fn().mockImplementation(function (this: any) {
+    this.spacer = true;
+  }),
 }));
 
 // Mock the AI types
@@ -47,7 +51,7 @@ vi.mock("../spawner", () => ({
 
 // Mock the profiles module
 vi.mock("../profiles", () => ({
-  loadProfiles: vi.fn().mockResolvedValue({}),
+  loadProfiles: vi.fn().mockReturnValue({}),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   resolveProfileSkills: vi.fn(async (profile: unknown) => profile),
@@ -138,7 +142,7 @@ describe("delegate-advanced", () => {
       expect(result).toBeDefined();
       expect(runSubAgent).toHaveBeenCalledTimes(1);
 
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.win.timeout).toBe(1);
       expect(callArgs.signal).toBeInstanceOf(AbortSignal);
     });
@@ -159,7 +163,7 @@ describe("delegate-advanced", () => {
       expect(result).toBeDefined();
       expect(runSubAgent).toHaveBeenCalledTimes(1);
 
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.signal).toBeInstanceOf(AbortSignal);
       expect(callArgs.win.timeout).toBe(600);
     });
@@ -210,9 +214,9 @@ describe("delegate-advanced", () => {
       expect(text).toMatch(/after \d+s/);
 
       const details = result.details as WindowedSubagentDetails;
-      expect(details.windows[0].status).toBe("error");
-      expect(details.windows[0].errorMessage).toContain("Timed out");
-      expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
+      expect(details.windows[0]!.status).toBe("error");
+      expect(details.windows[0]!.errorMessage).toContain("Timed out");
+      expect(details.windows[0]!.errorMessage).toMatch(/after \d+s/);
 
       vi.useRealTimers();
     });
@@ -244,8 +248,8 @@ describe("delegate-advanced", () => {
         const result = await executePromise;
 
         const details = result.details as WindowedSubagentDetails;
-        expect(details.windows[0].status).not.toBe("error");
-        expect(details.windows[0].errorMessage).toBeUndefined();
+        expect(details.windows[0]!.status).not.toBe("error");
+        expect(details.windows[0]!.errorMessage).toBeUndefined();
       } finally {
         vi.useRealTimers();
       }
@@ -289,9 +293,9 @@ describe("delegate-advanced", () => {
         const result = await executePromise;
 
         const details = result.details as WindowedSubagentDetails;
-        expect(details.windows[0].status).toBe("error");
-        expect(details.windows[0].errorMessage).toContain("Timed out");
-        expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
+        expect(details.windows[0]!.status).toBe("error");
+        expect(details.windows[0]!.errorMessage).toContain("Timed out");
+        expect(details.windows[0]!.errorMessage).toMatch(/after \d+s/);
       } finally {
         vi.useRealTimers();
       }
@@ -311,7 +315,7 @@ describe("delegate-advanced", () => {
       );
 
       const details = result.details as WindowedSubagentDetails;
-      expect(details.windows[0].timeout).toBe(1);
+      expect(details.windows[0]!.timeout).toBe(1);
     });
 
     it("should abort when no activity after original timeout", async () => {
@@ -352,9 +356,9 @@ describe("delegate-advanced", () => {
         const result = await executePromise;
 
         const details = result.details as WindowedSubagentDetails;
-        expect(details.windows[0].status).toBe("error");
-        expect(details.windows[0].errorMessage).toContain("Timed out");
-        expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
+        expect(details.windows[0]!.status).toBe("error");
+        expect(details.windows[0]!.errorMessage).toContain("Timed out");
+        expect(details.windows[0]!.errorMessage).toMatch(/after \d+s/);
       } finally {
         vi.useRealTimers();
       }
@@ -396,9 +400,9 @@ describe("delegate-advanced", () => {
 
         const result = await executePromise;
         const details = result.details as WindowedSubagentDetails;
-        expect(details.windows[0].status).toBe("error");
-        expect(details.windows[0].errorMessage).toContain("Timed out");
-        expect(details.windows[0].errorMessage).toMatch(/after \d+s/);
+        expect(details.windows[0]!.status).toBe("error");
+        expect(details.windows[0]!.errorMessage).toContain("Timed out");
+        expect(details.windows[0]!.errorMessage).toMatch(/after \d+s/);
       } finally {
         vi.useRealTimers();
       }
@@ -492,7 +496,7 @@ describe("delegate-advanced", () => {
         { cwd: process.cwd() } as any,
       );
 
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.task.prompt).toMatch(/^Previously:\n\n/);
       expect(callArgs.task.prompt).toContain("Previous assistant response");
       expect(callArgs.task.prompt).toContain("Instructions:\n\nnew instructions");
@@ -718,15 +722,15 @@ describe("delegate-advanced", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(capturedSignals.length).toBe(2);
 
-      expect(capturedSignals[0].aborted).toBe(false);
-      expect(capturedSignals[1].aborted).toBe(false);
+      expect(capturedSignals[0]!.aborted).toBe(false);
+      expect(capturedSignals[1]!.aborted).toBe(false);
 
       parentAbortController.abort();
 
       await executePromise;
 
-      expect(capturedSignals[0].aborted).toBe(true);
-      expect(capturedSignals[1].aborted).toBe(true);
+      expect(capturedSignals[0]!.aborted).toBe(true);
+      expect(capturedSignals[1]!.aborted).toBe(true);
     });
   });
 
@@ -793,9 +797,9 @@ describe("delegate-advanced", () => {
       );
 
       const details = result.details as WindowedSubagentDetails;
-      expect(details.windows[0].status).toBe("error");
-      expect(details.windows[0].errorMessage).toContain("Loop detected");
-      expect(details.windows[0].exitCode).toBe(1);
+      expect(details.windows[0]!.status).toBe("error");
+      expect(details.windows[0]!.errorMessage).toContain("Loop detected");
+      expect(details.windows[0]!.exitCode).toBe(1);
     });
 
     it("should pass loop detection settings to runSubAgent", async () => {
@@ -815,7 +819,7 @@ describe("delegate-advanced", () => {
       );
 
       expect(runSubAgent).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(runSubAgent).mock.calls[0][0];
+      const callArgs = vi.mocked(runSubAgent).mock.calls[0]![0];
       expect(callArgs.loopingToolCount).toBe(3);
     });
   });
@@ -971,7 +975,7 @@ describe("delegate-advanced", () => {
       expect(result).toBeDefined();
       expect(result.content).toBeDefined();
       const details = result.details as WindowedSubagentDetails;
-      expect(details.windows[0].status).toBe("completed");
+      expect(details.windows[0]!.status).toBe("completed");
     });
   });
 });

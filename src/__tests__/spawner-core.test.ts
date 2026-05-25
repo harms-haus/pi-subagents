@@ -62,7 +62,7 @@ describe("spawner-core", () => {
   let mockProcess: ReturnType<typeof createMockProcess>;
   let mockWindow: SubAgentWindow;
   let mockSession: SubagentSessionData;
-  let onUpdateSpy: ReturnType<typeof vi.fn>;
+  let onUpdateSpy: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -93,7 +93,7 @@ describe("spawner-core", () => {
       startedAt: Date.now(),
     };
 
-    onUpdateSpy = vi.fn();
+    onUpdateSpy = vi.fn<() => void>();
   });
 
   describe("runSubAgent", () => {
@@ -109,7 +109,7 @@ describe("spawner-core", () => {
       await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
 
       expect(spawn).toHaveBeenCalled();
-      const spawnArgs = vi.mocked(spawn).mock.calls[0];
+      const spawnArgs = vi.mocked(spawn).mock.calls[0]!;
       // getPiInvocation() returns the actual node path and script path
       expect(spawnArgs[0]).toEqual(expect.any(String));
       expect(spawnArgs[0].length).toBeGreaterThan(0);
@@ -140,7 +140,7 @@ describe("spawner-core", () => {
       await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
 
       expect(spawn).toHaveBeenCalled();
-      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
       expect(spawnOptions.cwd).toBe("/absolute/path");
 
       mockProcess.emit("close", 0);
@@ -161,7 +161,7 @@ describe("spawner-core", () => {
       await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
 
       expect(spawn).toHaveBeenCalled();
-      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
       // The path is normalized to /unsafe by resolve()
       expect(spawnOptions.cwd).toBe("/unsafe");
 
@@ -183,7 +183,7 @@ describe("spawner-core", () => {
       // spawn should be called because resolve() makes relative paths absolute
       // validateCwd will resolve the relative path to absolute
       expect(spawn).toHaveBeenCalled();
-      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
       expect(spawnOptions.cwd).toBeTruthy();
       expect(spawnOptions.cwd).toMatch(/^\//);
       expect((spawnOptions.cwd as string).endsWith("/relative/path")).toBe(true);
@@ -358,7 +358,7 @@ describe("spawner-core", () => {
       await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
 
       expect(spawn).toHaveBeenCalled();
-      const spawnArgs = vi.mocked(spawn).mock.calls[0][1];
+      const spawnArgs = vi.mocked(spawn).mock.calls[0]![1];
 
       // The prompt should NOT appear as a CLI argument
       expect(spawnArgs).not.toContain(longPrompt);
@@ -393,14 +393,14 @@ describe("spawner-core", () => {
       await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
 
       expect(spawn).toHaveBeenCalled();
-      const spawnArgs = vi.mocked(spawn).mock.calls[0][1];
+      const spawnArgs = vi.mocked(spawn).mock.calls[0]![1];
 
       // Profile should inject additional args and env vars
       // Prompt is passed via stdin via end(), not as CLI arg
       expect(spawnArgs).not.toContain("test prompt");
       expect(mockProcess.stdin.end).toHaveBeenCalledWith(expect.stringContaining("test prompt"));
 
-      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
       expect(spawnOptions.env).toBeDefined();
 
       mockProcess.emit("close", 0);
@@ -475,7 +475,7 @@ describe("spawner-core", () => {
       );
 
       // Should write to global agent-profiles dir
-      const writeCall = vi.mocked(writeFile).mock.calls[0];
+      const writeCall = vi.mocked(writeFile).mock.calls[0]!;
       expect(writeCall[0]).toMatch(/agent-profiles\/my-profile\.md$/);
       expect(writeCall[1]).toContain("name: my-profile");
       expect(writeCall[2]).toBe("utf8");
@@ -496,7 +496,7 @@ describe("spawner-core", () => {
       expect(profileCalls).toHaveLength(2);
 
       // Second call should have the updated content
-      const secondContent = String(profileCalls[1][1]);
+      const secondContent = String(profileCalls[1]![1]);
       expect(secondContent).toContain("provider: openai");
       expect(secondContent).toContain("model: gpt-4");
       // Should NOT contain old provider
@@ -516,7 +516,7 @@ describe("spawner-core", () => {
 
       // writeFile should still be called
       expect(writeFile).toHaveBeenCalled();
-      const writeCall = vi.mocked(writeFile).mock.calls[0];
+      const writeCall = vi.mocked(writeFile).mock.calls[0]!;
       expect(String(writeCall[0])).toMatch(/my-project\/\.pi\/agent-profiles\/new-profile\.md$/);
     });
   });
@@ -559,7 +559,7 @@ describe("spawner-core", () => {
       profile: ProfilesModule.SubagentProfile,
     ): Promise<string> {
       await saveProfile(name, profile, "global");
-      const writeCall = vi.mocked(writeFile).mock.calls[0];
+      const writeCall = vi.mocked(writeFile).mock.calls[0]!;
       return String(writeCall[1]);
     }
 

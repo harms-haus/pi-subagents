@@ -150,9 +150,9 @@ describe("index.ts — default export", () => {
 
       const record = capturedSessionStore!.get("resume-3")!;
       expect(record.runs).toHaveLength(3);
-      expect(record.runs[0].startedAt).toBe(1000);
-      expect(record.runs[1].startedAt).toBe(2000);
-      expect(record.runs[2].startedAt).toBe(3000);
+      expect(record.runs[0]!.startedAt).toBe(1000);
+      expect(record.runs[1]!.startedAt).toBe(2000);
+      expect(record.runs[2]!.startedAt).toBe(3000);
     });
   });
 
@@ -185,8 +185,8 @@ describe("index.ts — default export", () => {
       const record = capturedSessionStore!.get(sessionId)!;
 
       // The first two runs (run-0, run-1) should have been evicted
-      expect(record.runs[0].taskName).toBe("run-2");
-      expect(record.runs[9].taskName).toBe("run-11");
+      expect(record.runs[0]!.taskName).toBe("run-2");
+      expect(record.runs[9]!.taskName).toBe("run-11");
     });
 
     it("should not drop runs when at exactly 10", () => {
@@ -200,8 +200,8 @@ describe("index.ts — default export", () => {
 
       const record = capturedSessionStore!.get(sessionId)!;
       expect(record.runs).toHaveLength(10);
-      expect(record.runs[0].taskName).toBe("run-0");
-      expect(record.runs[9].taskName).toBe("run-9");
+      expect(record.runs[0]!.taskName).toBe("run-0");
+      expect(record.runs[9]!.taskName).toBe("run-9");
     });
 
     it("should cap correctly when adding run 11 after eviction brought it to 10", () => {
@@ -217,15 +217,15 @@ describe("index.ts — default export", () => {
       // Should be 10 after eviction of run-0
       let record = capturedSessionStore!.get(sessionId)!;
       expect(record.runs).toHaveLength(10);
-      expect(record.runs[0].taskName).toBe("run-1");
+      expect(record.runs[0]!.taskName).toBe("run-1");
 
       // Add one more
       capturedRegisterSession(makeSession({ sessionId, startedAt: 11000, taskName: "run-11" }));
 
       record = capturedSessionStore!.get(sessionId)!;
       expect(record.runs).toHaveLength(10);
-      expect(record.runs[0].taskName).toBe("run-2");
-      expect(record.runs[9].taskName).toBe("run-11");
+      expect(record.runs[0]!.taskName).toBe("run-2");
+      expect(record.runs[9]!.taskName).toBe("run-11");
     });
   });
 
@@ -476,7 +476,7 @@ describe("index.ts — default export", () => {
     it("should pass the same sessionStore to delegate and retrieval tools", async () => {
       const { registerRetrievalTools } = await import("../tools/retrieval");
       const retrievalCall = vi.mocked(registerRetrievalTools).mock.calls[0];
-      expect(retrievalCall[1]).toBe(capturedSessionStore);
+      expect(retrievalCall![1]).toBe(capturedSessionStore);
     });
   });
 
@@ -518,8 +518,8 @@ describe("index.ts — default export", () => {
       expect(capturedSessionStore!.has("reconstructed-1")).toBe(true);
       const record = capturedSessionStore!.get("reconstructed-1")!;
       expect(record.runs).toHaveLength(1);
-      expect(record.runs[0].taskName).toBe("test-task");
-      expect(record.runs[0].status).toBe("completed");
+      expect(record.runs[0]!.taskName).toBe("test-task");
+      expect(record.runs[0]!.status).toBe("completed");
     });
 
     it("should handle multiple runs for the same sessionId", () => {
@@ -546,8 +546,8 @@ describe("index.ts — default export", () => {
 
       const record = capturedSessionStore!.get("multi-reconstruct")!;
       expect(record.runs).toHaveLength(2);
-      expect(record.runs[0].taskName).toBe("first-run");
-      expect(record.runs[1].taskName).toBe("second-run");
+      expect(record.runs[0]!.taskName).toBe("first-run");
+      expect(record.runs[1]!.taskName).toBe("second-run");
     });
 
     it("should skip entries with different customType", () => {
@@ -617,8 +617,8 @@ describe("index.ts — default export", () => {
 
       const record = capturedSessionStore!.get("stale-running")!;
       expect(record.runs).toHaveLength(1);
-      expect(record.runs[0].status).toBe("error");
-      expect(record.runs[0].errorMessage).toContain("interrupted");
+      expect(record.runs[0]!.status).toBe("error");
+      expect(record.runs[0]!.errorMessage).toContain("interrupted");
     });
 
     it("should skip reconstruction for new sessions", () => {

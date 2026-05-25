@@ -68,7 +68,7 @@ describe("spawner-tool-display", () => {
   let mockProcess: ReturnType<typeof createMockProcess>;
   let mockWindow: SubAgentWindow;
   let mockSession: SubagentSessionData;
-  let onUpdateSpy: ReturnType<typeof vi.fn>;
+  let onUpdateSpy: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,7 +99,7 @@ describe("spawner-tool-display", () => {
       startedAt: Date.now(),
     };
 
-    onUpdateSpy = vi.fn();
+    onUpdateSpy = vi.fn<() => void>();
   });
 
   describe("path shortening in tool call display", () => {
@@ -394,7 +394,7 @@ describe("spawner-tool-display", () => {
 
       const bashLines = findToolLines(mockWindow.lines, "bash");
       expect(bashLines.length).toBe(1);
-      const text = bashLines[0].text;
+      const text = bashLines[0]!.text;
 
       expect(text).toContain("\n");
       expect(text).toContain("npm run build && npm run test &&");
@@ -475,7 +475,7 @@ describe("spawner-tool-display", () => {
 
       const bashLines = findToolLines(mockWindow.lines, "bash");
       expect(bashLines.length).toBe(1);
-      expect(bashLines[0].text).toBe("→ bash → npm test && npm run lint");
+      expect(bashLines[0]!.text).toBe("→ bash → npm test && npm run lint");
 
       mockProcess.emit("close", 0);
       await promise;

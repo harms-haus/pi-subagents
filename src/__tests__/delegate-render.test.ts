@@ -7,11 +7,15 @@ import { createMockTheme, makeDetails, makeWindow } from "./helpers";
 
 // Mock the TUI components — same pattern as tools.test.ts
 vi.mock("@earendil-works/pi-tui", () => ({
-  Text: vi.fn().mockImplementation((text: string) => ({ text })),
-  Container: vi.fn().mockImplementation(() => ({
-    addChild: vi.fn(),
-  })),
-  Spacer: vi.fn().mockImplementation(() => ({ spacer: true })),
+  Text: vi.fn().mockImplementation(function (this: any, text: string) {
+    this.text = text;
+  }),
+  Container: vi.fn().mockImplementation(function (this: any) {
+    this.addChild = vi.fn();
+  }),
+  Spacer: vi.fn().mockImplementation(function (this: any) {
+    this.spacer = true;
+  }),
 }));
 
 // Mock the AI types
@@ -38,7 +42,7 @@ vi.mock("../spawner", () => ({
 
 // Mock the profiles module
 vi.mock("../profiles", () => ({
-  loadProfiles: vi.fn().mockResolvedValue({}),
+  loadProfiles: vi.fn().mockReturnValue({}),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   validateProfileTools: vi.fn(),
@@ -87,7 +91,7 @@ const makeMockTheme = createMockTheme;
 /** Get the container instance from the last Container mock call */
 function getLastContainerInstance() {
   const MockContainer = vi.mocked(Container);
-  return MockContainer.mock.results[MockContainer.mock.results.length - 1].value;
+  return MockContainer.mock.results[MockContainer.mock.results.length - 1]!.value;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────

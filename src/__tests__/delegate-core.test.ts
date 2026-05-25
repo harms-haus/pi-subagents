@@ -10,11 +10,15 @@ import { createMockPi, createMockTheme } from "./helpers";
 
 // Mock the TUI components
 vi.mock("@earendil-works/pi-tui", () => ({
-  Text: vi.fn().mockImplementation((text: string) => ({ text })),
-  Container: vi.fn().mockImplementation(() => ({
-    addChild: vi.fn(),
-  })),
-  Spacer: vi.fn().mockImplementation(() => ({ spacer: true })),
+  Text: vi.fn().mockImplementation(function (this: any, text: string) {
+    this.text = text;
+  }),
+  Container: vi.fn().mockImplementation(function (this: any) {
+    this.addChild = vi.fn();
+  }),
+  Spacer: vi.fn().mockImplementation(function (this: any) {
+    this.spacer = true;
+  }),
 }));
 
 // Mock the AI types
@@ -46,7 +50,7 @@ vi.mock("../spawner", () => ({
 
 // Mock the profiles module
 vi.mock("../profiles", () => ({
-  loadProfiles: vi.fn().mockResolvedValue({}),
+  loadProfiles: vi.fn().mockReturnValue({}),
   resolveProfile: vi.fn(),
   profileSummary: vi.fn().mockReturnValue("profile-summary"),
   resolveProfileSkills: vi.fn(async (profile: unknown) => profile),
@@ -228,8 +232,8 @@ describe("delegate-core", () => {
         { cwd: process.cwd() } as any,
       );
 
-      expect(result.content[0].type).toBe("text");
-      expect((result.content[0] as { text: string }).text).toBe("Final output from sub-agent");
+      expect(result.content[0]!.type).toBe("text");
+      expect((result.content[0]! as { text: string }).text).toBe("Final output from sub-agent");
       expect((result.details as Record<string, unknown>).sessionId).toBe("test-session");
     });
 
@@ -283,7 +287,7 @@ describe("delegate-core", () => {
         { cwd: process.cwd() } as any,
       );
 
-      expect((result.content[0] as { text: string }).text).toBe("(no text output from sub-agent)");
+      expect((result.content[0]! as { text: string }).text).toBe("(no text output from sub-agent)");
     });
   });
 
@@ -333,8 +337,8 @@ describe("delegate-core", () => {
         { cwd: process.cwd() } as any,
       );
 
-      expect(result.content[0].type).toBe("text");
-      expect((result.content[0] as { text: string }).text).toContain("First response");
+      expect(result.content[0]!.type).toBe("text");
+      expect((result.content[0]! as { text: string }).text).toContain("First response");
       expect((result.details as Record<string, unknown>).messageCount).toBe(1);
     });
 

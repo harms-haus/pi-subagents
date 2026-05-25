@@ -195,6 +195,7 @@ describe("loadCommandPreviewWidth", () => {
       writable: true,
       configurable: true,
     });
+    vi.mocked(readFile).mockRejectedValue(new Error("File not found"));
 
     const result = await loadCommandPreviewWidth();
 

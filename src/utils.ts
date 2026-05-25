@@ -87,8 +87,10 @@ export function getTextParts(msg: Message): string[] {
  */
 export function getLastAssistantText(messages: Message[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
-    const parts = getTextParts(messages[i]);
-    if (parts.length > 0) {
+    const msg = messages[i];
+    if (!msg) continue;
+    const parts = getTextParts(msg);
+    if (parts.length > 0 && parts[0] !== undefined) {
       return parts[0];
     }
   }
@@ -149,12 +151,14 @@ export async function mapWithConcurrencyLimit<TIn, TOut>(
   const results: TOut[] = new Array<TOut>(items.length);
   let nextIndex = 0;
   const workers = new Array(limit).fill(null).map(async () => {
-    while (true) {
+    for (;;) {
       const current = nextIndex++;
       if (current >= items.length) {
         return;
       }
-      results[current] = await fn(items[current], current);
+      const item = items[current];
+      if (item === undefined) continue;
+      results[current] = await fn(item, current);
     }
   });
   await Promise.all(workers);

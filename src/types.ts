@@ -180,7 +180,12 @@ export function deserializeSessionData(data: unknown): SubagentSessionData | nul
     }
     // Validate message structure
     for (const msg of d.messages) {
-        if (!msg || typeof msg !== "object" || typeof msg.role !== "string") {
+        if (
+            !msg ||
+            typeof msg !== "object" ||
+            !("role" in msg) ||
+            typeof (msg as Record<string, unknown>).role !== "string"
+        ) {
             return null;
         }
     }

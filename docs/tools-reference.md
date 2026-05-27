@@ -252,8 +252,9 @@ The tool provides custom `renderCall` and `renderResult` implementations:
 - **`renderResult`**: Shows a live rolling window display with:
   - **Global status header**: `Sub-agents: 2 running, 1 done, 1 error`
   - **Per-agent windows**: Each with a condensed header: `{icon} {bold name} • {profile-name} ({provider}/{model} {thinking-level}) • {n} tools • [{completed}/{total}] • {elapsed}s/{timeout}s`. Tool calls are rendered in muted color. `ls` and `find` calls display condensed summaries instead of raw output:
-    - `ls → src/` (call) → `  2 files, 1 dir` (result); empty results show `  (empty)`
-    - `find → *.ts in src/` (call) → `  3 matches` (result); empty results show `  0 matches`
+    - `📂 ls → src/` (call) → `  2 files, 1 dir` (result); empty results show `  (empty)`
+    - `🔍 find → *.ts in src/` (call) → `  3 matches` (result); empty results show `  0 matches`
+    - Tool calls in the rolling window are prefixed with per-tool emojis (e.g., 📂 for `ls`, 🔍 for `find`/`grep`/`web_search`) instead of the previous `→` arrow.
     - Truncated results show a `+` suffix (e.g., `  500 files, 3 dirs+`)
       The todo segment `[completed/total]` only appears when todos are active and incomplete. Elapsed time updates live every second and freezes when the subagent completes.
   - **Expanded mode** (Ctrl+O): Shows all captured messages instead of just the latest N lines.

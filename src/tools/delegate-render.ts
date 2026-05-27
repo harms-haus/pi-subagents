@@ -81,9 +81,9 @@ function colorizeReadLineCount(line: string, theme: Theme): string | null {
   );
 }
 
-/** Pattern 3.5: Inline ls/find result summaries (→ ls → <path> → <summary>) */
+/** Pattern 3.5: Inline ls/find result summaries (📂 ls → <path> → <summary>) */
 function colorizeInlineResult(line: string, theme: Theme): string | null {
-  const m = line.match(/^(→ (?:ls|find) → .*? → )(\d+)(\s.*)$/);
+  const m = line.match(/^([^\s]+\s(?:ls|find) → .*? → )(\d+)(\s.*)$/);
   if (!m || m[1] === undefined || m[2] === undefined || m[3] === undefined) return null;
   const count = m[2];
   if (count === "0") return theme.fg("muted", line);

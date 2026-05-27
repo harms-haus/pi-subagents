@@ -14,6 +14,38 @@ const TRUNCATION_SUFFIX_LENGTH = 3;
 const BASH_PREFIX_WIDTH = 12;
 const BASH_CONT_PREFIX_WIDTH = 5;
 
+export const TOOL_EMOJI: Record<string, string> = {
+  grep: "🔍",
+  find: "🔍",
+  web_search: "🔍",
+  read: "📖",
+  edit: "✏️",
+  write: "📝",
+  ls: "📂",
+  bash: "💻",
+  delegate_to_subagents: "🤝",
+  get_subagent_output: "📋",
+  get_subagent_session: "📋",
+  list_subagent_profiles: "👥",
+  write_todos: "✅",
+  edit_todos: "✅",
+  list_todos: "✅",
+  lsp_diagnostics: "🏥",
+  lsp_find_references: "🔗",
+  lsp_goto_definition: "🔗",
+  lsp_find_symbol: "🔎",
+  lsp_call_hierarchy: "🔗",
+  lsp_refactor_symbol: "✏️",
+  fetch_content: "🌐",
+  fetch_repo: "📥",
+  lint_files: "🧹",
+  workflow_step: "▶️",
+};
+
+export function getToolEmoji(toolName: string): string {
+  return TOOL_EMOJI[toolName] ?? "🔧";
+}
+
 // ── Path Shortening ──────────────────────────────────────────────────────
 
 /**

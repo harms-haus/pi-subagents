@@ -705,7 +705,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes edit tool line with +N/-M diff stats", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "edit → src/file.ts (3 edits) +15/-8";
+      const toolLine = "✏️ edit → src/file.ts (3 edits) +15/-8";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -737,7 +737,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes write tool line with +N at end", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "write → src/file.ts +42";
+      const toolLine = "📝 write → src/file.ts +42";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -762,12 +762,12 @@ describe("delegate_to_subagents render functions", () => {
       // +42 should get toolDiffAdded color
       expect(fgCalls).toContainEqual(["toolDiffAdded", "+42"]);
       // The prefix should get muted color
-      expect(fgCalls).toContainEqual(["muted", "write → src/file.ts "]);
+      expect(fgCalls).toContainEqual(["muted", "📝 write → src/file.ts "]);
     });
 
     it("colorizes read tool line with (N lines) pattern", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "read → src/file.ts:10+50 (50 lines)";
+      const toolLine = "📖 read → src/file.ts:10+50 (50 lines)";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -792,7 +792,7 @@ describe("delegate_to_subagents render functions", () => {
       // The number 50 (line count) should get toolDiffAdded color
       expect(fgCalls).toContainEqual(["toolDiffAdded", "50"]);
       // The prefix should get muted color
-      expect(fgCalls).toContainEqual(["muted", "read → src/file.ts:10+50 "]);
+      expect(fgCalls).toContainEqual(["muted", "📖 read → src/file.ts:10+50 "]);
       // Opening paren should get muted
       expect(fgCalls).toContainEqual(["muted", "("]);
       // The suffix " lines)" should get muted
@@ -801,7 +801,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes default tool line entirely in muted", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "bash → npm test";
+      const toolLine = "💻 bash → npm test";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -824,7 +824,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // The entire line should be in a single muted call
-      expect(fgCalls).toContainEqual(["muted", "bash → npm test"]);
+      expect(fgCalls).toContainEqual(["muted", "💻 bash → npm test"]);
       // Should NOT use diff colors
       const colorNames = fgCalls.map((c: [string, string]) => c[0]);
       expect(colorNames).not.toContain("toolDiffAdded");
@@ -833,7 +833,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes grep tool line entirely in muted", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "grep → /TODO/ → *.ts";
+      const toolLine = "🔍 grep → /TODO/ → *.ts";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -856,7 +856,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // The entire line should be in a single muted call
-      expect(fgCalls).toContainEqual(["muted", "grep → /TODO/ → *.ts"]);
+      expect(fgCalls).toContainEqual(["muted", "🔍 grep → /TODO/ → *.ts"]);
       // Should NOT use diff colors
       const colorNames = fgCalls.map((c: [string, string]) => c[0]);
       expect(colorNames).not.toContain("toolDiffAdded");
@@ -865,7 +865,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("does not colorize fetch_content line ending with +N (false-positive bug fix)", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "fetch_content → https://site.com/api+1";
+      const toolLine = "🌐 fetch_content → https://site.com/api+1";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -888,7 +888,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // The entire line should be in a single muted call
-      expect(fgCalls).toContainEqual(["muted", "fetch_content → https://site.com/api+1"]);
+      expect(fgCalls).toContainEqual(["muted", "🌐 fetch_content → https://site.com/api+1"]);
       // Should NOT use diff colors (this is the bug fix - +N in URL should not be colorized)
       const colorNames = fgCalls.map((c: [string, string]) => c[0]);
       expect(colorNames).not.toContain("toolDiffAdded");
@@ -994,7 +994,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes combined inline ls result", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "→ ls → . → 2 files, 1 dir";
+      const toolLine = "📂 ls → . → 2 files, 1 dir";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -1017,7 +1017,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // Prefix (→ ls → . → ) should get muted color
-      expect(fgCalls).toContainEqual(["muted", "→ ls → . → "]);
+      expect(fgCalls).toContainEqual(["muted", "📂 ls → . → "]);
       // Count should get toolDiffAdded color
       expect(fgCalls).toContainEqual(["toolDiffAdded", "2"]);
       // Rest of the summary should get muted color
@@ -1026,7 +1026,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes combined inline find result", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "→ find → *.ts in src → 5 matches";
+      const toolLine = "🔍 find → *.ts in src → 5 matches";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -1049,7 +1049,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // Prefix (→ find → *.ts in src → ) should get muted color
-      expect(fgCalls).toContainEqual(["muted", "→ find → *.ts in src → "]);
+      expect(fgCalls).toContainEqual(["muted", "🔍 find → *.ts in src → "]);
       // Count should get toolDiffAdded color
       expect(fgCalls).toContainEqual(["toolDiffAdded", "5"]);
       // Rest of the summary should get muted color
@@ -1058,7 +1058,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes combined inline ls result with single file", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "→ ls → src → 1 file";
+      const toolLine = "📂 ls → src → 1 file";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -1081,7 +1081,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // Prefix should get muted color
-      expect(fgCalls).toContainEqual(["muted", "→ ls → src → "]);
+      expect(fgCalls).toContainEqual(["muted", "📂 ls → src → "]);
       // Count should get toolDiffAdded color
       expect(fgCalls).toContainEqual(["toolDiffAdded", "1"]);
       // Rest of the summary should get muted color
@@ -1090,7 +1090,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("combined inline empty result falls to default muted", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "→ ls → . → (empty)";
+      const toolLine = "📂 ls → . → (empty)";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -1113,7 +1113,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // The entire line should be in a single muted call (no count to colorize)
-      expect(fgCalls).toContainEqual(["muted", "→ ls → . → (empty)"]);
+      expect(fgCalls).toContainEqual(["muted", "📂 ls → . → (empty)"]);
       // Should NOT use toolDiffAdded since there's no numeric count
       const colorNames = fgCalls.map((c: [string, string]) => c[0]);
       expect(colorNames).not.toContain("toolDiffAdded");
@@ -1121,7 +1121,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("zero-count inline result falls through to full muted (not green)", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "→ find → *.xyz → 0 matches";
+      const toolLine = "🔍 find → *.xyz → 0 matches";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -1144,7 +1144,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // The entire line should be in a single muted call (zero = nothing found)
-      expect(fgCalls).toContainEqual(["muted", "→ find → *.xyz → 0 matches"]);
+      expect(fgCalls).toContainEqual(["muted", "🔍 find → *.xyz → 0 matches"]);
       // Should NOT use toolDiffAdded for zero count
       const colorNames = fgCalls.map((c: [string, string]) => c[0]);
       expect(colorNames).not.toContain("toolDiffAdded");
@@ -1152,7 +1152,7 @@ describe("delegate_to_subagents render functions", () => {
 
     it("colorizes combined inline with truncation indicator", () => {
       const markerTheme = makeMarkerTheme();
-      const toolLine = "→ ls → src → 15 files, 3 dirs+";
+      const toolLine = "📂 ls → src → 15 files, 3 dirs+";
       const details = makeDetails({
         windows: [
           makeWindow({
@@ -1175,7 +1175,7 @@ describe("delegate_to_subagents render functions", () => {
       const fgCalls = vi.mocked(markerTheme.fg).mock.calls;
 
       // Prefix should get muted color
-      expect(fgCalls).toContainEqual(["muted", "→ ls → src → "]);
+      expect(fgCalls).toContainEqual(["muted", "📂 ls → src → "]);
       // Count should get toolDiffAdded color
       expect(fgCalls).toContainEqual(["toolDiffAdded", "15"]);
       // Rest of the summary including truncation indicator should get muted color

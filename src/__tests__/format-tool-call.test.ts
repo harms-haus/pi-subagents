@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { formatToolCall, formatToolResult, formatToolResultInline } from "../format-tool-call";
+import { formatToolCall, formatToolResult, formatToolResultInline, getToolEmoji, TOOL_EMOJI } from "../format-tool-call";
 
 const cwd = "/home/user/projects/my-app";
 
@@ -690,5 +690,30 @@ describe("formatToolResultInline", () => {
     it("returns null for bash", () => {
       expect(formatToolResultInline("bash", "command output")).toBeNull();
     });
+  });
+});
+
+describe("getToolEmoji", () => {
+  it("returns correct emoji for each tool in TOOL_EMOJI map", () => {
+    for (const [toolName, expectedEmoji] of Object.entries(TOOL_EMOJI)) {
+      expect(getToolEmoji(toolName)).toBe(expectedEmoji);
+    }
+  });
+
+  it("returns 🔧 for unknown tool", () => {
+    expect(getToolEmoji("nonexistent_tool_xyz")).toBe("🔧");
+  });
+
+  it("returns 🔧 for empty string", () => {
+    expect(getToolEmoji("")).toBe("🔧");
+  });
+
+  it("TOOL_EMOJI has exactly 25 entries", () => {
+    expect(Object.keys(TOOL_EMOJI).length).toBe(25);
+  });
+
+  it("find and web_search share the same emoji (🔍)", () => {
+    expect(getToolEmoji("find")).toBe("🔍");
+    expect(getToolEmoji("web_search")).toBe("🔍");
   });
 });

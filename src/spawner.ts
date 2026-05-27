@@ -7,7 +7,7 @@
 
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { formatToolCall, formatToolResultInline } from "./format-tool-call";
+import { formatToolCall, formatToolResultInline, getToolEmoji } from "./format-tool-call";
 import { profileToArgs } from "./profiles";
 import { loadCommandPreviewWidth } from "./settings";
 import { MAX_MESSAGES_PER_SESSION, syncState } from "./types";
@@ -130,11 +130,11 @@ function inlineToolResultSummary(
     return;
   }
 
-  const marker = `→ ${result.toolName} →`;
+  const marker = `${result.toolName} →`;
   // Find the first unused tool line matching this tool name
   // that has NOT already received an inline result from a previous turn.
-  // A bare tool call line ("→ ls → src") has no " → " after the path,
-  // while an already-inlined line ("→ ls → src → 2 files") does.
+  // A bare tool call line ("📂 ls → src") has no " → " after the path,
+  // while an already-inlined line ("📂 ls → src → 2 files") does.
   for (let i = 0; i < ctx.win.lines.length; i++) {
     const line = ctx.win.lines[i];
     if (!line) continue;
@@ -208,7 +208,8 @@ function processToolCall(part: ToolCallPart, ctx: LineContext): void {
   const toolArgs = part.arguments || {};
   const toolName = part.name;
   const preview = formatToolCall(toolName, toolArgs, ctx.cwd, ctx.widthBudget);
-  appendLineToWindow(ctx.win, `→ ${preview}`, ctx.maxLines, "tool");
+  const emoji = getToolEmoji(toolName);
+  appendLineToWindow(ctx.win, `${emoji} ${preview}`, ctx.maxLines, "tool");
 
   trackTodoProgress(toolName, toolArgs, ctx.win);
   trackToolCallForLoop(toolName, toolArgs, ctx.win, ctx.loopingToolCount);

@@ -139,7 +139,7 @@ describe("spawner-tool-display", () => {
       emitToolCall(mockProcess, "bash", { command: "cd /home/user/projects/my-app && npm test" });
 
       const toolLine = findToolLine(mockWindow.lines, "bash");
-      expect(toolLine.text).toBe("→ bash → npm test");
+      expect(toolLine.text).toBe("💻 bash → npm test");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -162,7 +162,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "edit");
-      expect(toolLine.text).toBe("→ edit → src/utils.ts (1 edit) +1/-1");
+      expect(toolLine.text).toBe("✏️ edit → src/utils.ts (1 edit) +1/-1");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -186,7 +186,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "read");
-      expect(toolLine.text).toBe("→ read → src/index.ts:10+20 (20 lines)");
+      expect(toolLine.text).toBe("📖 read → src/index.ts:10+20 (20 lines)");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -209,7 +209,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "write");
-      expect(toolLine.text).toBe("→ write → src/new-file.ts +1");
+      expect(toolLine.text).toBe("📝 write → src/new-file.ts +1");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -231,7 +231,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "lsp_diagnostics");
-      expect(toolLine.text).toBe("→ lsp_diagnostics → src/app.tsx");
+      expect(toolLine.text).toBe("🏥 lsp_diagnostics → src/app.tsx");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -253,7 +253,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "lint");
-      expect(toolLine.text).toBe("→ lint → src/a.ts, src/b.ts");
+      expect(toolLine.text).toBe("🧹 lint → src/a.ts, src/b.ts");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -273,7 +273,7 @@ describe("spawner-tool-display", () => {
       emitToolCall(mockProcess, "grep", { pattern: "TODO" });
 
       const toolLine = findToolLine(mockWindow.lines, "grep");
-      expect(toolLine.text).toBe("→ grep → /TODO/");
+      expect(toolLine.text).toBe("🔍 grep → /TODO/");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -296,7 +296,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "grep");
-      expect(toolLine.text).toBe("→ grep → /TODO/ → src");
+      expect(toolLine.text).toBe("🔍 grep → /TODO/ → src");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -319,7 +319,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "grep");
-      expect(toolLine.text).toBe("→ grep → /TODO/ → *.ts");
+      expect(toolLine.text).toBe("🔍 grep → /TODO/ → *.ts");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -343,7 +343,7 @@ describe("spawner-tool-display", () => {
       });
 
       const toolLine = findToolLine(mockWindow.lines, "grep");
-      expect(toolLine.text).toBe("→ grep → /TODO/ → *.ts");
+      expect(toolLine.text).toBe("🔍 grep → /TODO/ → *.ts");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -475,7 +475,7 @@ describe("spawner-tool-display", () => {
 
       const bashLines = findToolLines(mockWindow.lines, "bash");
       expect(bashLines.length).toBe(1);
-      expect(bashLines[0]!.text).toBe("→ bash → npm test && npm run lint");
+      expect(bashLines[0]!.text).toBe("💻 bash → npm test && npm run lint");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -498,7 +498,7 @@ describe("spawner-tool-display", () => {
 
       emitToolCall(mockProcess, "my_tool", {});
       const toolLine = findToolLine(mockWindow.lines, "my_tool");
-      expect(toolLine.text).toBe("\u2192 my_tool");
+      expect(toolLine.text).toBe("🔧 my_tool");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -627,7 +627,7 @@ describe("spawner-tool-display", () => {
 
       emitToolCall(mockProcess, "list_todos", {});
       const listLine = findToolLine(mockWindow.lines, "list_todos");
-      expect(listLine.text).toBe("\u2192 list_todos");
+      expect(listLine.text).toBe("✅ list_todos");
 
       mockProcess.emit("close", 0);
       await promise;

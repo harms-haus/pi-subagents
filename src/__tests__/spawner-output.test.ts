@@ -244,7 +244,7 @@ describe("spawner-output", () => {
 
       // The ls tool line should now have the inline summary appended
       const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
-      expect(lsLine?.text).toBe("→ ls → . → 2 files, 1 dir");
+      expect(lsLine?.text).toBe("📂 ls → . → 2 files, 1 dir");
       expect(lsLine?.kind).toBe("tool");
 
       // No separate summary line should have been added
@@ -278,7 +278,7 @@ describe("spawner-output", () => {
       ]);
 
       const findLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("find →"));
-      expect(findLine?.text).toBe("→ find → *.ts → 3 matches");
+      expect(findLine?.text).toBe("🔍 find → *.ts → 3 matches");
       expect(findLine?.kind).toBe("tool");
 
       mockProcess.emit("close", 0);
@@ -372,8 +372,8 @@ describe("spawner-output", () => {
       const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
       const findLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("find →"));
 
-      expect(lsLine?.text).toBe("→ ls → . → 3 files");
-      expect(findLine?.text).toBe("→ find → *.ts → 2 matches");
+      expect(lsLine?.text).toBe("📂 ls → . → 3 files");
+      expect(findLine?.text).toBe("🔍 find → *.ts → 2 matches");
 
       // No separate summary lines
       const summaryLines = mockWindow.lines.filter(
@@ -417,8 +417,8 @@ describe("spawner-output", () => {
       // Each ls tool line should have its own inline summary
       const lsLines = mockWindow.lines.filter((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(lsLines).toHaveLength(2);
-      expect(lsLines[0]!.text).toBe("→ ls → src → 2 files");
-      expect(lsLines[1]!.text).toBe("→ ls → test → 3 files");
+      expect(lsLines[0]!.text).toBe("📂 ls → src → 2 files");
+      expect(lsLines[1]!.text).toBe("📂 ls → test → 3 files");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -478,7 +478,7 @@ describe("spawner-output", () => {
       const lsAllMsg = mockWindow.allMessages.find(
         (l) => l.kind === "tool" && l.text.includes("ls →"),
       );
-      expect(lsAllMsg?.text).toBe("→ ls → src → 2 files");
+      expect(lsAllMsg?.text).toBe("📂 ls → src → 2 files");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -486,8 +486,8 @@ describe("spawner-output", () => {
 
     it("should not misattribute result to already-inlined line from previous turn", async () => {
       // Regression test for cross-turn misattribution bug:
-      // Turn A: tool call `→ ls → src/` → result inlines to `→ ls → src/ → 2 files, 1 dir`
-      // Turn B: tool call `→ ls → tests/` → result scan should NOT match Turn A's inlined line
+      // Turn A: tool call `📂 ls → src/` → result inlines to `📂 ls → src/ → 2 files, 1 dir`
+      // Turn B: tool call `📂 ls → tests/` → result scan should NOT match Turn A's inlined line
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt", cwd: CWD },
         win: mockWindow,
@@ -510,7 +510,7 @@ describe("spawner-output", () => {
 
       // Verify Turn A result is inlined correctly
       const turnALine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
-      expect(turnALine?.text).toBe("→ ls → src → 2 files, 1 dir");
+      expect(turnALine?.text).toBe("📂 ls → src → 2 files, 1 dir");
 
       // --- Turn B ---
       emitToolCall(mockProcess, "ls", { path: "tests" });
@@ -525,8 +525,8 @@ describe("spawner-output", () => {
       // Turn A's line should NOT have been modified by Turn B's result
       const lsLines = mockWindow.lines.filter((l) => l.kind === "tool" && l.text.includes("ls →"));
       expect(lsLines).toHaveLength(2);
-      expect(lsLines[0]!.text).toBe("→ ls → src → 2 files, 1 dir");
-      expect(lsLines[1]!.text).toBe("→ ls → tests → 3 files");
+      expect(lsLines[0]!.text).toBe("📂 ls → src → 2 files, 1 dir");
+      expect(lsLines[1]!.text).toBe("📂 ls → tests → 3 files");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -595,7 +595,7 @@ describe("spawner-output", () => {
 
       // No inline summary should be appended (no text content)
       const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
-      expect(lsLine?.text).toBe("→ ls → .");
+      expect(lsLine?.text).toBe("📂 ls → .");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -628,7 +628,7 @@ describe("spawner-output", () => {
 
       // No inline summary should be appended (empty text)
       const lsLine = mockWindow.lines.find((l) => l.kind === "tool" && l.text.includes("ls →"));
-      expect(lsLine?.text).toBe("→ ls → .");
+      expect(lsLine?.text).toBe("📂 ls → .");
 
       mockProcess.emit("close", 0);
       await promise;

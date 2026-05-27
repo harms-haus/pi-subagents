@@ -331,7 +331,9 @@ Each window header includes the agent name, profile info (if any), and a status 
 
 ### 6.4 `formatToolCall()` One-Line Previews
 
-Tool calls in the rolling window are rendered as concise one-liners by `formatToolCall()` in `format-tool-call.ts`. Key patterns:
+Tool calls in the rolling window are rendered as concise one-liners by `formatToolCall()` in `format-tool-call.ts`. Each line is prefixed with a per-tool emoji via `getToolEmoji()` (also in `format-tool-call.ts`) — the `TOOL_EMOJI` map assigns one of 25 tool names a purpose-specific emoji, and unknown tools receive the 🔧 fallback. Tools that share a purpose share the same emoji (e.g., `grep`, `find`, and `web_search` all use 🔍). The final display in the rolling window is `emoji + " " + formatToolCall() output` (see `spawner.ts`). The table below describes the `formatToolCall()` portion only — the internal format without the emoji prefix.
+
+Key patterns:
 
 | Tool                         | Format                                                                                                                 |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |

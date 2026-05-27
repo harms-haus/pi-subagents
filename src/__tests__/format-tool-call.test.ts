@@ -3,7 +3,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { formatToolCall, formatToolResult, formatToolResultInline, getToolEmoji, TOOL_EMOJI } from "../format-tool-call";
+import {
+  formatToolCall,
+  formatToolResult,
+  formatToolResultInline,
+  getToolEmoji,
+  TOOL_EMOJI,
+} from "../format-tool-call";
 
 const cwd = "/home/user/projects/my-app";
 

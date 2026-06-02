@@ -43,7 +43,8 @@ export function shortenPath(absolutePath: string, cwd: string): string {
 }
 
 /** Pattern for matching absolute paths (at least 2 segments, starting with /) */
-export const ABSOLUTE_PATH_PATTERN = "(?:^|[^:\\w/\\\\])((?:\\/[a-zA-Z0-9._-]+){2,}|[A-Za-z]:[\\\\/][a-zA-Z0-9._ -]+(?:[\\\\/][a-zA-Z0-9._ -]+)+)";
+export const ABSOLUTE_PATH_PATTERN =
+  "(?:^|[^:\\w/\\\\])((?:\\/[a-zA-Z0-9._-]+){2,}|[A-Za-z]:[\\\\/][a-zA-Z0-9._ -]+(?:[\\\\/][a-zA-Z0-9._ -]+)+)";
 
 /**
  * Finds absolute paths in arbitrary text and shortens them.

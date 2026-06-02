@@ -900,7 +900,6 @@ describe("formatBashCommand with ; separator", () => {
 //
 // Note: afterEach, beforeEach, and vi are imported at the top of this file.
 
-
 describe("shortenPath with mocked Windows HOME", () => {
   beforeEach(() => {
     vi.resetModules();

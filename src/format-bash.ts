@@ -69,7 +69,7 @@ function flushTruncatedSegment(
 }
 
 function getSep(separators: string[], index: number, fallback: string): string {
-  return index >= 0 && index < separators.length ? separators[index] ?? fallback : fallback;
+  return index >= 0 && index < separators.length ? (separators[index] ?? fallback) : fallback;
 }
 
 function appendSegmentToLine(
@@ -131,8 +131,17 @@ function formatBashSegments(
     const isLast = i === segments.length - 1;
 
     const result = appendSegmentToLine(
-      seg, i, isLast, isFirstLine, currentLine.length > 0, currentLine,
-      separators, firstLineBudget, contLineBudget, contPrefix, lines,
+      seg,
+      i,
+      isLast,
+      isFirstLine,
+      currentLine.length > 0,
+      currentLine,
+      separators,
+      firstLineBudget,
+      contLineBudget,
+      contPrefix,
+      lines,
     );
     currentLine = result.currentLine;
     isFirstLine = result.isFirstLine;

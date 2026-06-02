@@ -15,7 +15,12 @@ import {
 
 // ── Re-exports for backward compatibility ────────────────────────────
 export { shortenPath, shortenPathsInText } from "./format-path";
-export { BASH_CONT_PREFIX_WIDTH, BASH_PREFIX_WIDTH, collapseCdDot, formatBashCommand } from "./format-bash";
+export {
+  BASH_CONT_PREFIX_WIDTH,
+  BASH_PREFIX_WIDTH,
+  collapseCdDot,
+  formatBashCommand,
+} from "./format-bash";
 
 export const TOOL_EMOJI: Record<string, string> = {
   grep: "🔍",

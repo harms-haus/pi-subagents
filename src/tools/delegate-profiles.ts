@@ -17,7 +17,11 @@ import {
 } from "../profiles";
 import { resolvePackageSkillPaths } from "../skill-discovery";
 import type { SubagentProfile } from "../profile-types";
-import type { ProfileResolutionResult, ResolvedProfileEntry, StaticDelegateParams } from "./delegate-types";
+import type {
+  ProfileResolutionResult,
+  ResolvedProfileEntry,
+  StaticDelegateParams,
+} from "./delegate-types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 // ── Profile Resolution ────────────────────────────────────────────────

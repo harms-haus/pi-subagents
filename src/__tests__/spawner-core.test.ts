@@ -149,8 +149,10 @@ describe("spawner-core", () => {
       expect(spawn).toHaveBeenCalled();
       const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
       expect(isAbsolute(spawnOptions.cwd as string)).toBe(true);
-      expect((spawnOptions.cwd as string).endsWith(`absolute${sep}path`) ||
-        (spawnOptions.cwd as string).endsWith('/absolute/path')).toBe(true);
+      expect(
+        (spawnOptions.cwd as string).endsWith(`absolute${sep}path`) ||
+          (spawnOptions.cwd as string).endsWith("/absolute/path"),
+      ).toBe(true);
 
       mockProcess.emit("close", 0);
       await promise;
@@ -173,7 +175,7 @@ describe("spawner-core", () => {
       const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
       // The path is normalized by resolve()
       expect(isAbsolute(spawnOptions.cwd as string)).toBe(true);
-      expect((spawnOptions.cwd as string).endsWith('unsafe')).toBe(true);
+      expect((spawnOptions.cwd as string).endsWith("unsafe")).toBe(true);
 
       mockProcess.emit("close", 0);
       await promise;

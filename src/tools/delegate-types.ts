@@ -6,12 +6,7 @@
  */
 
 import type { SubagentProfile } from "../profile-types";
-import type {
-  SessionRecord,
-  SubAgentTask,
-  SubAgentWindow,
-  SubagentSessionData,
-} from "../types";
+import type { SessionRecord, SubAgentTask, SubAgentWindow, SubagentSessionData } from "../types";
 
 // ── Parameter Types ───────────────────────────────────────────────────
 

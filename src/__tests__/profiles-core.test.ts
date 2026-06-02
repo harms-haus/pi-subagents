@@ -279,8 +279,6 @@ describe("formatProfileDetail", () => {
   });
 });
 
-
-
 describe("validateProfileTools", () => {
   it("should not throw when only tools is set", () => {
     const profile: SubagentProfile = { tools: ["read", "bash"] };

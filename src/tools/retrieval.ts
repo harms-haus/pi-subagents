@@ -231,6 +231,7 @@ function registerListSubagentProfiles(pi: ExtensionAPI): void {
       "one for delegate_to_subagents.",
     ],
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     async execute(
       _toolCallId: string,
       _params: Record<string, unknown>,

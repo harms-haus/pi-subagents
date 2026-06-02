@@ -1,6 +1,6 @@
 /**
  * Tests for src/profiles.ts — Core profile functionality:
- * resolveProfile, profileSummary, formatProfileDetail, getProfilesDir,
+ * resolveProfile, profileSummary, formatProfileDetail,
  * validateProfileTools, applyExcludeTools, validateProfileSkills,
  * resolveProfileSkills, loadProfilesFromDir parsing, loadProfiles cache,
  * loadProfiles project-local profiles, apiKey security,
@@ -12,7 +12,6 @@ import type { SubagentProfile } from "../profiles";
 import {
   applyExcludeTools,
   formatProfileDetail,
-  getProfilesDir,
   invalidateProfilesCache,
   loadProfiles,
   profileSummary,
@@ -280,24 +279,7 @@ describe("formatProfileDetail", () => {
   });
 });
 
-describe("getProfilesDir", () => {
-  it("should return global agent-profiles dir when scope is 'global'", () => {
-    const result = getProfilesDir("global");
-    expect(result).toMatch(/\.pi\/agent\/agent-profiles$/);
-  });
 
-  it("should return project agent-profiles dir when scope is 'project'", () => {
-    const cwd = "/my/project";
-    const result = getProfilesDir("project", cwd);
-    expect(result).toBe("/my/project/.pi/agent-profiles");
-  });
-
-  it("should use process.cwd() when scope is 'project' and cwd is not provided", () => {
-    const originalCwd = process.cwd();
-    const result = getProfilesDir("project");
-    expect(result).toBe(`${originalCwd}/.pi/agent-profiles`);
-  });
-});
 
 describe("validateProfileTools", () => {
   it("should not throw when only tools is set", () => {

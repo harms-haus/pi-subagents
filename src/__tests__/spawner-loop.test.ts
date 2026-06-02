@@ -46,7 +46,13 @@ vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
+// Mock tree-kill (used by spawner for process termination)
+vi.mock("tree-kill", () => ({
+  default: vi.fn(),
+}));
+
 import { spawn } from "node:child_process";
+import kill from "tree-kill";
 
 describe("spawner-loop", () => {
   let mockProcess: ReturnType<typeof createMockProcess>;
@@ -356,7 +362,7 @@ describe("spawner-loop", () => {
       emitToolCall(mockProcess, "read", { path: "/same/file.ts" });
       emitToolCall(mockProcess, "read", { path: "/same/file.ts" });
 
-      expect(mockProcess.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(kill).toHaveBeenCalledWith(mockProcess.pid, "SIGTERM");
 
       mockProcess.emit("close", 0);
       const result = await promise;

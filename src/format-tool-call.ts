@@ -1,18 +1,21 @@
 /**
- * Tool Call Formatting & Path/Bash Utilities
+ * Tool Call Formatting
  *
- * Functions for formatting tool call previews and shortening paths/collapsing
- * cd commands in sub-agent output.
+ * Functions for formatting tool call previews and result summaries.
+ * Path shortening and bash command formatting live in their own modules.
  */
 
-import { homedir } from "node:os";
-import { relative } from "node:path";
+import { shortenPath, shortenPathsInText } from "./format-path";
+import {
+  BASH_CONT_PREFIX_WIDTH,
+  BASH_PREFIX_WIDTH,
+  collapseCdDot,
+  formatBashCommand,
+} from "./format-bash";
 
-const HOME = homedir();
-
-const TRUNCATION_SUFFIX_LENGTH = 3;
-const BASH_PREFIX_WIDTH = 12;
-const BASH_CONT_PREFIX_WIDTH = 5;
+// ── Re-exports for backward compatibility ────────────────────────────
+export { shortenPath, shortenPathsInText } from "./format-path";
+export { BASH_CONT_PREFIX_WIDTH, BASH_PREFIX_WIDTH, collapseCdDot, formatBashCommand } from "./format-bash";
 
 export const TOOL_EMOJI: Record<string, string> = {
   grep: "🔍",
@@ -44,229 +47,6 @@ export const TOOL_EMOJI: Record<string, string> = {
 
 export function getToolEmoji(toolName: string): string {
   return TOOL_EMOJI[toolName] ?? "🔧";
-}
-
-// ── Path Shortening ──────────────────────────────────────────────────────
-
-/**
- * Shortens a single absolute file path relative to the given cwd.
- * - Replaces home directory prefix with `~`
- * - Uses relative path from cwd if shorter
- */
-export function shortenPath(absolutePath: string, cwd: string): string {
-  if (absolutePath === cwd) {
-    return ".";
-  }
-
-  let displayPath = absolutePath;
-  if (absolutePath.startsWith(`${HOME}/`)) {
-    displayPath = `~${absolutePath.slice(HOME.length)}`;
-  }
-
-  const rel = relative(cwd, absolutePath);
-
-  if (rel !== "" && rel !== "." && rel.length < displayPath.length) {
-    // For ascending paths (..), only use if significantly shorter to avoid confusing output
-    if (rel.startsWith("..")) {
-      const savings = displayPath.length - rel.length;
-      if (savings < 10) {
-        return displayPath;
-      }
-    }
-    return rel;
-  }
-
-  return displayPath;
-}
-
-/** Regex to match candidate absolute paths (at least 2 segments, starting with /) */
-const ABSOLUTE_PATH_REGEX = /(?:^|[^:\w/])((?:\/[a-zA-Z0-9._-]+){2,})/g;
-
-/**
- * Finds absolute paths in arbitrary text and shortens them.
- * Excludes URLs (preceded by `://`).
- */
-export function shortenPathsInText(text: string, cwd: string): string {
-  const matches: Array<{ match: string; index: number }> = [];
-  ABSOLUTE_PATH_REGEX.lastIndex = 0;
-  let m: RegExpExecArray | null = ABSOLUTE_PATH_REGEX.exec(text);
-  while (m !== null) {
-    if (m[1]) {
-      matches.push({ match: m[1], index: m.index + (m[0].length - m[1].length) });
-    }
-    m = ABSOLUTE_PATH_REGEX.exec(text);
-  }
-
-  if (matches.length === 0) {
-    return text;
-  }
-
-  // Build result by replacing each match
-  let result = "";
-  let lastEnd = 0;
-
-  for (const { match, index } of matches) {
-    result += text.slice(lastEnd, index);
-    result += shortenPath(match, cwd);
-    lastEnd = index + match.length;
-  }
-  result += text.slice(lastEnd);
-  return result;
-}
-
-/**
- * Handles the common pattern where the cwd appears in cd commands.
- * - `cd <cwd> && ...` → strips the `cd <cwd> &&` prefix
- * - `cd <cwd>` exactly → returns `.`
- * - `cd <cwd> &&` with nothing after → returns empty string
- */
-let _cdCwd = "";
-let _cdPattern: RegExp | null = null;
-
-function getCdPattern(cwd: string): RegExp {
-  if (cwd !== _cdCwd) {
-    _cdCwd = cwd;
-    const escapedCwd = cwd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    _cdPattern = new RegExp(`^cd\\s+${escapedCwd}(\\s+&&\\s*(.*))?$`);
-  }
-  return _cdPattern as RegExp;
-}
-
-export function collapseCdDot(command: string, cwd: string): string {
-  const match = command.match(getCdPattern(cwd));
-
-  if (!match) {
-    return command;
-  }
-
-  if (!command.includes("&&")) {
-    // Exact match: `cd <cwd>` with nothing after → return "."
-    return ".";
-  }
-
-  // Has `&&` part — match[2] is the text after `&&\s*`, which may be empty
-  const after = match[2];
-  if (!after || after.trim() === "") {
-    // `cd <cwd> &&` with nothing after → return empty string
-    return "";
-  }
-
-  // `cd <cwd> && ...` → strip prefix, return the rest
-  return after.trimStart();
-}
-
-// ── Bash Command Formatting ────────────────────────────────────────
-
-function flushTruncatedSegment(
-  seg: string,
-  budget: number,
-  isLast: boolean,
-  isFirstLine: boolean,
-  lines: string[],
-  contPrefix: string,
-): { isFirstLine: boolean } {
-  const truncated = `${seg.slice(0, budget - TRUNCATION_SUFFIX_LENGTH)}...`;
-  const prefix = isFirstLine ? "" : contPrefix;
-  const suffix = isLast ? "" : " &&";
-  lines.push(`${prefix}${truncated}${suffix}`);
-  return { isFirstLine: false };
-}
-
-function formatBashSegments(
-  segments: string[],
-  firstLineBudget: number,
-  contLineBudget: number,
-  contPrefix: string,
-  separator: string,
-): string {
-  const lines: string[] = [];
-  let currentLine = "";
-  let isFirstLine = true;
-
-  for (let i = 0; i < segments.length; i++) {
-    const budget = isFirstLine && currentLine.length === 0 ? firstLineBudget : contLineBudget;
-    const seg = segments[i];
-    if (!seg) continue;
-    const isLast = i === segments.length - 1;
-
-    if (currentLine.length === 0) {
-      if (seg.length <= budget) {
-        currentLine = `${isFirstLine ? "" : contPrefix}${seg}`;
-      } else {
-        const result = flushTruncatedSegment(seg, budget, isLast, isFirstLine, lines, contPrefix);
-        isFirstLine = result.isFirstLine;
-        currentLine = "";
-      }
-    } else {
-      const withSeg = `${currentLine} && ${seg}`;
-      if (withSeg.length <= budget) {
-        currentLine = withSeg;
-      } else {
-        lines.push(`${currentLine}${separator}`);
-        isFirstLine = false;
-
-        if (seg.length <= contLineBudget) {
-          currentLine = `${contPrefix}${seg}`;
-        } else {
-          const result = flushTruncatedSegment(
-            seg,
-            contLineBudget,
-            isLast,
-            false,
-            lines,
-            contPrefix,
-          );
-          isFirstLine = result.isFirstLine;
-          currentLine = "";
-        }
-      }
-    }
-  }
-
-  if (currentLine.length > 0) {
-    lines.push(currentLine);
-  }
-
-  return lines.join("\n");
-}
-
-/**
- * Format a bash command with smart && splitting for display.
- *
- * Splits on ` && ` boundaries, greedily fits segments into the width budget.
- * When the next segment won't fit in the remaining width, starts a new line.
- * When a single segment is too long, truncates with `...`.
- * Continuation lines are prefixed with `│ ` for visual grouping.
- *
- * @param cmd - The bash command string (already collapsed/stripped of cd prefix)
- * @param firstLineBudget - Maximum characters for the first line of command content
- * @param contBudget - Maximum characters for continuation lines (command text only,
- *   excluding the `│ ` prefix). Defaults to `firstLineBudget`.
- * @returns Formatted multi-line string (continuation lines include `│ ` prefix)
- */
-export function formatBashCommand(
-  cmd: string,
-  firstLineBudget: number,
-  contBudget?: number,
-): string {
-  const contLineBudget = contBudget ?? firstLineBudget;
-
-  if (cmd.length <= firstLineBudget) {
-    return cmd;
-  }
-
-  // Split on " && " boundaries
-  const segments = cmd.split(" && ");
-
-  if (segments.length === 1) {
-    // Single segment, just truncate
-    return `${cmd.slice(0, firstLineBudget - TRUNCATION_SUFFIX_LENGTH)}...`;
-  }
-
-  const separator = " &&"; // goes at end of line when wrapping
-  const contPrefix = "\u2502 "; // \u2502 = │ prefix for continuation lines
-
-  return formatBashSegments(segments, firstLineBudget, contLineBudget, contPrefix, separator);
 }
 
 // ── Tool Call Formatting ────────────────────────────────────────────
@@ -315,8 +95,11 @@ function countDirsInOutput(text: string): number {
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
     if (i === text.length || text.charCodeAt(i) === 10) {
-      if (i > lineStart && text.charCodeAt(lineStart) !== 91 && text.charCodeAt(i - 1) === 47) {
-        dirs++;
+      if (i > lineStart && text.charCodeAt(lineStart) !== 91) {
+        const ch = text.charCodeAt(i - 1);
+        if (ch === 47 || ch === 92) {
+          dirs++;
+        }
       }
       lineStart = i + 1;
     }

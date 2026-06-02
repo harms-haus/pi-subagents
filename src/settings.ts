@@ -10,8 +10,8 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAgentDir } from "./constants";
 
 // ── Settings Types ───────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ export interface SettingsFile {
 // ── Settings File Paths ──────────────────────────────────────────────
 
 export function getGlobalSettingsPath(): string {
-  const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  const agentDir = getAgentDir();
   return join(agentDir, "settings.json");
 }
 

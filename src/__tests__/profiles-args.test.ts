@@ -125,6 +125,24 @@ describe("profileToArgs", () => {
     expect(() => profileToArgs(profile)).toThrow("Refusing extraArg: potentially unsafe argument");
   });
 
+  it("should throw error when extraArgs contains Windows cmd.exe escape character (^)", () => {
+    const profile: SubagentProfile = { extraArgs: ["^escape"] };
+
+    expect(() => profileToArgs(profile)).toThrow("Refusing extraArg: potentially unsafe argument");
+  });
+
+  it("should throw error when extraArgs contains Windows cmd.exe environment variable expansion (%PATH%)", () => {
+    const profile: SubagentProfile = { extraArgs: ["%PATH%"] };
+
+    expect(() => profileToArgs(profile)).toThrow("Refusing extraArg: potentially unsafe argument");
+  });
+
+  it("should throw error when extraArgs contains carriage return", () => {
+    const profile: SubagentProfile = { extraArgs: ["arg\rcommand"] };
+
+    expect(() => profileToArgs(profile)).toThrow("Refusing extraArg: potentially unsafe argument");
+  });
+
   it("should return empty args and env for empty profile", () => {
     const profile: SubagentProfile = {};
     const result = profileToArgs(profile);

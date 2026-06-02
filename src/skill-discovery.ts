@@ -1,7 +1,6 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { TtlCache } from "./cache";
+import { getAgentDir } from "./constants";
 
 const skillCache = new TtlCache<string[]>(5000);
 
@@ -15,7 +14,7 @@ export async function resolvePackageSkillPaths(cwd: string, agentDir?: string): 
     return cached;
   }
 
-  const resolvedAgentDir = agentDir ?? join(homedir(), ".pi", "agent");
+  const resolvedAgentDir = agentDir ?? getAgentDir();
   const settingsManager = SettingsManager.create(cwd, resolvedAgentDir);
   const packageManager = new DefaultPackageManager({
     cwd,

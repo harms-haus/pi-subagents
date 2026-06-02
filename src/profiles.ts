@@ -24,13 +24,14 @@
 
 import { type Dirent, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+
 import { join, resolve, sep } from "node:path";
 import {
   parseFrontmatter,
   stripFrontmatter,
   loadSkills as discoverSkills,
 } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "./constants";
 import { resolvePackageSkillPaths } from "./skill-discovery";
 export { profileSummary, formatProfileDetail } from "./profile-formatting";
 import { TtlCache } from "./cache";
@@ -77,7 +78,7 @@ function parseStringOrArray(value: unknown): string[] | undefined {
 // ── Profile Directory Paths ──────────────────────────────────────────
 
 function getGlobalProfilesDir(): string {
-  const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  const agentDir = getAgentDir();
   return join(agentDir, "agent-profiles");
 }
 
@@ -87,7 +88,7 @@ function getProjectProfilesDir(cwd: string): string {
 
 export type ProfileScope = "global" | "project";
 
-export function getProfilesDir(scope: ProfileScope, cwd?: string): string {
+function getProfilesDir(scope: ProfileScope, cwd?: string): string {
   return scope === "project" ? getProjectProfilesDir(cwd ?? process.cwd()) : getGlobalProfilesDir();
 }
 
@@ -208,7 +209,7 @@ export async function resolveProfileSkills(
   if (skillMap) {
     result = { skills: [...skillMap.values()] };
   } else {
-    const agentDir = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+    const agentDir = getAgentDir();
     const packageSkillPaths = await resolvePackageSkillPaths(cwd, agentDir);
     result = discoverSkills({
       cwd,
@@ -497,7 +498,7 @@ function pushExtraArgs(args: string[], profile: SubagentProfile): void {
     if (arg.includes("\0")) {
       throw new Error("Invalid extraArg: contains null byte");
     }
-    if (/^[\s|&;$\\`!]|&&|\|\||;|>|>>|<|<</.test(arg)) {
+    if (/^[\s|&;$\\`!%^]|&&|\|\||;|>|>>|<|<<|\r|%/.test(arg)) {
       throw new Error(`Refusing extraArg: potentially unsafe argument '${arg.slice(0, 40)}'`);
     }
   }
@@ -558,6 +559,9 @@ export async function saveProfile(
  * Delete a profile markdown file from the given scope.
  * Returns true if the profile existed and was deleted.
  */
+// Retained for internal use, see `getGlobalProfilesDir` and `getProjectProfilesDir`
+void getProfilesDir;
+
 export async function deleteProfile(
   name: string,
   scope: ProfileScope,

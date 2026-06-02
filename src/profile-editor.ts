@@ -35,7 +35,7 @@ async function promptScope(
   name: string,
 ): Promise<ProfileScope | typeof CANCELLED> {
   const scope = await ui.select("Save to which scope?", [
-    `Global (~/.pi/agent-profiles/${name}.md)`,
+    `Global (~/.pi/agent/agent-profiles/${name}.md)`,
     `Project (.pi/agent-profiles/${name}.md)`,
   ]);
   if (!scope) return CANCELLED;

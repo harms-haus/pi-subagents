@@ -8,30 +8,41 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 
 ## 2. Module Map
 
-| File                           | Responsibility                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`                 | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_start` (reconstructs in-memory store from persisted custom entries) and `session_shutdown` lifecycle events                                                                                                                                                                                     |
-| `src/types.ts`                 | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper, session persistence helpers (`CUSTOM_ENTRY_TYPE`, `serializeSessionData()`, `deserializeSessionData()`). Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts` |
-| `src/spawner.ts`               | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Also processes `turn_end` events to capture ls/find tool result summaries. Also contains `getPiInvocation()` (moved from `utils.ts`)                                                                                                |
-| `src/format-tool-call.ts`      | `formatToolCall()` (one-line tool previews), `countNonEmptyLines()` (edit/write diff stats), `shortenPath()`, `formatBashCommand()`, `collapseCdDot()`, `shortenPathsInText()`, `formatToolResult()` (ls/find result summaries)                                                                                                                                                                 |
-| `src/settings.ts`              | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local)                                                                                                                                                                                                                                                                                          |
-| `src/format-transcript.ts`     | `formatRunsForResume()` (resume transcript formatting), `getTextContent()` (message text extraction)                                                                                                                                                                                                                                                                                            |
-| `src/profile-types.ts`         | `SubagentProfile`, `SubagentProfiles`, `ThinkingLevel`, `ProfileInvocation` type definitions                                                                                                                                                                                                                                                                                                    |
-| `src/profile-formatting.ts`    | `profileSummary()`, `formatProfileDetail()`, `serializeProfileToMarkdown()`                                                                                                                                                                                                                                                                                                                     |
-| `src/profiles.ts`              | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, profile CRUD, tool validation (`validateProfileTools`, `applyExcludeTools`), skill validation (`validateProfileSkills`) and resolution (`resolveProfileSkills`). Re-exports from `profile-formatting.ts` and `profile-types.ts`                                                     |
-| `src/profile-editor.ts`        | Interactive profile creation/editing via `/profile` command                                                                                                                                                                                                                                                                                                                                     |
-| `src/commands/profile.ts`      | `/profile` slash command (list, show, create, edit, delete)                                                                                                                                                                                                                                                                                                                                     |
-| `src/schemas.ts`               | TypeBox schemas for `delegate_to_subagents` parameter validation                                                                                                                                                                                                                                                                                                                                |
-| `src/tools/delegate.ts`        | `delegate_to_subagents` tool registration — profile resolution, session creation, concurrency orchestration, session persistence via `persistSession()` helper. Delegates TUI rendering to `delegate-render.ts`                                                                                                                                                                                 |
-| `src/tools/delegate-render.ts` | `colorizeToolLine()`, `renderDelegateCall()`, `renderDelegateResult()` — pure rendering functions for the delegate tool TUI display                                                                                                                                                                                                                                                             |
-| `src/tools/retrieval.ts`       | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers                                                                                                                                                                                                                                                                            |
-| `src/utils.ts`                 | Shared helpers: ANSI stripping (`stripAnsi`), `appendLineToWindow()`, `getTextParts()`, `getLastAssistantText()`, `mapWithConcurrencyLimit()`, `countWindowStatuses()`, `getSummaryText()`                                                                                                                                                                                                      |
+| File                                  | Responsibility                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`                        | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_start` (reconstructs in-memory store from persisted custom entries) and `session_shutdown` lifecycle events                                                                                                                                                                                     |
+| `src/types.ts`                        | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper, session persistence helpers (`CUSTOM_ENTRY_TYPE`, `serializeSessionData()`, `deserializeSessionData()`). Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts` |
+| `src/constants.ts`                    | Shared `getAgentDir()` function for resolving the agent directory (`process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent")`). Leaf module with no project imports                                                                                                                                                                                                                         |
+| `src/spawner.ts`                      | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Uses `path.isAbsolute()` for cross-platform cwd validation and `tree-kill` npm package for cross-platform process tree termination (uses `taskkill` on Windows). Also processes `turn_end` events to capture ls/find tool result summaries. Also contains `getPiInvocation()` |
+| `src/format-tool-call.ts`             | Re-exports from `format-path.ts` and `format-bash.ts`. Contains `formatToolCall()` (one-line tool previews), `formatToolResult()`, `formatToolResultInline()`, `getToolEmoji()`, `countNonEmptyLines()`, `countOutputEntries()`, `countDirsInOutput()`, and all tool-specific format call helpers                                                                                               |
+| `src/format-path.ts`                  | Path shortening utilities: `shortenPath()`, `shortenPathsInText()`, `ABSOLUTE_PATH_PATTERN` regex string. Cross-platform: handles both Unix and Windows absolute paths                                                                                                                                                                                                                          |
+| `src/format-bash.ts`                  | Bash command display formatting: `collapseCdDot()`, `formatBashCommand()`, `formatBashSegments()`, `flushTruncatedSegment()`, `getCdPattern()`, `BASH_PREFIX_WIDTH`, `BASH_CONT_PREFIX_WIDTH` constants. Handles both `&&` and `;` separators                                                                                                                                                    |
+| `src/settings.ts`                     | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local). Uses `getAgentDir()` from `constants.ts` instead of inline path resolution                                                                                                                                                                                                             |
+| `src/format-transcript.ts`            | `formatRunsForResume()` (resume transcript formatting), `getTextContent()` (message text extraction)                                                                                                                                                                                                                                                                                            |
+| `src/profile-types.ts`                | `SubagentProfile`, `SubagentProfiles`, `ThinkingLevel`, `ProfileInvocation` type definitions                                                                                                                                                                                                                                                                                                    |
+| `src/profile-formatting.ts`           | `profileSummary()`, `formatProfileDetail()`, `serializeProfileToMarkdown()`                                                                                                                                                                                                                                                                                                                     |
+| `src/profiles.ts`                     | Profile loading from `.md` files, YAML frontmatter parsing, 5s TTL cache, `profileToArgs()` CLI conversion, profile CRUD, tool validation (`validateProfileTools`, `applyExcludeTools`), skill validation (`validateProfileSkills`) and resolution (`resolveProfileSkills`). Shell injection regex also catches Windows cmd.exe metacharacters (`^`, `%`, `\r`). `getProfilesDir()` is module-private (not exported). Re-exports from `profile-formatting.ts` and `profile-types.ts` |
+| `src/profile-editor.ts`               | Interactive profile creation/editing via `/profile` command                                                                                                                                                                                                                                                                                                                                     |
+| `src/commands/profile.ts`             | `/profile` slash command (list, show, create, edit, delete)                                                                                                                                                                                                                                                                                                                                     |
+| `src/schemas.ts`                      | TypeBox schemas for `delegate_to_subagents` parameter validation                                                                                                                                                                                                                                                                                                                                |
+| `src/tools/delegate.ts`               | `delegate_to_subagents` tool registration (~360 lines). Keeps `executeDelegate()`, `createTaskWindow()`, `createTaskWindows()`, `createTaskSession()`, `buildSummaryLines()`, `persistSession()`, `registerDelegateTool()`. Imports from delegate-runner, delegate-profiles, delegate-file-reader, delegate-types. Delegates TUI rendering to `delegate-render.ts`                              |
+| `src/tools/delegate-types.ts`         | Shared type definitions for the delegate module family: `StaticDelegateParams`, `ResolvedProfileEntry`, `ProfileResolutionResult`, `TaskRunContext`                                                                                                                                                                                                                                              |
+| `src/tools/delegate-file-reader.ts`   | File reading utilities: `readFileContents()`, `sliceLines()`, `MAX_FILE_BYTES` constant. Security: path containment check to prevent reading outside project directory                                                                                                                                                                                                                           |
+| `src/tools/delegate-profiles.ts`      | Profile resolution logic: `resolveTaskProfiles()`, `applyToolExcludeLists()`, `discoverSkillsIfNeeded()`, `preResolveProfileSkills()`. Imports from delegate-types.ts, profiles.ts, constants.ts                                                                                                                                                                                                |
+| `src/tools/delegate-runner.ts`        | Task execution: `runSingleTask()`, `buildEffectivePrompt()`, `setupIdleTimeout()`, `handlePostRunResult()`, `markTaskError()`. Imports from delegate-types.ts, delegate-file-reader.ts, spawner.ts, profile-types.ts, types.ts, utils.ts                                                                                                                                                          |
+| `src/tools/delegate-render.ts`        | `colorizeToolLine()`, `renderDelegateCall()`, `renderDelegateResult()` — pure rendering functions for the delegate tool TUI display                                                                                                                                                                                                                                                             |
+| `src/tools/retrieval.ts`              | `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` tool registrations with truncating renderers                                                                                                                                                                                                                                                                            |
+| `src/utils.ts`                        | Shared helpers: ANSI stripping (`stripAnsi`), `appendLineToWindow()`, `getTextParts()`, `getLastAssistantText()`, `mapWithConcurrencyLimit()`, `countWindowStatuses()`, `getSummaryText()`                                                                                                                                                                                                      |
+| `src/cache.ts`                        | Generic `TtlCache<T>` class for TTL-based caching. Used by profiles.ts and skill-discovery.ts                                                                                                                                                                                                                                                                                                  |
+| `src/skill-discovery.ts`              | Package skill path resolution via `resolvePackageSkillPaths()`, with 5-second TTL cache. Imports from cache.ts and constants.ts                                                                                                                                                                                                                                                                 |
 
 ### Dependency Graph
 
 ```
 index.ts
+├── constants.ts (leaf — Node.js builtins only)
 ├── profiles.ts
+│   ├── constants.ts
 │   ├── profile-formatting.ts
 │   │   └── profile-types.ts
 │   └── profile-types.ts
@@ -40,32 +51,38 @@ index.ts
 │   └── profile-editor.ts
 │       └── profiles.ts
 ├── tools/delegate.ts
-│   ├── profiles.ts
-│   ├── schemas.ts
-│   │   └── types.ts
-│   ├── settings.ts
-│   ├── spawner.ts
-│   │   ├── format-tool-call.ts
-│   │   ├── profiles.ts
-│   │   ├── settings.ts
+│   ├── tools/delegate-types.ts
+│   ├── tools/delegate-runner.ts
+│   │   ├── tools/delegate-types.ts
+│   │   ├── tools/delegate-file-reader.ts
+│   │   ├── spawner.ts
+│   │   │   ├── format-tool-call.ts
+│   │   │   │   ├── format-path.ts
+│   │   │   │   └── format-bash.ts
+│   │   │   │       └── format-path.ts
+│   │   │   ├── profiles.ts
+│   │   │   ├── settings.ts
+│   │   │   │   └── constants.ts
+│   │   │   ├── types.ts
+│   │   │   └── utils.ts
+│   │   │       └── types.ts
+│   │   ├── profile-types.ts
 │   │   ├── types.ts
 │   │   └── utils.ts
-│   │       └── types.ts
 │   ├── tools/delegate-render.ts
 │   │   ├── types.ts
 │   │   └── utils.ts
 │   │       └── types.ts
-│   ├── types.ts              ← CUSTOM_ENTRY_TYPE, serializeSessionData
-│   └── utils.ts
-│       └── types.ts
-├── tools/retrieval.ts
 │   ├── profiles.ts
+│   ├── schemas.ts
+│   │   └── types.ts
 │   ├── settings.ts
+│   │   └── constants.ts
 │   ├── types.ts
 │   └── utils.ts
 │       └── types.ts
-└── types.ts              ← CUSTOM_ENTRY_TYPE, deserializeSessionData
-    └── format-transcript.ts
+└── tools/retrieval.ts
+    └── profiles.ts
 ```
 
 ## 3. Session Lifecycle
@@ -252,14 +269,17 @@ The listener is removed in the `finally` block to prevent leaks.
 
 ### 5.3 SIGTERM → SIGKILL Escalation
 
-In `setupAbortHandler()`, when the task's abort signal fires:
+In `setupAbortHandler()`, when the task's abort signal fires, the process tree is terminated via the `tree-kill` npm package for cross-platform support (uses `taskkill` on Windows):
 
 ```ts
+import kill from "tree-kill";
+
 const killProc = () => {
-  proc.kill("SIGTERM");
-  setTimeout(() => {
-    if (!proc.killed) proc.kill("SIGKILL");
-  }, 5000); // 5-second grace period
+  kill(proc.pid!, "SIGTERM", (err) => {
+    if (err) {
+      setTimeout(() => kill(proc.pid!, "SIGKILL"), 5000); // 5-second grace period
+    }
+  });
 };
 ```
 
@@ -361,7 +381,7 @@ Where A=lines added, R=lines removed, L=line count. The `(L lines)` suffix only 
 
 Diff stats (`+A/-R`), line counts (`(L lines)`), and numeric counts in ls/find result summary lines are colorized in the TUI using `colorizeToolLine()`: additions use `toolDiffAdded` (green), removals use `toolDiffRemoved` (red), and line counts use `toolDiffAdded` (green).
 
-Paths are shortened via `shortenPath()` (replaces home prefix with `~`, uses relative paths when shorter). Bash commands are collapsed (stripping redundant `cd <cwd>` prefixes) and formatted with `formatBashCommand()` (smart `&&` splitting with `│` continuation prefixes).
+Paths are shortened via `shortenPath()` in `format-path.ts` (replaces home prefix with `~`, uses relative paths when shorter; cross-platform for both Unix and Windows absolute paths). Bash commands are collapsed (stripping redundant `cd <cwd>` prefixes) and formatted with `formatBashCommand()` in `format-bash.ts` (smart `&&` and `;` splitting with `│` continuation prefixes). Both are re-exported through `format-tool-call.ts`.
 
 ## 7. Concurrency Model
 
@@ -438,9 +458,9 @@ const CACHE_TTL = 5000;
 
 The cache key includes the `cwd` — different working directories get separate cache entries. Cache is invalidated by `saveProfile()`, `deleteProfile()`, and `invalidateProfilesCache()`.
 
-### 8.3 `excludeTools` Resolution (in delegate.ts)
+### 8.3 `excludeTools` Resolution (in `delegate-profiles.ts`)
 
-Before `profileToArgs()` is called, profiles with `excludeTools` are resolved to concrete tool allowlists in the delegate tool's execute handler:
+Before `profileToArgs()` is called, profiles with `excludeTools` are resolved to concrete tool allowlists via `applyToolExcludeLists()` in `delegate-profiles.ts`, called from the delegate tool's execute handler:
 
 1. For each task whose profile has `excludeTools` set, `pi.getAllTools()` is called once to obtain the full list of available tool names.
 2. `validateProfileTools(profile, name)` throws if both `tools` (allowlist) and `excludeTools` (blacklist) are set — they are mutually exclusive.
@@ -455,9 +475,9 @@ Before `profileToArgs()` is called, profiles with `excludeTools` are resolved to
 
 If no profile has `excludeTools` set, `pi.getAllTools()` is never called.
 
-### 8.4 Skill Resolution (in delegate.ts)
+### 8.4 Skill Resolution (in `delegate-profiles.ts`)
 
-Before `profileToArgs()` is called, profiles with `suggestedSkills` or `loadSkills` are resolved in a multi-step pipeline inside the delegate tool's execute handler:
+Before `profileToArgs()` is called, profiles with `suggestedSkills` or `loadSkills` are resolved in a multi-step pipeline via `discoverSkillsIfNeeded()` and `preResolveProfileSkills()` in `delegate-profiles.ts`, called from the delegate tool's execute handler:
 
 1. **Mutual-exclusivity validation** — `validateProfileSkills(profile, name)` throws if `suggestedSkills` or `loadSkills` is combined with `noSkills`. These are mutually exclusive because `--no-skills` would either override `--skill` flags or disable skill content that was injected into the system prompt.
 

@@ -108,6 +108,7 @@ export type MockChildProcess = EventEmitter & {
     write: ReturnType<typeof vi.fn>;
     end: ReturnType<typeof vi.fn>;
   };
+  pid: number | undefined;
   killed: boolean;
   kill: ReturnType<typeof vi.fn>;
 };
@@ -124,6 +125,7 @@ export function createMockProcess(): MockChildProcess {
     write: vi.fn(),
     end: vi.fn(),
   });
+  proc.pid = 12345;
   proc.killed = false;
   proc.kill = vi.fn((signal: string) => {
     proc.killed = true;

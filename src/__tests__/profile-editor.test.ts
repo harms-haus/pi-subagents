@@ -83,7 +83,7 @@ describe("editProfileInteractive", () => {
   // ── 2. User cancels at provider input ─────────────────────────────
   it("returns early when user cancels at provider input", async () => {
     const ui = queueUISteps({
-      selects: ["Global (~/.pi/agent-profiles/test.md)"],
+      selects: ["Global (~/.pi/agent/agent-profiles/test.md)"],
       inputs: [undefined], // cancel at provider
     });
     await editProfileInteractive("test", {}, createCtx(ui));
@@ -138,7 +138,7 @@ describe("editProfileInteractive", () => {
   it("sets thinking level when user confirms and selects one", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "high", // thinking level
       ],
       inputs: [
@@ -172,7 +172,7 @@ describe("editProfileInteractive", () => {
   it("sets noTools when user disables all tools", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -211,7 +211,7 @@ describe("editProfileInteractive", () => {
   it("configures tool allowlist when user selects allowlist mode", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
@@ -251,7 +251,7 @@ describe("editProfileInteractive", () => {
   it("configures tool blacklist when user selects blacklist mode", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "Blacklist (all tools except these)", // tool mode
       ],
       inputs: [
@@ -291,7 +291,7 @@ describe("editProfileInteractive", () => {
   it("sets noExtensions when user disables all extensions", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -328,7 +328,7 @@ describe("editProfileInteractive", () => {
   it("does not save when user cancels at final save confirmation", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -404,7 +404,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at model input", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -421,7 +421,7 @@ describe("editProfileInteractive", () => {
   it("removes provider from profile when user enters empty string", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "", // empty provider → delete provider
@@ -449,7 +449,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at system prompt editor", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -472,7 +472,7 @@ describe("editProfileInteractive", () => {
   it("removes systemPrompt when user declines system prompt", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -499,7 +499,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at append system prompt input", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -521,7 +521,7 @@ describe("editProfileInteractive", () => {
   it("removes appendSystemPrompt when user declines append", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -548,7 +548,7 @@ describe("editProfileInteractive", () => {
   it("removes thinkingLevel when user declines thinking", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -575,7 +575,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at tool mode select", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         undefined, // cancel at tool mode select
       ],
       inputs: [
@@ -600,7 +600,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at allowlist input", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
@@ -626,7 +626,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at blacklist input", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "Blacklist (all tools except these)", // tool mode
       ],
       inputs: [
@@ -652,7 +652,7 @@ describe("editProfileInteractive", () => {
   it("clears tools when user enters empty allowlist string", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
@@ -682,7 +682,7 @@ describe("editProfileInteractive", () => {
   it("clears excludeTools when user enters empty blacklist string", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "Blacklist (all tools except these)", // tool mode
       ],
       inputs: [
@@ -712,7 +712,7 @@ describe("editProfileInteractive", () => {
   it("configures extension paths when user enters comma-separated list", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -747,7 +747,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at extensions input", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -773,7 +773,7 @@ describe("editProfileInteractive", () => {
   it("clears extensions when user enters empty extension string", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -802,7 +802,7 @@ describe("editProfileInteractive", () => {
   it("preserves initial profile values for fields the user skips", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "", // provider — empty, clears it
@@ -831,7 +831,7 @@ describe("editProfileInteractive", () => {
   it("trims and filters empty entries in tool allowlist", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
         "Allowlist (only these tools)", // tool mode
       ],
       inputs: [
@@ -861,7 +861,7 @@ describe("editProfileInteractive", () => {
   it("configures both suggestedSkills and loadSkills when user enters comma-separated lists", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -897,7 +897,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at suggestedSkills input", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -923,7 +923,7 @@ describe("editProfileInteractive", () => {
   it("returns early when user cancels at loadSkills input", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -950,7 +950,7 @@ describe("editProfileInteractive", () => {
   it("leaves suggestedSkills unset when user enters empty string", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -980,7 +980,7 @@ describe("editProfileInteractive", () => {
   it("leaves loadSkills unset when user enters empty string", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -1010,7 +1010,7 @@ describe("editProfileInteractive", () => {
   it("preserves existing skills when user declines removal", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -1042,7 +1042,7 @@ describe("editProfileInteractive", () => {
   it("removes both suggestedSkills and loadSkills when user confirms removal", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider
@@ -1074,7 +1074,7 @@ describe("editProfileInteractive", () => {
   it("trims and filters empty entries in skills lists", async () => {
     const ui = queueUISteps({
       selects: [
-        "Global (~/.pi/agent-profiles/test.md)", // scope
+        "Global (~/.pi/agent/agent-profiles/test.md)", // scope
       ],
       inputs: [
         "anthropic", // provider

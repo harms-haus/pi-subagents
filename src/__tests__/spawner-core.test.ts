@@ -49,9 +49,16 @@ vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
+// Mock tree-kill (used by spawner for process termination)
+vi.mock("tree-kill", () => ({
+  default: vi.fn(),
+}));
+
 import { existsSync, mkdirSync } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import kill from "tree-kill";
+import { isAbsolute, sep } from "node:path";
 import { deleteProfile, invalidateProfilesCache, saveProfile } from "../profiles";
 import { serializeProfileToMarkdown } from "../profile-formatting";
 
@@ -141,7 +148,9 @@ describe("spawner-core", () => {
 
       expect(spawn).toHaveBeenCalled();
       const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
-      expect(spawnOptions.cwd).toBe("/absolute/path");
+      expect(isAbsolute(spawnOptions.cwd as string)).toBe(true);
+      expect((spawnOptions.cwd as string).endsWith(`absolute${sep}path`) ||
+        (spawnOptions.cwd as string).endsWith('/absolute/path')).toBe(true);
 
       mockProcess.emit("close", 0);
       await promise;
@@ -162,8 +171,9 @@ describe("spawner-core", () => {
 
       expect(spawn).toHaveBeenCalled();
       const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
-      // The path is normalized to /unsafe by resolve()
-      expect(spawnOptions.cwd).toBe("/unsafe");
+      // The path is normalized by resolve()
+      expect(isAbsolute(spawnOptions.cwd as string)).toBe(true);
+      expect((spawnOptions.cwd as string).endsWith('unsafe')).toBe(true);
 
       mockProcess.emit("close", 0);
       await promise;
@@ -185,8 +195,8 @@ describe("spawner-core", () => {
       expect(spawn).toHaveBeenCalled();
       const spawnOptions = vi.mocked(spawn).mock.calls[0]![2];
       expect(spawnOptions.cwd).toBeTruthy();
-      expect(spawnOptions.cwd).toMatch(/^\//);
-      expect((spawnOptions.cwd as string).endsWith("/relative/path")).toBe(true);
+      expect(isAbsolute(spawnOptions.cwd as string)).toBe(true);
+      expect(spawnOptions.cwd).toContain("relative");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -271,9 +281,9 @@ describe("spawner-core", () => {
       // Abort the process
       abortController.abort();
 
-      await waitForCondition(() => mockProcess.kill.mock.calls.length > 0);
+      await waitForCondition(() => vi.mocked(kill).mock.calls.length > 0);
 
-      expect(mockProcess.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(kill).toHaveBeenCalledWith(mockProcess.pid, "SIGTERM");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -282,10 +292,10 @@ describe("spawner-core", () => {
     it("should escalate from SIGTERM to SIGKILL after 5s if process does not die", async () => {
       vi.useFakeTimers();
 
-      // Create a process where SIGTERM does NOT set killed=true
-      // (simulating an unresponsive process that ignores SIGTERM)
+      // Create a process where the tree-kill mock simulates an unresponsive
+      // process that ignores SIGTERM — only SIGKILL takes effect
       const escalationProc = createMockProcess();
-      escalationProc.kill = vi.fn((signal: string) => {
+      vi.mocked(kill).mockImplementation((_pid: number, signal?: string | number) => {
         if (signal === "SIGKILL") {
           escalationProc.killed = true;
           escalationProc.emit("exit", 1);
@@ -310,14 +320,14 @@ describe("spawner-core", () => {
 
       // Abort triggers SIGTERM
       abortController.abort();
-      expect(escalationProc.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(kill).toHaveBeenCalledWith(escalationProc.pid, "SIGTERM");
       expect(escalationProc.killed).toBe(false);
 
       // Advance past the 5-second escalation timeout
       await vi.advanceTimersByTimeAsync(6000);
 
       // SIGKILL should now have been sent
-      expect(escalationProc.kill).toHaveBeenCalledWith("SIGKILL");
+      expect(kill).toHaveBeenCalledWith(escalationProc.pid, "SIGKILL");
       expect(escalationProc.killed).toBe(true);
 
       // Resolve the main promise
@@ -340,9 +350,9 @@ describe("spawner-core", () => {
         session: mockSession,
       });
 
-      await waitForCondition(() => mockProcess.kill.mock.calls.length > 0);
+      await waitForCondition(() => vi.mocked(kill).mock.calls.length > 0);
 
-      expect(mockProcess.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(kill).toHaveBeenCalledWith(mockProcess.pid, "SIGTERM");
 
       mockProcess.emit("close", 0);
       await promise;
@@ -518,11 +528,11 @@ describe("spawner-core", () => {
 
       // writeFile should have been called twice to the same path
       const calls = vi.mocked(writeFile).mock.calls;
-      const profileCalls = calls.filter((c) => String(c[0]).endsWith("updatable.md"));
+      const profileCalls = calls.filter((c) => (c[0] as string).endsWith("updatable.md"));
       expect(profileCalls).toHaveLength(2);
 
       // Second call should have the updated content
-      const secondContent = String(profileCalls[1]![1]);
+      const secondContent = profileCalls[1]![1] as string;
       expect(secondContent).toContain("provider: openai");
       expect(secondContent).toContain("model: gpt-4");
       // Should NOT contain old provider
@@ -543,7 +553,7 @@ describe("spawner-core", () => {
       // writeFile should still be called
       expect(writeFile).toHaveBeenCalled();
       const writeCall = vi.mocked(writeFile).mock.calls[0]!;
-      expect(String(writeCall[0])).toMatch(/my-project\/\.pi\/agent-profiles\/new-profile\.md$/);
+      expect(writeCall[0] as string).toMatch(/my-project\/\.pi\/agent-profiles\/new-profile\.md$/);
     });
   });
 
@@ -586,7 +596,7 @@ describe("spawner-core", () => {
     ): Promise<string> {
       await saveProfile(name, profile, "global");
       const writeCall = vi.mocked(writeFile).mock.calls[0]!;
-      return String(writeCall[1]);
+      return writeCall[1] as string;
     }
 
     it("produces correct format with all fields", async () => {

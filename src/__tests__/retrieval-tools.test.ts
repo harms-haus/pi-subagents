@@ -61,11 +61,7 @@ function getToolExecute(mockPi: ExtensionAPI, toolName: string) {
   if (!call) {
     throw new Error(`Tool "${toolName}" not registered`);
   }
-  const execute = call[0].execute;
-  if (!execute) {
-    throw new Error(`Tool "${toolName}" has no execute`);
-  }
-  return execute;
+  return call[0].execute;
 }
 
 /** Extract a registered tool's renderResult function by name */

@@ -6,7 +6,8 @@
  */
 
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import kill from "tree-kill";
+import { isAbsolute, resolve } from "node:path";
 import { formatToolCall, formatToolResultInline, getToolEmoji } from "./format-tool-call";
 import { profileToArgs } from "./profiles";
 import { loadCommandPreviewWidth } from "./settings";
@@ -51,9 +52,10 @@ function getPiInvocation(): { command: string; args: string[] } {
  */
 function validateCwd(cwd: string | undefined, fallback: string): string {
   const target = cwd ? resolve(cwd) : fallback;
-  if (!target.startsWith("/")) {
+  if (!isAbsolute(target)) {
     throw new Error("cwd must be an absolute path");
   }
+  // resolve() already normalizes .. segments; this check is defense-in-depth
   if (target.includes("..")) {
     throw new Error("cwd must not contain '..' path segments");
   }
@@ -385,10 +387,12 @@ function handleProcessExit(
  */
 function setupAbortHandler(proc: ReturnType<typeof spawn>, signal: AbortSignal): void {
   const killProc = () => {
-    proc.kill("SIGTERM");
+    if (proc.pid) {
+      kill(proc.pid, "SIGTERM");
+    }
     setTimeout(() => {
-      if (!proc.killed) {
-        proc.kill("SIGKILL");
+      if (proc.pid) {
+        kill(proc.pid, "SIGKILL");
       }
     }, 5000);
   };
@@ -468,7 +472,9 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
       );
       if (result.loopDetected) {
         loopDetectedFlag = true;
-        proc.kill("SIGTERM"); // kill the looping process immediately
+        if (proc.pid) {
+          kill(proc.pid, "SIGTERM"); // kill the looping process immediately
+        }
       }
     };
 

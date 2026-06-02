@@ -68,6 +68,52 @@ function flushTruncatedSegment(
   return { isFirstLine: false };
 }
 
+function getSep(separators: string[], index: number, fallback: string): string {
+  return index >= 0 && index < separators.length ? separators[index] ?? fallback : fallback;
+}
+
+function appendSegmentToLine(
+  seg: string,
+  i: number,
+  isLast: boolean,
+  isFirstLine: boolean,
+  hasCurrentLine: boolean,
+  currentLine: string,
+  separators: string[],
+  firstLineBudget: number,
+  contLineBudget: number,
+  contPrefix: string,
+  lines: string[],
+): { currentLine: string; isFirstLine: boolean } {
+  const budget = isFirstLine && !hasCurrentLine ? firstLineBudget : contLineBudget;
+  const nextSep = !isLast ? ` ${getSep(separators, i, "&&")}` : "";
+
+  if (!hasCurrentLine) {
+    if (seg.length <= budget) {
+      return { currentLine: `${isFirstLine ? "" : contPrefix}${seg}`, isFirstLine };
+    }
+    flushTruncatedSegment(seg, budget, isLast, isFirstLine, lines, contPrefix, nextSep);
+    return { currentLine: "", isFirstLine: false };
+  }
+
+  // Separator between the last segment on the current line (i-1) and this segment (i)
+  const sep = ` ${getSep(separators, i - 1, "&&")} `;
+  const withSeg = `${currentLine}${sep}${seg}`;
+  if (withSeg.length <= budget) {
+    return { currentLine: withSeg, isFirstLine };
+  }
+
+  // Doesn't fit — flush current line and start a new one
+  const lineEndSep = ` ${getSep(separators, i - 1, "&&")}`;
+  lines.push(`${currentLine}${lineEndSep}`);
+
+  if (seg.length <= contLineBudget) {
+    return { currentLine: `${contPrefix}${seg}`, isFirstLine: false };
+  }
+  flushTruncatedSegment(seg, contLineBudget, isLast, false, lines, contPrefix, nextSep);
+  return { currentLine: "", isFirstLine: false };
+}
+
 function formatBashSegments(
   segments: string[],
   separators: string[],
@@ -80,49 +126,16 @@ function formatBashSegments(
   let isFirstLine = true;
 
   for (let i = 0; i < segments.length; i++) {
-    const budget = isFirstLine && currentLine.length === 0 ? firstLineBudget : contLineBudget;
     const seg = segments[i];
     if (!seg) continue;
     const isLast = i === segments.length - 1;
-    const nextSep = !isLast && i < separators.length ? ` ${separators[i]!}` : "";
 
-    if (currentLine.length === 0) {
-      if (seg.length <= budget) {
-        currentLine = `${isFirstLine ? "" : contPrefix}${seg}`;
-      } else {
-        const result = flushTruncatedSegment(seg, budget, isLast, isFirstLine, lines, contPrefix, nextSep);
-        isFirstLine = result.isFirstLine;
-        currentLine = "";
-      }
-    } else {
-      // Separator between the last segment on the current line (i-1) and this segment (i)
-      const sep = i > 0 && i - 1 < separators.length ? ` ${separators[i - 1]!} ` : " && ";
-      const withSeg = `${currentLine}${sep}${seg}`;
-      if (withSeg.length <= budget) {
-        currentLine = withSeg;
-      } else {
-        // Line-end separator between the last segment on this line and the first on the next
-        const lineEndSep = i > 0 && i - 1 < separators.length ? ` ${separators[i - 1]!}` : " &&";
-        lines.push(`${currentLine}${lineEndSep}`);
-        isFirstLine = false;
-
-        if (seg.length <= contLineBudget) {
-          currentLine = `${contPrefix}${seg}`;
-        } else {
-          const result = flushTruncatedSegment(
-            seg,
-            contLineBudget,
-            isLast,
-            false,
-            lines,
-            contPrefix,
-            nextSep,
-          );
-          isFirstLine = result.isFirstLine;
-          currentLine = "";
-        }
-      }
-    }
+    const result = appendSegmentToLine(
+      seg, i, isLast, isFirstLine, currentLine.length > 0, currentLine,
+      separators, firstLineBudget, contLineBudget, contPrefix, lines,
+    );
+    currentLine = result.currentLine;
+    isFirstLine = result.isFirstLine;
   }
 
   if (currentLine.length > 0) {
@@ -159,10 +172,10 @@ export function formatBashCommand(
   const segments: string[] = [];
   const separators: string[] = [];
   for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]!;
-    if (i % 2 === 0) {
+    const part = parts[i];
+    if (part !== undefined && i % 2 === 0) {
       segments.push(part);
-    } else {
+    } else if (part !== undefined) {
       separators.push(part);
     }
   }
@@ -170,9 +183,11 @@ export function formatBashCommand(
   if (cmd.length <= firstLineBudget) {
     // Rejoin with original separators, preserving their type
     if (segments.length > 1) {
-      let result = segments[0]!;
+      let result = segments[0] ?? "";
       for (let i = 0; i < separators.length; i++) {
-        result += ` ${separators[i]!} ${segments[i + 1]!}`;
+        const sep = separators[i] ?? "&&";
+        const next = segments[i + 1] ?? "";
+        result += ` ${sep} ${next}`;
       }
       return result;
     }

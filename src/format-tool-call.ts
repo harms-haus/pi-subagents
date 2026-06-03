@@ -156,6 +156,17 @@ function formatFindResultText(
   return `${prefix}${count} match${count !== 1 ? "es" : ""}${truncationIndicator}`;
 }
 
+function formatWebSearchResultText(
+  _text: string,
+  details?: Record<string, unknown>,
+  inline?: boolean,
+): string {
+  const prefix = inline ? "" : "  ";
+  const count: number = (details?.resultCount as number | undefined) ?? 0;
+  const truncationIndicator = details?.truncated ? "+" : "";
+  return `${prefix}${count} result${count !== 1 ? "s" : ""}${truncationIndicator}`;
+}
+
 export function formatToolResult(
   toolName: string,
   resultText: string,
@@ -166,6 +177,9 @@ export function formatToolResult(
   }
   if (toolName === "find") {
     return formatFindResultText(resultText, details);
+  }
+  if (toolName === "web_search") {
+    return formatWebSearchResultText(resultText, details);
   }
   return null;
 }
@@ -184,6 +198,9 @@ export function formatToolResultInline(
   }
   if (toolName === "find") {
     return formatFindResultText(resultText, details, true);
+  }
+  if (toolName === "web_search") {
+    return formatWebSearchResultText(resultText, details, true);
   }
   return null;
 }
@@ -337,6 +354,15 @@ function formatLintFilesCall(args: Record<string, unknown>, cwd: string): string
   return "lint → (all)";
 }
 
+function formatWebSearchCall(a: Record<string, string>, widthBudget: number): string {
+  const query = a.q || a.query || "...";
+  const prefixLen = 14; // `web_search → "` = 14 chars
+  const available = Math.max(0, widthBudget - prefixLen - 1); // -1 for closing `"`
+  const truncated =
+    query.length > available ? `${query.slice(0, Math.max(0, available - 3))}...` : query;
+  return `web_search → "${truncated}"`;
+}
+
 function formatFetchCall(toolName: string, a: Record<string, string>, widthBudget: number): string {
   const url = a.url || a.query || "...";
   const urlBudget = widthBudget - toolName.length - 4;
@@ -388,7 +414,7 @@ const TOOL_FORMATTERS: Partial<
   lsp_refactor_symbol: (a, _args, cwd) => formatLspRefactorSymbolCall(a, cwd),
   lint_files: (_a, args, cwd) => formatLintFilesCall(args, cwd),
   fetch_content: (a, _args, _cwd, widthBudget) => formatFetchCall("fetch_content", a, widthBudget),
-  web_search: (a, _args, _cwd, widthBudget) => formatFetchCall("web_search", a, widthBudget),
+  web_search: (a, _args, _cwd, widthBudget) => formatWebSearchCall(a, widthBudget),
   fetch_repo: (a) => formatFetchRepoCall(a),
   get_subagent_output: (_a, args) => formatSessionCall("get_subagent_output", args),
   get_subagent_session: (_a, args) => formatSessionCall("get_subagent_session", args),

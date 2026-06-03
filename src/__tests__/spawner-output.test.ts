@@ -531,6 +531,37 @@ describe("spawner-output", () => {
       mockProcess.emit("close", 0);
       await promise;
     });
+
+    it("should append inline web_search summary to existing web_search tool call line", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt", cwd: CWD },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      emitToolCall(mockProcess, "web_search", { q: "test query" });
+      await emitTurnEnd([
+        {
+          toolName: "web_search",
+          content: [{ type: "text", text: "result text" }],
+          details: { resultCount: 5, query: "test query", truncated: false, offset: 0 },
+          isError: false,
+        },
+      ]);
+
+      const wsLine = mockWindow.lines.find(
+        (l) => l.kind === "tool" && l.text.includes("web_search →"),
+      );
+      expect(wsLine?.text).toBe('🔍 web_search → "test query" → 5 results');
+      expect(wsLine?.kind).toBe("tool");
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
   });
 
   describe("handleStderrData", () => {

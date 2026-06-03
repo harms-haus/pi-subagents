@@ -13,8 +13,8 @@ pi-subagents is a pi-coding-agent extension that enables the main agent to spawn
 | `src/index.ts`                        | Extension entry point; creates `sessionStore` (Map), registers tools/commands, handles `session_start` (reconstructs in-memory store from persisted custom entries) and `session_shutdown` lifecycle events                                                                                                                                                                                     |
 | `src/types.ts`                        | Core type definitions (`SubAgentTask`, `SubAgentWindow`, `SubagentSessionData`, `SessionRecord`), configuration constants (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY`, etc.), `syncState()` helper, session persistence helpers (`CUSTOM_ENTRY_TYPE`, `serializeSessionData()`, `deserializeSessionData()`). Re-exports `formatRunsForResume()` and `getTextContent()` from `format-transcript.ts` |
 | `src/constants.ts`                    | Shared `getAgentDir()` function for resolving the agent directory (`process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent")`). Leaf module with no project imports                                                                                                                                                                                                                         |
-| `src/spawner.ts`                      | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Uses `path.isAbsolute()` for cross-platform cwd validation and `tree-kill` npm package for cross-platform process tree termination (uses `taskkill` on Windows). Also processes `turn_end` events to capture ls/find tool result summaries. Also contains `getPiInvocation()` |
-| `src/format-tool-call.ts`             | Re-exports from `format-path.ts` and `format-bash.ts`. Contains `formatToolCall()` (one-line tool previews), `formatToolResult()`, `formatToolResultInline()`, `getToolEmoji()`, `countNonEmptyLines()`, `countOutputEntries()`, `countDirsInOutput()`, and all tool-specific format call helpers                                                                                               |
+| `src/spawner.ts`                      | Process spawning, JSONL parsing, abort handling. `runSubAgent()` spawns `pi` subprocess, buffers stdout/stderr, parses JSON events, updates rolling window. Uses `path.isAbsolute()` for cross-platform cwd validation and `tree-kill` npm package for cross-platform process tree termination (uses `taskkill` on Windows). Also processes `turn_end` events to capture ls/find/web_search tool result summaries. Also contains `getPiInvocation()` |
+| `src/format-tool-call.ts`             | Re-exports from `format-path.ts` and `format-bash.ts`. Contains `formatToolCall()` (one-line tool previews), `formatToolResult()`, `formatToolResultInline()`, `getToolEmoji()`, `countNonEmptyLines()`, `countOutputEntries()`, `countDirsInOutput()`, `formatWebSearchCall()`, `formatWebSearchResultText()`, and all tool-specific format call helpers                                                                                               |
 | `src/format-path.ts`                  | Path shortening utilities: `shortenPath()`, `shortenPathsInText()`, `ABSOLUTE_PATH_PATTERN` regex string. Cross-platform: handles both Unix and Windows absolute paths                                                                                                                                                                                                                          |
 | `src/format-bash.ts`                  | Bash command display formatting: `collapseCdDot()`, `formatBashCommand()`, `formatBashSegments()`, `flushTruncatedSegment()`, `getCdPattern()`, `BASH_PREFIX_WIDTH`, `BASH_CONT_PREFIX_WIDTH` constants. Handles both `&&` and `;` separators                                                                                                                                                    |
 | `src/settings.ts`                     | `loadMaxLinesPerWindow()`, `loadCommandPreviewWidth()`, settings file reading (global + project-local). Uses `getAgentDir()` from `constants.ts` instead of inline path resolution                                                                                                                                                                                                             |
@@ -137,7 +137,7 @@ pi.on("session_shutdown", () => {
    a. Per-task AbortController with timeout (default 600s)
    b. Parent abort signal forwarded to task controller
    c. runSubAgent() spawns pi subprocess
-   d. stdout lines parsed as JSONL, appended to rolling window; `turn_end` events processed to capture ls/find tool result summaries
+   d. stdout lines parsed as JSONL, appended to rolling window; `turn_end` events processed to capture ls/find/web_search tool result summaries
    e. Process exit → status set to "completed" or "error"
    f. persistSession() → serialize and write to main agent's session tree via pi.appendEntry()
 8. Summary result returned with session IDs
@@ -218,7 +218,7 @@ Each complete line is processed by `handleStdoutLine()`:
 1. **Empty lines** — skipped.
 2. **Non-JSON lines** — appended to the rolling window as plain text.
 3. **JSON lines** — parsed. Two event types are processed:
-   - **`turn_end` events** — `toolResults` array is inspected for `ls`/`find` tool results; summaries are generated via `formatToolResult()` and appended as `"tool"`-kind lines.
+   - **`turn_end` events** — `toolResults` array is inspected for `ls`/`find`/`web_search` tool results; summaries are generated via `formatToolResultInline()`. If a matching tool call line already exists in the rolling window, its `text` is mutated inline (appending the summary); otherwise, the summary is appended as a new `"tool"`-kind line.
    - **`message_end` events** (with a `message` field) — Message is pushed to `session.messages` (capped at `MAX_MESSAGES_PER_SESSION = 500`).
    - Text parts extracted via `getTextParts()` → appended to rolling window.
    - Tool call parts formatted via `formatToolCall()` → appended as `"tool"`-kind lines.
@@ -325,7 +325,7 @@ export function appendLineToWindow(win, line, maxLines, kind = "text") {
 }
 ```
 
-Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering — tool lines are colorized by `colorizeToolLine()` in `delegate-render.ts`: diff additions in `toolDiffAdded` (green), removals in `toolDiffRemoved` (red), line counts in `toolDiffAdded`, ls/find result summary counts in `toolDiffAdded` (green), and all other text in `muted`.
+Lines are ANSI-stripped before storage. Each `WindowLine` carries a `kind` (`"text"` or `"tool"`) that affects TUI rendering — tool lines are colorized by `colorizeToolLine()` in `delegate-render.ts`: diff additions in `toolDiffAdded` (green), removals in `toolDiffRemoved` (red), line counts in `toolDiffAdded`, ls/find/web_search result summary counts in `toolDiffAdded` (green), and all other text in `muted`.
 
 ### 6.2 Debounced TUI Updates
 
@@ -366,7 +366,8 @@ Key patterns:
 | `read`                       | `read → path:offset+limit (L lines)`                                                                                   |
 | `delegate_to_subagents`      | `delegate_to_subagents → N tasks [profile names]`                                                                      |
 | LSP tools                    | `lsp_diagnostics → file`                                                                                               |
-| `fetch_content`/`web_search` | `fetch_content → url (truncated)`                                                                                      |
+| `fetch_content`              | `fetch_content → url (truncated)`                                                                                      |
+| `web_search`                 | `web_search → "query"` (truncated to width)                                                                             |
 | Generic                      | `toolName {"key":"value",...}` (full JSON args, truncated to width budget; empty `{}` omitted)                         |
 | `write_todos`                | `write_todos → N todos written`                                                                                        |
 | `edit_todos`                 | `edit_todos → description or action [indices]`                                                                         |
@@ -379,7 +380,9 @@ Key patterns:
 
 Where A=lines added, R=lines removed, L=line count. The `(L lines)` suffix only appears when `limit` is specified. Diff stats are computed using `countNonEmptyLines()`, which counts non-blank lines without allocating intermediate arrays.
 
-Diff stats (`+A/-R`), line counts (`(L lines)`), and numeric counts in ls/find result summary lines are colorized in the TUI using `colorizeToolLine()`: additions use `toolDiffAdded` (green), removals use `toolDiffRemoved` (red), and line counts use `toolDiffAdded` (green).
+Diff stats (`+A/-R`), line counts (`(L lines)`), and numeric counts in ls/find/web_search result summary lines are colorized in the TUI using `colorizeToolLine()`: additions use `toolDiffAdded` (green), removals use `toolDiffRemoved` (red), and line counts use `toolDiffAdded` (green).
+
+**`web_search` inline result summaries:** When a `web_search` tool result appears in a `turn_end` event, `formatWebSearchResultText()` generates a concise summary line showing the result count: `N result(s)`, with a `+` suffix if the results were truncated (e.g., `10 results+`). This summary is appended as a `"tool"`-kind line in the rolling window, alongside the existing `ls`/`find` summaries. The call display uses `formatWebSearchCall()`, which wraps the query in double quotes: `web_search → "query"`.
 
 Paths are shortened via `shortenPath()` in `format-path.ts` (replaces home prefix with `~`, uses relative paths when shorter; cross-platform for both Unix and Windows absolute paths). Bash commands are collapsed (stripping redundant `cd <cwd>` prefixes) and formatted with `formatBashCommand()` in `format-bash.ts` (smart `&&` and `;` splitting with `│` continuation prefixes). Both are re-exported through `format-tool-call.ts`.
 

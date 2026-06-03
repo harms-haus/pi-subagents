@@ -17,6 +17,8 @@ import type { SubagentProfile } from "./profiles";
 import type { SubAgentTask, SubAgentWindow, SubagentSessionData, ToolCallPart } from "./types";
 import type { Message } from "@earendil-works/pi-ai";
 
+const TOOLS_WITH_INLINE_SUMMARY = new Set(["ls", "find", "web_search"]);
+
 // ── Helpers ───────────────────────────────────────────────────────────
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -96,7 +98,7 @@ function handleTurnEnd(event: { type?: string }, ctx: LineContext): void {
 
   const usedIndices = new Set<number>();
   for (const result of toolResults) {
-    if (result.isError || (result.toolName !== "ls" && result.toolName !== "find")) {
+    if (result.isError || !TOOLS_WITH_INLINE_SUMMARY.has(result.toolName)) {
       continue;
     }
     inlineToolResultSummary(result, ctx, usedIndices);
@@ -105,7 +107,7 @@ function handleTurnEnd(event: { type?: string }, ctx: LineContext): void {
 }
 
 /**
- * Inline a single ls/find tool result summary into the window.
+ * Inline a single ls/find/web_search tool result summary into the window.
  */
 function inlineToolResultSummary(
   result: {

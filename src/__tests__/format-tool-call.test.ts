@@ -452,7 +452,12 @@ describe("formatToolCall", () => {
 
     it("web_search: short query", () => {
       const result = formatToolCall("web_search", { query: "vitest docs" }, cwd, W);
-      expect(result).toBe("web_search → vitest docs");
+      expect(result).toBe('web_search → "vitest docs"');
+    });
+
+    it("web_search: using q param instead of query", () => {
+      const result = formatToolCall("web_search", { q: "vitest docs" }, cwd, W);
+      expect(result).toBe('web_search → "vitest docs"');
     });
 
     it("web_search: long query (truncated)", () => {
@@ -623,6 +628,25 @@ describe("formatToolResult", () => {
       );
     });
   });
+  describe("web_search", () => {
+    it("shows result count from details", () => {
+      expect(formatToolResult("web_search", "...", { resultCount: 10 })).toBe("  10 results");
+    });
+    it("shows singular for 1 result", () => {
+      expect(formatToolResult("web_search", "...", { resultCount: 1 })).toBe("  1 result");
+    });
+    it("shows 0 results when count is 0", () => {
+      expect(formatToolResult("web_search", "...", { resultCount: 0 })).toBe("  0 results");
+    });
+    it("shows 0 results when details is undefined", () => {
+      expect(formatToolResult("web_search", "...")).toBe("  0 results");
+    });
+    it("shows truncation indicator", () => {
+      expect(formatToolResult("web_search", "...", { resultCount: 10, truncated: true })).toBe(
+        "  10 results+",
+      );
+    });
+  });
   describe("other tools", () => {
     it("returns null for unknown tool", () => {
       expect(formatToolResult("read", "file contents")).toBeNull();
@@ -692,6 +716,25 @@ describe("formatToolResultInline", () => {
       expect(formatToolResultInline("find", "a.ts\nb.ts", { resultLimitReached: 1000 })).toBe(
         "2 matches+",
       );
+    });
+  });
+  describe("web_search", () => {
+    it("shows result count from details", () => {
+      expect(formatToolResultInline("web_search", "...", { resultCount: 10 })).toBe("10 results");
+    });
+    it("shows singular for 1 result", () => {
+      expect(formatToolResultInline("web_search", "...", { resultCount: 1 })).toBe("1 result");
+    });
+    it("shows 0 results when count is 0", () => {
+      expect(formatToolResultInline("web_search", "...", { resultCount: 0 })).toBe("0 results");
+    });
+    it("shows 0 results when details is undefined", () => {
+      expect(formatToolResultInline("web_search", "...")).toBe("0 results");
+    });
+    it("shows truncation indicator", () => {
+      expect(
+        formatToolResultInline("web_search", "...", { resultCount: 10, truncated: true }),
+      ).toBe("10 results+");
     });
   });
   describe("other tools", () => {

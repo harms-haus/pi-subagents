@@ -35,12 +35,16 @@
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
   },
+  "simple-git-hooks": {
+    "pre-commit": "npm run format:check && npm run lint && npm run typecheck"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
+    "simple-git-hooks": "^2.12.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.3",

@@ -336,9 +336,7 @@ function handleStdoutLine(
     return { loopDetected: false };
   }
 
-  // Unknown JSON event types — surface the raw line
-  appendLineToWindow(win, line, maxLines);
-  onUpdate();
+  // Unknown JSON event types — silently ignore
   return { loopDetected: false };
 }
 

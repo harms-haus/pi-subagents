@@ -750,8 +750,36 @@ describe("spawner-output", () => {
 
       await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
 
+      const linesBefore = mockWindow.lines.length;
       const jsonEvent = JSON.stringify({ type: "unknown_event", data: {} });
       mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      expect(mockWindow.lines.length).toBe(linesBefore);
+
+      mockProcess.emit("close", 0);
+      const result = await promise;
+      expect(result.loopDetected).toBe(false);
+    });
+
+    it("should silently ignore message_update with thinking_delta", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      const linesBefore = mockWindow.lines.length;
+      const jsonEvent = JSON.stringify({
+        type: "message_update",
+        assistantMessageEvent: { type: "thinking_delta", delta: "analyzing..." },
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${jsonEvent}\n`));
+
+      expect(mockWindow.lines.length).toBe(linesBefore);
 
       mockProcess.emit("close", 0);
       const result = await promise;

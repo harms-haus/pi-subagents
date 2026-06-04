@@ -265,8 +265,8 @@ export async function runSingleTask(task: SubAgentTask, ctx: TaskRunContext): Pr
     resetTimer();
   };
 
-  // eslint-disable-next-line no-useless-assignment
   let loopDetected = false;
+  let taskErrored = false;
 
   try {
     const result = await runSubAgent({
@@ -281,18 +281,25 @@ export async function runSingleTask(task: SubAgentTask, ctx: TaskRunContext): Pr
       agentDir: ctx.agentDir,
     });
     loopDetected = result.loopDetected;
+  } catch (err) {
+    taskErrored = true;
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    markTaskError(win, session, errorMessage, emitUpdate);
+    win.completedAt = Date.now();
   } finally {
     cleanup();
   }
 
-  handlePostRunResult(
-    loopDetected,
-    taskAbortController,
-    ctx.parentSignal,
-    win,
-    session,
-    emitUpdate,
-  );
+  if (!taskErrored) {
+    handlePostRunResult(
+      loopDetected,
+      taskAbortController,
+      ctx.parentSignal,
+      win,
+      session,
+      emitUpdate,
+    );
+  }
 
   // Persist session data after completion/error
   persistSession(session);

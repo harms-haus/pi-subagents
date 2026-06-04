@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadExtendTimeoutDebounce } from "../settings";
 import { runSubAgent } from "../spawner";
 import { registerDelegateTool } from "../tools/delegate";
+import { runSingleTask } from "../tools/delegate-runner";
 import { registerRetrievalTools } from "../tools/retrieval";
+import type { TaskRunContext } from "../tools/delegate-types";
 import type { SessionRecord, SubagentSessionData, WindowedSubagentDetails } from "../types";
 import { CUSTOM_ENTRY_TYPE } from "../types";
 import { createMockPi } from "./helpers";
@@ -976,6 +978,80 @@ describe("delegate-advanced", () => {
       expect(result.content).toBeDefined();
       const details = result.details as WindowedSubagentDetails;
       expect(details.windows[0]!.status).toBe("completed");
+    });
+  });
+
+  // ── runSingleTask rejection handling ──────────────────────────
+
+  describe("delegate-runner - runSingleTask rejection", () => {
+    it("should handle runSubAgent rejection gracefully", async () => {
+      const rejectionError = new Error("cwd validation failed");
+      vi.mocked(runSubAgent).mockRejectedValueOnce(rejectionError);
+
+      const win = {
+        sessionId: "rejection-session",
+        name: "rejection-task",
+        status: "running" as const,
+        lines: [],
+        allMessages: [],
+        exitCode: null,
+        startedAt: Date.now(),
+        timeout: 600,
+        toolCount: 0,
+        fileCount: 0,
+        recentToolCalls: [],
+        completedAt: undefined as number | undefined,
+        errorMessage: undefined as string | undefined,
+      };
+
+      const session = {
+        sessionId: "rejection-session",
+        taskName: "rejection-task",
+        prompt: "test prompt",
+        cwd: "/tmp",
+        status: "running" as const,
+        messages: [],
+        exitCode: null,
+        startedAt: Date.now(),
+        errorMessage: undefined as string | undefined,
+      };
+
+      const emitUpdate = vi.fn();
+      const persistSession = vi.fn();
+
+      const ctx: TaskRunContext = {
+        win,
+        session,
+        rp: { name: undefined, profile: undefined },
+        profiles: {},
+        skillResolvedProfiles: new Map(),
+        sessionStore: new Map(),
+        taskCwd: "/tmp",
+        maxLines: 15,
+        loopingToolCount: 5,
+        agentDir: "/tmp/.pi",
+        extendDebounce: 30,
+        emitUpdate,
+        persistSession,
+        parentSignal: undefined,
+      };
+
+      // runSingleTask should not throw — it should catch the rejection internally
+      await runSingleTask({ name: "rejection-task", prompt: "test prompt" }, ctx);
+
+      // Window should be marked as errored with the actual error message
+      expect(win.status).toBe("error");
+      expect(win.errorMessage).toContain("cwd validation failed");
+      expect(win.exitCode).toBe(1);
+      expect(win.completedAt).toBeDefined();
+
+      // Session should also be updated
+      expect(session.status).toBe("error");
+      expect(session.errorMessage).toContain("cwd validation failed");
+      expect(session.exitCode).toBe(1);
+
+      // persistSession should have been called so the error is saved
+      expect(persistSession).toHaveBeenCalledTimes(1);
     });
   });
 });

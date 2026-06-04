@@ -219,7 +219,9 @@ describe("spawner-core", () => {
       await promise;
 
       expect(mockWindow.exitCode).toBe(0);
-      expect(mockWindow.status).toBe("completed");
+      // Process exited with code 0 but produced no message_end events — bare exit detection
+      expect(mockWindow.status).toBe("error");
+      expect(mockWindow.errorMessage).toMatch(/no output/i);
     });
 
     it("should handle process exit with non-zero code", async () => {
@@ -263,7 +265,9 @@ describe("spawner-core", () => {
 
       // The leftover buffer should have been processed as a line
       expect(mockWindow.lines.some((l) => l.text.includes("leftover line"))).toBe(true);
-      expect(mockWindow.status).toBe("completed");
+      // Process exited with code 0 but produced no message_end events — bare exit detection
+      expect(mockWindow.status).toBe("error");
+      expect(mockWindow.errorMessage).toMatch(/no output/i);
     });
 
     it("should handle abort signal with SIGTERM", async () => {
@@ -447,7 +451,7 @@ describe("spawner-core", () => {
   });
 
   describe("stdin error handling", () => {
-    it("should silently ignore EPIPE on stdin", async () => {
+    it("should handle EPIPE on stdin without crashing", async () => {
       const promise = runSubAgent({
         task: { name: "test-task", prompt: "test prompt" },
         win: mockWindow,
@@ -684,6 +688,150 @@ describe("spawner-core", () => {
       // The body section (after second ---) should contain the prompt
       const body = parts.slice(2).join("---").trim();
       expect(body).toBe("You are a senior code reviewer.");
+    });
+  });
+
+  describe("error handling improvements", () => {
+    it("should capture the actual error message from spawn error event", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Emit an error event with a specific error message
+      const spawnError = new Error("spawn ENOENT pi not found");
+      mockProcess.emit("error", spawnError);
+      await promise;
+
+      expect(mockWindow.exitCode).toBe(1);
+      expect(mockWindow.status).toBe("error");
+      // The errorMessage should include the actual error details, not just the generic message
+      expect(mockWindow.errorMessage).toContain("ENOENT");
+      expect(mockWindow.errorMessage).toContain("pi not found");
+    });
+
+    it("should set exitCode to -1 when process is killed by signal (code is null)", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Emit 'close' with null code (signal kill, e.g. SIGTERM)
+      mockProcess.emit("close", null);
+      await promise;
+
+      expect(mockWindow.exitCode).toBe(-1);
+      expect(mockWindow.status).toBe("error");
+    });
+
+    it("should detect bare exit with code 0 and no output as error", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Process exits with code 0 but produced zero output (no message_end events)
+      expect(mockSession.messages).toHaveLength(0);
+      mockProcess.emit("close", 0);
+      await promise;
+
+      // Should be detected as error — no output means nothing useful happened
+      expect(mockWindow.status).toBe("error");
+      expect(mockWindow.errorMessage).toBeDefined();
+      expect(mockWindow.errorMessage).not.toBe("");
+      expect(mockWindow.errorMessage).toMatch(/no output/i);
+    });
+
+    it("should include stderr content in errorMessage on non-zero exit", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Emit stderr data before the process exits
+      mockProcess.stderr.emit("data", Buffer.from("FATAL: API key not configured"));
+
+      // Process exits with non-zero code
+      mockProcess.emit("close", 1);
+      await promise;
+
+      expect(mockWindow.status).toBe("error");
+      // The stderr content should be captured as error context when no other error message is set
+      expect(mockWindow.errorMessage).toContain("API key not configured");
+    });
+
+    it("should show diagnostic line in win.lines for EPIPE on stdin", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Emit an EPIPE error on stdin
+      const epipeError = new Error("write EPIPE") as NodeJS.ErrnoException;
+      epipeError.code = "EPIPE";
+      mockProcess.stdin.emit("error", epipeError);
+
+      // A diagnostic line should appear in win.lines indicating the pipe issue
+      const diagnosticLine = mockWindow.lines.find(
+        (l) => l.text.includes("EPIPE") || l.text.includes("pipe") || l.text.includes("stdin"),
+      );
+      expect(diagnosticLine).toBeDefined();
+      expect(diagnosticLine?.text).toMatch(/EPIPE|pipe|stdin/);
+
+      mockProcess.emit("close", 0);
+      await promise;
+    });
+
+    it("should surface unknown JSON event types instead of silently dropping them", async () => {
+      const promise = runSubAgent({
+        task: { name: "test-task", prompt: "test prompt" },
+        win: mockWindow,
+        maxLines: 100,
+        onUpdate: onUpdateSpy,
+        session: mockSession,
+      });
+
+      await waitForCondition(() => vi.mocked(spawn).mock.calls.length > 0);
+
+      // Emit a JSON event with an unknown type that contains error info
+      const unknownEvent = JSON.stringify({
+        type: "error",
+        message: "API auth failed",
+      });
+      mockProcess.stdout.emit("data", Buffer.from(`${unknownEvent}\n`));
+
+      // The error content should appear somewhere visible — either in lines or errorMessage
+      const hasErrorInLines = mockWindow.lines.some((l) => l.text.includes("API auth failed"));
+      const hasErrorInMessage = mockWindow.errorMessage?.includes("API auth failed");
+      expect(hasErrorInLines || hasErrorInMessage).toBe(true);
+
+      mockProcess.emit("close", 0);
+      await promise;
     });
   });
 

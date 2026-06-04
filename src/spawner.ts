@@ -331,6 +331,14 @@ function handleStdoutLine(
     return handleMessageEnd(event.message, ctx);
   }
 
+  // Known event types without required fields — silently ignore
+  if (event.type === "message_end" || event.type === "turn_end") {
+    return { loopDetected: false };
+  }
+
+  // Unknown JSON event types — surface the raw line
+  appendLineToWindow(win, line, maxLines);
+  onUpdate();
   return { loopDetected: false };
 }
 
@@ -353,6 +361,27 @@ function handleStderrData(
 }
 
 /**
+ * Determine the error message for a sub-agent process exit.
+ * Prefers existing error messages, then stderr, then generic fallbacks.
+ */
+function resolveExitErrorMessage(
+  exitCode: number,
+  messagesLength: number,
+  existingError: string | undefined,
+  lastStderr: string | undefined,
+): string | undefined {
+  if (exitCode === 0 && messagesLength === 0) {
+    return (
+      existingError || lastStderr?.slice(-500) || "Process exited cleanly but produced no output"
+    );
+  }
+  if (exitCode !== 0 && !existingError) {
+    return lastStderr?.slice(-500) || "Process exited with error but no output";
+  }
+  return undefined;
+}
+
+/**
  * Handle the sub-agent process exit.
  */
 function handleProcessExit(
@@ -363,6 +392,7 @@ function handleProcessExit(
   bufferTimeout: ReturnType<typeof setTimeout> | null,
   processLineFn: (line: string) => void,
   onUpdate: () => void,
+  lastStderr?: string,
 ): void {
   if (buffer.trim()) {
     processLineFn(buffer);
@@ -371,7 +401,7 @@ function handleProcessExit(
     clearTimeout(bufferTimeout);
   }
 
-  const exitCode = code ?? 0;
+  const exitCode = code === null ? -1 : code;
   win.exitCode = exitCode;
 
   const isError = code !== 0 || win.stopReason === "error" || win.stopReason === "aborted";
@@ -379,6 +409,21 @@ function handleProcessExit(
 
   win.status = status;
   win.completedAt = Date.now();
+
+  if (exitCode === 0 && session.messages.length === 0) {
+    win.status = "error";
+  }
+
+  const errorMsg = resolveExitErrorMessage(
+    exitCode,
+    session.messages.length,
+    win.errorMessage,
+    lastStderr,
+  );
+  if (errorMsg !== undefined) {
+    win.errorMessage = errorMsg;
+  }
+
   syncState(win, session);
 
   onUpdate();
@@ -408,6 +453,82 @@ function setupAbortHandler(proc: ReturnType<typeof spawn>, signal: AbortSignal):
 }
 
 /**
+ * Spawn configuration: resolved command, args, and profile-specific env vars.
+ */
+interface SpawnConfig {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+/**
+ * Build the spawn command, args, and profile environment for a sub-agent.
+ */
+function buildSpawnConfig(
+  task: SubAgentTask,
+  profile: SubagentProfile | undefined,
+  agentDir: string | undefined,
+): SpawnConfig {
+  const invocation = getPiInvocation();
+  const args = [...invocation.args, "--mode", "json", "-p", "--no-session"];
+
+  // Inject profile-specific CLI arguments before the prompt
+  let profileEnv: Record<string, string> = {};
+  if (profile) {
+    const { args: profileArgs, env: envVars } = profileToArgs(profile, task.cwd, agentDir);
+    args.push(...profileArgs);
+    profileEnv = envVars;
+  }
+
+  return { command: invocation.command, args, env: profileEnv };
+}
+
+/**
+ * Create a debounced update function that batches onUpdate calls.
+ */
+function createDebouncedUpdate(onUpdate: () => void): {
+  debouncedUpdate: () => void;
+  getBufferTimeout: () => ReturnType<typeof setTimeout> | null;
+  clearBufferTimeout: () => void;
+} {
+  let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  const debouncedUpdate = () => {
+    if (bufferTimeout) {
+      clearTimeout(bufferTimeout);
+    }
+    bufferTimeout = setTimeout(() => {
+      onUpdate();
+    }, 50);
+  };
+
+  return {
+    debouncedUpdate,
+    getBufferTimeout: () => bufferTimeout,
+    clearBufferTimeout: () => {
+      if (bufferTimeout) clearTimeout(bufferTimeout);
+    },
+  };
+}
+
+/**
+ * Handle stdin errors, displaying pipe-closed or generic error messages.
+ */
+function handleStdinError(
+  err: NodeJS.ErrnoException,
+  win: SubAgentWindow,
+  maxLines: number,
+  debouncedUpdate: () => void,
+): void {
+  if (err.code === "EPIPE" || err.code === "ERR_STREAM_DESTROYED") {
+    appendLineToWindow(win, "[stdin] pipe closed \u2014 process may have exited early", maxLines);
+    debouncedUpdate();
+    return;
+  }
+  handleStderrData(Buffer.from(`[stdin error]: ${err.message}`), win, maxLines, debouncedUpdate);
+}
+
+/**
  * Spawn a sub-agent process and manage its lifecycle.
  *
  * Handles spawning the pi binary, buffering stdout/stderr, parsing JSON events,
@@ -421,42 +542,24 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
 
   const effectiveLoopingToolCount = options.loopingToolCount ?? 5;
 
-  const invocation = getPiInvocation();
-  const args = [...invocation.args, "--mode", "json", "-p", "--no-session"];
-
-  // Inject profile-specific CLI arguments before the prompt
-  let profileEnv: Record<string, string> = {};
-  if (profile) {
-    const { args: profileArgs, env: envVars } = profileToArgs(profile, task.cwd, options.agentDir);
-    args.push(...profileArgs);
-    profileEnv = envVars;
-  }
+  const spawnConfig = buildSpawnConfig(task, profile, options.agentDir);
 
   let buffer = "";
-  let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // Debounced onUpdate to reduce TUI pressure
-  const debouncedUpdate = () => {
-    if (bufferTimeout) {
-      clearTimeout(bufferTimeout);
-    }
-    bufferTimeout = setTimeout(() => {
-      onUpdate();
-    }, 50);
-  };
+  const { debouncedUpdate, getBufferTimeout, clearBufferTimeout } = createDebouncedUpdate(onUpdate);
 
   // Validate and resolve the cwd parameter
   const resolvedCwd = validateCwd(task.cwd, process.cwd());
 
   return new Promise((resolve) => {
-    const proc = spawn(invocation.command, args, {
+    const proc = spawn(spawnConfig.command, spawnConfig.args, {
       cwd: resolvedCwd,
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, ...profileEnv },
+      env: { ...process.env, ...spawnConfig.env },
     });
 
     let loopDetectedFlag = false;
+    let lastStderr = "";
 
     const processLine = (line: string) => {
       if (loopDetectedFlag) {
@@ -490,36 +593,37 @@ export async function runSubAgent(options: RunSubAgentOptions): Promise<{ loopDe
     });
 
     proc.stderr.on("data", (data: Buffer) => {
+      lastStderr = data.toString().trim();
       handleStderrData(data, win, maxLines, debouncedUpdate);
     });
 
-    const handleError = () => {
-      if (bufferTimeout) {
-        clearTimeout(bufferTimeout);
-      }
+    const handleError = (err: Error) => {
+      clearBufferTimeout();
       win.exitCode = 1;
       win.status = "error";
-      win.errorMessage = win.errorMessage || "Failed to spawn sub-agent process";
+      win.errorMessage = win.errorMessage || `Failed to spawn sub-agent process: ${err.message}`;
       syncState(win, session);
       onUpdate();
       resolve({ loopDetected: false });
     };
 
     proc.on("close", (code) => {
-      handleProcessExit(code, win, session, buffer, bufferTimeout, processLine, onUpdate);
+      handleProcessExit(
+        code,
+        win,
+        session,
+        buffer,
+        getBufferTimeout(),
+        processLine,
+        onUpdate,
+        lastStderr,
+      );
       resolve({ loopDetected: loopDetectedFlag });
     });
 
     // Write prompt via stdin to avoid OS ARG_MAX limits
     proc.stdin.on("error", (err: NodeJS.ErrnoException) => {
-      if (err.code !== "EPIPE" && err.code !== "ERR_STREAM_DESTROYED") {
-        handleStderrData(
-          Buffer.from(`[stdin error]: ${err.message}`),
-          win,
-          maxLines,
-          debouncedUpdate,
-        );
-      }
+      handleStdinError(err, win, maxLines, debouncedUpdate);
     });
     proc.stdin.end(task.prompt);
 

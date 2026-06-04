@@ -36,7 +36,7 @@
     "typebox": "*"
   },
   "simple-git-hooks": {
-    "pre-commit": "npm run format:check && npm run lint && npm run typecheck"
+    "pre-commit": "npm run pre-commit-check"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -44,13 +44,15 @@
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
-    "simple-git-hooks": "^2.12.1",
+    "simple-git-hooks": "^2.13.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.3",
     "vitest": "^4.1.6"
   },
   "scripts": {
+    "pre-commit-check": "npm run format:check && npm run lint && npm run typecheck",
+    "prepare": "simple-git-hooks",
     "lint": "eslint src/",
     "lint:fix": "eslint --fix src/",
     "format": "prettier --write src/",

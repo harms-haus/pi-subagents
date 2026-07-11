@@ -120,7 +120,7 @@ describe("retrieval-tools", () => {
       expect(result.content).toEqual([
         {
           type: "text" as const,
-          text: "No subagent profiles found. Add .md files to ~/.pi/agent/agent-profiles/ or .pi/agent-profiles/.",
+          text: "No subagent profiles found. Add .md files to ~/.pi/agent/profiles/ or .pi/agent/profiles/.",
         },
       ]);
       expect(result.details).toEqual({ count: 0 });

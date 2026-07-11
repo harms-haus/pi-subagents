@@ -140,14 +140,14 @@ Profiles let you pre-configure the provider, model, system prompt, thinking leve
 
 | Scope   | Directory                         |
 | ------- | --------------------------------- |
-| Global  | `~/.pi/agent/agent-profiles/*.md` |
-| Project | `.pi/agent-profiles/*.md`         |
+| Global  | `~/.pi/agent/profiles/*.md` |
+| Project | `.pi/agent/profiles/*.md`         |
 
 Project-local profiles override global profiles with the same name.
 
 ### Example Profiles
 
-**`~/.pi/agent/agent-profiles/code-reviewer.md`**:
+**`~/.pi/agent/profiles/code-reviewer.md`**:
 
 ```markdown
 ---
@@ -161,7 +161,7 @@ tools: read,bash,grep,find
 You are an expert code reviewer. Focus on bugs, security issues, and performance problems. Be thorough but concise.
 ```
 
-**`~/.pi/agent/agent-profiles/fast-worker.md`**:
+**`~/.pi/agent/profiles/fast-worker.md`**:
 
 ```markdown
 ---
@@ -172,7 +172,7 @@ thinkingLevel: off
 ---
 ```
 
-**`.pi/agent-profiles/researcher.md`** (project-local):
+**`.pi/agent/profiles/researcher.md`** (project-local):
 
 ```markdown
 ---
@@ -259,8 +259,8 @@ tools: read,bash,grep
 
 Profiles are loaded from `.md` files:
 
-1. Global: `~/.pi/agent/agent-profiles/*.md`
-2. Project-local: `.pi/agent-profiles/*.md` (overrides global profiles with the same name)
+1. Global: `~/.pi/agent/profiles/*.md`
+2. Project-local: `.pi/agent/profiles/*.md` (overrides global profiles with the same name)
 
 The profile cache refreshes every 5 seconds.
 
@@ -295,7 +295,7 @@ Use `/profile` interactively to manage subagent profiles without editing files b
 
 `/profile create` and `/profile edit` walk you through each setting:
 
-1. **Scope** — save to global (`~/.pi/agent/agent-profiles/`) or project-local (`.pi/agent-profiles/`) directory
+1. **Scope** — save to global (`~/.pi/agent/profiles/`) or project-local (`.pi/agent/profiles/`) directory
 2. **Provider** — e.g. `anthropic`, `openai`, `dashscope`
 3. **Model** — supports `provider/id` and `:thinking` shorthand
 4. **System prompt** — the body text of the `.md` file (replaces default system prompt)
@@ -329,8 +329,8 @@ Main Agent TUI
   └── delegate_to_subagents
         │
         ├── Resolve profiles from .md files
-        │   ├── Global: ~/.pi/agent/agent-profiles/*.md
-        │   └── Project: .pi/agent-profiles/*.md
+        │   ├── Global: ~/.pi/agent/profiles/*.md
+        │   └── Project: .pi/agent/profiles/*.md
         │
         ├── Validate profile skills (suggestedSkills/loadSkills vs noSkills)
         │

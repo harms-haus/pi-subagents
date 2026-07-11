@@ -457,8 +457,8 @@ Uses the same **truncating renderer** as `get_subagent_output` — display is li
 
 List all available named sub-agent profiles that can be used with `delegate_to_subagents`. Profiles are loaded from two locations:
 
-- **Global**: `~/.pi/agent/agent-profiles/*.md`
-- **Project-local**: `.pi/agent-profiles/*.md`
+- **Global**: `~/.pi/agent/profiles/*.md`
+- **Project-local**: `.pi/agent/profiles/*.md`
 
 Project-local profiles override global profiles with the same name.
 
@@ -478,7 +478,7 @@ None. The parameters schema is `Type.Object({})` — an empty object.
 When no profiles are found, returns:
 
 ```
-No subagent profiles found. Add .md files to ~/.pi/agent/agent-profiles/ or .pi/agent-profiles/.
+No subagent profiles found. Add .md files to ~/.pi/agent/profiles/ or .pi/agent/profiles/.
 ```
 
 With `details: { count: 0 }`.

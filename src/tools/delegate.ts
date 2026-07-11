@@ -306,7 +306,7 @@ export function registerDelegateTool(
       "Live progress from each sub-agent is shown in a rolling window in the TUI.",
       "Optionally specify a profile name to pre-configure provider/model, system prompt,",
       "thinking level, and other model settings. Profiles are defined as individual .md files",
-      "in ~/.pi/agent/agent-profiles/ (global) or .pi/agent-profiles/ (project-local). A top-level profile parameter sets a default for all tasks;",
+      "in ~/.pi/agent/profiles/ (global) or .pi/agent/profiles/ (project-local). A top-level profile parameter sets a default for all tasks;",
       "each task can override with its own profile.",
       "Returns session IDs for each task that can be used with get_subagent_output",
       "and get_subagent_session to retrieve results. Each task supports an optional `timeout`",

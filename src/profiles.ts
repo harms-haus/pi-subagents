@@ -5,8 +5,8 @@
  * and resolves them into CLI arguments for sub-agent processes.
  *
  * Profile locations:
- *   Global:   ~/.pi/agent/agent-profiles/*.md
- *   Project:  .pi/agent-profiles/*.md
+ *   Global:   ~/.pi/agent/profiles/*.md
+ *   Project:  .pi/agent/profiles/*.md
  *
  * Project-local profiles override global profiles with the same name.
  *
@@ -79,11 +79,11 @@ function parseStringOrArray(value: unknown): string[] | undefined {
 
 function getGlobalProfilesDir(): string {
   const agentDir = getAgentDir();
-  return join(agentDir, "agent-profiles");
+  return join(agentDir, "profiles");
 }
 
 function getProjectProfilesDir(cwd: string): string {
-  return join(cwd, ".pi", "agent-profiles");
+  return join(cwd, ".pi", "agent", "profiles");
 }
 
 export type ProfileScope = "global" | "project";
@@ -276,7 +276,7 @@ function applyApiKey(
   if (typeof frontmatter.apiKey !== "string") return;
   if (scope === "project") {
     console.warn(
-      `Warning: Refusing to load apiKey from project-local profile "${name}" in ${filePath}. Move the profile to the global directory (~/.pi/agent/agent-profiles/) or use environment variables.`,
+      `Warning: Refusing to load apiKey from project-local profile "${name}" in ${filePath}. Move the profile to the global directory (~/.pi/agent/profiles/) or use environment variables.`,
     );
     return;
   }

@@ -6,7 +6,7 @@
  * conversation history.
  *
  * Supports named profiles defined as markdown files in the
- * agent-profiles/ directory, each pre-configuring provider/model, system
+ * profiles/ directory, each pre-configuring provider/model, system
  * prompts, thinking levels, and other model settings per profile.
  *
  * Tools provided:

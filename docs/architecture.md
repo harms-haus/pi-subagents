@@ -433,8 +433,8 @@ Profiles are loaded from two directories:
 
 | Scope   | Path                                                                |
 | ------- | ------------------------------------------------------------------- |
-| Global  | `~/.pi/agent/agent-profiles/*.md` (configurable via `PI_AGENT_DIR`) |
-| Project | `<cwd>/.pi/agent-profiles/*.md`                                     |
+| Global  | `~/.pi/agent/profiles/*.md` (configurable via `PI_AGENT_DIR`) |
+| Project | `<cwd>/.pi/agent/profiles/*.md`                                     |
 
 Project-local profiles **override** global profiles with the same name. Loading is synchronous via `readFileSync` — each `.md` file is parsed with `parseFrontmatter()`:
 

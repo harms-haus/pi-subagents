@@ -516,9 +516,9 @@ describe("spawner-core", () => {
         "global",
       );
 
-      // Should write to global agent-profiles dir
+      // Should write to global profiles dir
       const writeCall = vi.mocked(writeFile).mock.calls[0]!;
-      expect(writeCall[0]).toMatch(/agent-profiles\/my-profile\.md$/);
+      expect(writeCall[0]).toMatch(/profiles\/my-profile\.md$/);
       expect(writeCall[1]).toContain("name: my-profile");
       expect(writeCall[2]).toBe("utf8");
     });
@@ -552,14 +552,14 @@ describe("spawner-core", () => {
       await saveProfile("new-profile", { provider: "anthropic" }, "project", "/tmp/my-project");
 
       // mkdirSync should have been called with recursive: true
-      expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining("agent-profiles"), {
+      expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining("profiles"), {
         recursive: true,
       });
 
       // writeFile should still be called
       expect(writeFile).toHaveBeenCalled();
       const writeCall = vi.mocked(writeFile).mock.calls[0]!;
-      expect(writeCall[0] as string).toMatch(/my-project\/\.pi\/agent-profiles\/new-profile\.md$/);
+      expect(writeCall[0] as string).toMatch(/my-project\/\.pi\/agent\/profiles\/new-profile\.md$/);
     });
   });
 
@@ -575,7 +575,7 @@ describe("spawner-core", () => {
       const result = await deleteProfile("removable", "global");
 
       expect(result).toBe(true);
-      expect(unlink).toHaveBeenCalledWith(expect.stringMatching(/agent-profiles\/removable\.md$/));
+      expect(unlink).toHaveBeenCalledWith(expect.stringMatching(/profiles\/removable\.md$/));
     });
 
     it("returns false for non-existent profile", async () => {

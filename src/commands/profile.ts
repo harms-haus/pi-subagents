@@ -17,7 +17,7 @@ function handleList(ctx: ProfileCommandContext): void {
   const names = Object.keys(profiles);
   if (names.length === 0) {
     ctx.ui.notify(
-      "No subagent profiles found. Add .md files to ~/.pi/agent/agent-profiles/ or use /profile create.",
+      "No subagent profiles found. Add .md files to ~/.pi/agent/profiles/ or use /profile create.",
       "info",
     );
     return;

@@ -64,7 +64,7 @@ export interface SubAgentTask {
   name: string;
   prompt: string;
   cwd?: string;
-  /** Named profile from an agent-profiles/*.md file */
+  /** Named profile from an profiles/*.md file */
   profile?: string;
   /** Timeout in seconds (default: 600) */
   timeout?: number;

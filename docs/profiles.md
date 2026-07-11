@@ -23,7 +23,7 @@ Each profile is a standalone Markdown file with YAML frontmatter. The frontmatte
 
 ## 2. Profile File Format
 
-Profiles are Markdown files (`.md`) stored in the [agent-profiles directory](#4-profile-locations--resolution). They use YAML frontmatter for configuration and Markdown body for the system prompt.
+Profiles are Markdown files (`.md`) stored in the [profiles directory](#4-profile-locations--resolution). They use YAML frontmatter for configuration and Markdown body for the system prompt.
 
 ### Structure
 
@@ -80,8 +80,8 @@ The Markdown body (everything after the closing `---`) becomes the sub-agent's `
 
 | Scope             | Directory                                        | Example                                          |
 | ----------------- | ------------------------------------------------ | ------------------------------------------------ |
-| **Global**        | `~/.pi/agent/agent-profiles/`                    | `~/.pi/agent/agent-profiles/code-reviewer.md`    |
-| **Project-local** | `.pi/agent-profiles/` (relative to project root) | `my-project/.pi/agent-profiles/code-reviewer.md` |
+| **Global**        | `~/.pi/agent/profiles/`                    | `~/.pi/agent/profiles/code-reviewer.md`    |
+| **Project-local** | `.pi/agent/profiles/` (relative to project root) | `my-project/.pi/agent/profiles/code-reviewer.md` |
 
 The global directory respects the `PI_AGENT_DIR` environment variable. If set, the base path is `$PI_AGENT_DIR` instead of `~/.pi/agent`.
 
@@ -352,7 +352,7 @@ Profile names must match the pattern `^[a-zA-Z0-9_-]+$`:
 
 Both `/profile create` and `/profile edit` launch a step-by-step wizard:
 
-1. **Scope** — choose `Global` (`~/.pi/agent/agent-profiles/`) or `Project` (`.pi/agent-profiles/`)
+1. **Scope** — choose `Global` (`~/.pi/agent/profiles/`) or `Project` (`.pi/agent/profiles/`)
 2. **Provider** — enter provider name (pre-filled on edit); skip to omit
 3. **Model** — enter model ID (pre-filled on edit); skip to omit
 4. **System prompt** — confirm whether to set/keep a custom system prompt; if yes, opens a full editor for the prompt text
@@ -529,8 +529,8 @@ The `loadSkills` field causes skill file content to be read and injected into th
 Consider restricting read access to profile directories if they contain API keys:
 
 ```bash
-chmod 700 ~/.pi/agent/agent-profiles/
-chmod 600 ~/.pi/agent/agent-profiles/*.md
+chmod 700 ~/.pi/agent/profiles/
+chmod 600 ~/.pi/agent/profiles/*.md
 ```
 
 ### Project-Local Profiles

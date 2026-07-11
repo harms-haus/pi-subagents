@@ -27,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - `delegate_to_subagents` tool with parallel execution (max 16 tasks, 4 concurrent)
 - `get_subagent_output`, `get_subagent_session`, `list_subagent_profiles` retrieval tools
-- Profile system using markdown+YAML frontmatter files (`~/.pi/agent/agent-profiles/*.md`, `.pi/agent-profiles/*.md`)
+- Profile system using markdown+YAML frontmatter files (`~/.pi/agent/profiles/*.md`, `.pi/agent/profiles/*.md`)
 - `/profile` slash command with interactive profile editor
 - Live TUI rolling window display with expand/collapse per sub-agent
 - Per-task timeout with abort escalation (SIGTERM → SIGKILL after 5s)

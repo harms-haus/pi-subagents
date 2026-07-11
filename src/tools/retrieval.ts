@@ -222,7 +222,7 @@ function registerListSubagentProfiles(pi: ExtensionAPI): void {
     label: "List Sub-agent Profiles",
     description: [
       "List all available subagent profiles that can be used with delegate_to_subagents.",
-      "Profiles are stored as .md files in ~/.pi/agent/agent-profiles/ (global) and .pi/agent-profiles/ (project-local).",
+      "Profiles are stored as .md files in ~/.pi/agent/profiles/ (global) and .pi/agent/profiles/ (project-local).",
     ].join(" "),
     parameters: Type.Object({}),
     promptSnippet: "List available named subagent profiles and their configurations",
@@ -246,7 +246,7 @@ function registerListSubagentProfiles(pi: ExtensionAPI): void {
           content: [
             {
               type: "text",
-              text: "No subagent profiles found. Add .md files to ~/.pi/agent/agent-profiles/ or .pi/agent-profiles/.",
+              text: "No subagent profiles found. Add .md files to ~/.pi/agent/profiles/ or .pi/agent/profiles/.",
             },
           ],
           details: { count: 0 },
